@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:provider/provider.dart' as provider;
 
 import 'core/network/api_client.dart';
+import 'core/theme/app_colors.dart';
 import 'features/auth/providers/auth_provider.dart';
 import 'features/auth/screens/login_screen.dart';
 import 'features/auth/services/auth_service.dart';
@@ -34,7 +35,38 @@ class MyApp extends StatelessWidget {
         title: 'Bond',
         debugShowCheckedModeBanner: false,
         theme: ThemeData(
-          colorScheme: ColorScheme.fromSeed(seedColor: Colors.deepPurple),
+          scaffoldBackgroundColor: AppColors.background,
+
+          colorScheme: const ColorScheme.dark(
+            primary: AppColors.primary,
+            surface: AppColors.surface,
+            error: AppColors.error,
+          ),
+
+          appBarTheme: const AppBarTheme(
+            backgroundColor: AppColors.surface,
+            foregroundColor: AppColors.text,
+          ),
+
+          inputDecorationTheme: const InputDecorationTheme(
+            labelStyle: TextStyle(color: AppColors.hint),
+
+            enabledBorder: OutlineInputBorder(
+              borderSide: BorderSide(color: AppColors.border),
+            ),
+
+            focusedBorder: OutlineInputBorder(
+              borderSide: BorderSide(color: AppColors.primary),
+            ),
+          ),
+
+          elevatedButtonTheme: ElevatedButtonThemeData(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: AppColors.primary,
+              foregroundColor: Colors.black,
+            ),
+          ),
+
           useMaterial3: true,
         ),
         home: const LoginScreen(),
