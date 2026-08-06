@@ -12,6 +12,13 @@
 .swiftpm/
 migrate_working_dir/
 
+# dotenv environment variable files
+.env
+.env.development.local
+.env.test.local
+.env.production.local
+.env.local
+
 # IntelliJ related
 *.iml
 *.ipr
@@ -43,6 +50,3 @@ app.*.map.json
 /android/app/debug
 /android/app/profile
 /android/app/release
-
-
-.env
