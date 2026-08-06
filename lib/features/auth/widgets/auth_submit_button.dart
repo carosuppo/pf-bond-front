@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import '../../../core/theme/app_colors.dart';
+
 class AuthSubmitButton extends StatelessWidget {
   final String text;
   final bool isLoading;
@@ -12,8 +14,6 @@ class AuthSubmitButton extends StatelessWidget {
     required this.onPressed,
   });
 
-  static const Color _primaryYellow = Color(0xFFFFC107);
-
   @override
   Widget build(BuildContext context) {
     return SizedBox(
@@ -22,9 +22,9 @@ class AuthSubmitButton extends StatelessWidget {
       child: ElevatedButton(
         onPressed: isLoading ? null : onPressed,
         style: ElevatedButton.styleFrom(
-          backgroundColor: _primaryYellow,
+          backgroundColor: AppColors.primary,
           foregroundColor: Colors.black,
-          disabledBackgroundColor: const Color(0xFF7A6A2A),
+          disabledBackgroundColor: AppColors.disabledBackgroundColorButton,
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(14),
           ),
@@ -38,12 +38,7 @@ class AuthSubmitButton extends StatelessWidget {
                   color: Colors.black,
                 ),
               )
-            : Text(
-                text,
-                style: const TextStyle(
-                  fontWeight: FontWeight.w600,
-                ),
-              ),
+            : Text(text, style: const TextStyle(fontWeight: FontWeight.w600)),
       ),
     );
   }

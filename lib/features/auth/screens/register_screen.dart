@@ -1,10 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
+import '../../../core/routes/app_routes.dart';
+import '../../../core/theme/app_colors.dart';
 import '../providers/auth_provider.dart';
 import '../widgets/auth_submit_button.dart';
 import '../widgets/auth_text_field.dart';
-import 'login_screen.dart';
 
 class RegisterScreen extends StatefulWidget {
   const RegisterScreen({super.key});
@@ -19,12 +20,6 @@ class _RegisterScreenState extends State<RegisterScreen> {
   final _nameController = TextEditingController();
   final _emailController = TextEditingController();
   final _passwordController = TextEditingController();
-
-  static const Color _backgroundColor = Color(0xFF242424);
-  static const Color _cardColor = Color(0xFF303030);
-  static const Color _primaryYellow = Color(0xFFFFC107);
-  static const Color _textColor = Color(0xFFE8E8E8);
-  static const Color _mutedTextColor = Color(0xFFB8B8B8);
 
   @override
   void dispose() {
@@ -54,14 +49,10 @@ class _RegisterScreenState extends State<RegisterScreen> {
 
     if (success) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Usuario registrado correctamente.'),
-        ),
+        const SnackBar(content: Text('Usuario registrado correctamente.')),
       );
 
-      debugPrint(
-        'Session token: ${authProvider.authResponse?.sessionToken}',
-      );
+      debugPrint('Session token: ${authProvider.authResponse?.sessionToken}');
     } else {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
@@ -82,11 +73,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
   }
 
   void _goToLogin() {
-    Navigator.of(context).pushReplacement(
-      MaterialPageRoute(
-        builder: (_) => const LoginScreen(),
-      ),
-    );
+    Navigator.of(context).pushReplacementNamed(AppRoutes.login);
   }
 
   @override
@@ -94,7 +81,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
     final authProvider = context.watch<AuthProvider>();
 
     return Scaffold(
-      backgroundColor: _backgroundColor,
+      backgroundColor: AppColors.background,
       body: SafeArea(
         child: SingleChildScrollView(
           padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 28),
@@ -106,7 +93,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
                 'Bond',
                 textAlign: TextAlign.center,
                 style: TextStyle(
-                  color: _primaryYellow,
+                  color: AppColors.primary,
                   fontSize: 34,
                   fontWeight: FontWeight.bold,
                 ),
@@ -116,7 +103,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
                 'Crear cuenta',
                 textAlign: TextAlign.center,
                 style: TextStyle(
-                  color: _textColor,
+                  color: AppColors.text,
                   fontSize: 26,
                   fontWeight: FontWeight.w600,
                 ),
@@ -125,20 +112,15 @@ class _RegisterScreenState extends State<RegisterScreen> {
               const Text(
                 'Registrate para empezar a organizar tus grupos.',
                 textAlign: TextAlign.center,
-                style: TextStyle(
-                  color: _mutedTextColor,
-                  fontSize: 15,
-                ),
+                style: TextStyle(color: AppColors.mutedText, fontSize: 15),
               ),
               const SizedBox(height: 32),
               Container(
                 padding: const EdgeInsets.all(20),
                 decoration: BoxDecoration(
-                  color: _cardColor,
+                  color: AppColors.cardColor,
                   borderRadius: BorderRadius.circular(18),
-                  border: Border.all(
-                    color: const Color(0xFF444444),
-                  ),
+                  border: Border.all(color: AppColors.border),
                 ),
                 child: Form(
                   key: _formKey,
@@ -172,25 +154,15 @@ class _RegisterScreenState extends State<RegisterScreen> {
                       const SizedBox(height: 18),
                       Row(
                         children: const [
-                          Expanded(
-                            child: Divider(
-                              color: Color(0xFF555555),
-                            ),
-                          ),
+                          Expanded(child: Divider(color: AppColors.divider)),
                           Padding(
                             padding: EdgeInsets.symmetric(horizontal: 12),
                             child: Text(
                               'o',
-                              style: TextStyle(
-                                color: _mutedTextColor,
-                              ),
+                              style: TextStyle(color: AppColors.mutedText),
                             ),
                           ),
-                          Expanded(
-                            child: Divider(
-                              color: Color(0xFF555555),
-                            ),
-                          ),
+                          Expanded(child: Divider(color: AppColors.divider)),
                         ],
                       ),
                       const SizedBox(height: 18),
@@ -202,16 +174,16 @@ class _RegisterScreenState extends State<RegisterScreen> {
                           icon: const Text(
                             'G',
                             style: TextStyle(
-                              color: _primaryYellow,
+                              color: AppColors.primary,
                               fontSize: 20,
                               fontWeight: FontWeight.bold,
                             ),
                           ),
                           label: const Text('Ingresar con Google'),
                           style: OutlinedButton.styleFrom(
-                            foregroundColor: _textColor,
+                            foregroundColor: AppColors.text,
                             side: const BorderSide(
-                              color: _primaryYellow,
+                              color: AppColors.primary,
                               width: 1.4,
                             ),
                             shape: RoundedRectangleBorder(
@@ -225,9 +197,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
                         onPressed: _goToLogin,
                         child: const Text(
                           '¿Ya tenés cuenta? Iniciá sesión',
-                          style: TextStyle(
-                            color: _primaryYellow,
-                          ),
+                          style: TextStyle(color: AppColors.primary),
                         ),
                       ),
                     ],

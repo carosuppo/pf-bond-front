@@ -1,10 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
+import '../../../core/routes/app_routes.dart';
+import '../../../core/theme/app_colors.dart';
 import '../providers/auth_provider.dart';
 import '../widgets/auth_submit_button.dart';
 import '../widgets/auth_text_field.dart';
-import 'register_screen.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -18,12 +19,6 @@ class _LoginScreenState extends State<LoginScreen> {
 
   final _emailController = TextEditingController();
   final _passwordController = TextEditingController();
-
-  static const Color _backgroundColor = Color(0xFF242424);
-  static const Color _cardColor = Color(0xFF303030);
-  static const Color _primaryYellow = Color(0xFFFFC107);
-  static const Color _textColor = Color(0xFFE8E8E8);
-  static const Color _mutedTextColor = Color(0xFFB8B8B8);
 
   @override
   void dispose() {
@@ -50,15 +45,9 @@ class _LoginScreenState extends State<LoginScreen> {
     }
 
     if (success) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Inicio de sesión correcto.'),
-        ),
-      );
+      debugPrint('Session token: ${authProvider.authResponse?.sessionToken}');
 
-      debugPrint(
-        'Session token: ${authProvider.authResponse?.sessionToken}',
-      );
+      Navigator.of(context).pushReplacementNamed(AppRoutes.map);
     } else {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
@@ -79,11 +68,7 @@ class _LoginScreenState extends State<LoginScreen> {
   }
 
   void _goToRegister() {
-    Navigator.of(context).pushReplacement(
-      MaterialPageRoute(
-        builder: (_) => const RegisterScreen(),
-      ),
-    );
+    Navigator.of(context).pushReplacementNamed(AppRoutes.register);
   }
 
   @override
@@ -91,7 +76,7 @@ class _LoginScreenState extends State<LoginScreen> {
     final authProvider = context.watch<AuthProvider>();
 
     return Scaffold(
-      backgroundColor: _backgroundColor,
+      backgroundColor: AppColors.background,
       body: SafeArea(
         child: SingleChildScrollView(
           padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 28),
@@ -103,7 +88,7 @@ class _LoginScreenState extends State<LoginScreen> {
                 'Bond',
                 textAlign: TextAlign.center,
                 style: TextStyle(
-                  color: _primaryYellow,
+                  color: AppColors.primary,
                   fontSize: 34,
                   fontWeight: FontWeight.bold,
                 ),
@@ -113,7 +98,7 @@ class _LoginScreenState extends State<LoginScreen> {
                 'Iniciar sesión',
                 textAlign: TextAlign.center,
                 style: TextStyle(
-                  color: _textColor,
+                  color: AppColors.text,
                   fontSize: 26,
                   fontWeight: FontWeight.w600,
                 ),
@@ -122,20 +107,15 @@ class _LoginScreenState extends State<LoginScreen> {
               const Text(
                 'Ingresá para continuar con tus grupos.',
                 textAlign: TextAlign.center,
-                style: TextStyle(
-                  color: _mutedTextColor,
-                  fontSize: 15,
-                ),
+                style: TextStyle(color: AppColors.mutedText, fontSize: 15),
               ),
               const SizedBox(height: 32),
               Container(
                 padding: const EdgeInsets.all(20),
                 decoration: BoxDecoration(
-                  color: _cardColor,
+                  color: AppColors.cardColor,
                   borderRadius: BorderRadius.circular(18),
-                  border: Border.all(
-                    color: const Color(0xFF444444),
-                  ),
+                  border: Border.all(color: AppColors.border),
                 ),
                 child: Form(
                   key: _formKey,
@@ -163,25 +143,15 @@ class _LoginScreenState extends State<LoginScreen> {
                       const SizedBox(height: 18),
                       Row(
                         children: const [
-                          Expanded(
-                            child: Divider(
-                              color: Color(0xFF555555),
-                            ),
-                          ),
+                          Expanded(child: Divider(color: AppColors.divider)),
                           Padding(
                             padding: EdgeInsets.symmetric(horizontal: 12),
                             child: Text(
                               'o',
-                              style: TextStyle(
-                                color: _mutedTextColor,
-                              ),
+                              style: TextStyle(color: AppColors.mutedText),
                             ),
                           ),
-                          Expanded(
-                            child: Divider(
-                              color: Color(0xFF555555),
-                            ),
-                          ),
+                          Expanded(child: Divider(color: AppColors.divider)),
                         ],
                       ),
                       const SizedBox(height: 18),
@@ -193,16 +163,16 @@ class _LoginScreenState extends State<LoginScreen> {
                           icon: const Text(
                             'G',
                             style: TextStyle(
-                              color: _primaryYellow,
+                              color: AppColors.primary,
                               fontSize: 20,
                               fontWeight: FontWeight.bold,
                             ),
                           ),
                           label: const Text('Ingresar con Google'),
                           style: OutlinedButton.styleFrom(
-                            foregroundColor: _textColor,
+                            foregroundColor: AppColors.text,
                             side: const BorderSide(
-                              color: _primaryYellow,
+                              color: AppColors.primary,
                               width: 1.4,
                             ),
                             shape: RoundedRectangleBorder(
@@ -216,9 +186,7 @@ class _LoginScreenState extends State<LoginScreen> {
                         onPressed: _goToRegister,
                         child: const Text(
                           '¿No tenés cuenta? Registrate',
-                          style: TextStyle(
-                            color: _primaryYellow,
-                          ),
+                          style: TextStyle(color: AppColors.primary),
                         ),
                       ),
                     ],

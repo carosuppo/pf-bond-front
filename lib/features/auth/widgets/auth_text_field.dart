@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import '../../../core/theme/app_colors.dart';
+
 class AuthTextField extends StatelessWidget {
   final TextEditingController controller;
   final String label;
@@ -16,36 +18,31 @@ class AuthTextField extends StatelessWidget {
     this.validator,
   });
 
-  static const Color _primaryYellow = Color(0xFFFFC107);
-  static const Color _textColor = Color(0xFFE8E8E8);
-  static const Color _mutedTextColor = Color(0xFFB8B8B8);
-  static const Color _fieldColor = Color(0xFF3A3A3A);
-
   @override
   Widget build(BuildContext context) {
     return TextFormField(
       controller: controller,
-      style: const TextStyle(color: _textColor),
+      style: const TextStyle(color: AppColors.text),
       decoration: InputDecoration(
         labelText: label,
-        labelStyle: const TextStyle(color: _mutedTextColor),
+        labelStyle: const TextStyle(color: AppColors.mutedText),
         filled: true,
-        fillColor: _fieldColor,
+        fillColor: AppColors.fieldColor,
         enabledBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(14),
           borderSide: const BorderSide(color: Color(0xFF555555)),
         ),
         focusedBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(14),
-          borderSide: const BorderSide(color: _primaryYellow, width: 1.5),
+          borderSide: const BorderSide(color: AppColors.primary, width: 1.5),
         ),
         errorBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(14),
-          borderSide: const BorderSide(color: Colors.redAccent),
+          borderSide: const BorderSide(color: AppColors.error),
         ),
         focusedErrorBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(14),
-          borderSide: const BorderSide(color: Colors.redAccent),
+          borderSide: const BorderSide(color: AppColors.error),
         ),
       ),
       obscureText: obscureText,
