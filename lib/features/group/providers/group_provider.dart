@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../models/create_group_model.request.dart';
 import '../models/create_group_model.response.dart';
+import '../models/get_groups_model.response.dart';
 import '../models/group_model.response.dart';
 import '../models/update_group_model.request.dart';
 import '../services/group_service.dart';
@@ -15,6 +16,8 @@ class GroupProvider extends ChangeNotifier {
   String? errorMessage;
   CreateGroupResponseModel? group;
   GroupResponseModel? updatedGroup;
+  GetGroupsResponseModel? activeGroup;
+  List<GetGroupsResponseModel> groups = [];
 
   Future<bool> createGroup({
     required String name,
@@ -89,5 +92,31 @@ class GroupProvider extends ChangeNotifier {
       isLoading = false;
       notifyListeners();
     }
+  }
+
+  Future<bool> getGroups() async {
+    isLoading = true;
+    errorMessage = null;
+
+    notifyListeners();
+
+    try {
+      groups = await _groupService.getGroups();
+
+      return true;
+    } catch (error) {
+      errorMessage = error.toString().replaceFirst('Exception: ', '');
+      groups = [];
+
+      return false;
+    } finally {
+      isLoading = false;
+      notifyListeners();
+    }
+  }
+
+  void selectGroup(GetGroupsResponseModel group) {
+    activeGroup = group;
+    notifyListeners();
   }
 }
