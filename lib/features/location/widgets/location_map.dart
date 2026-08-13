@@ -5,9 +5,12 @@ import 'package:latlong2/latlong.dart';
 
 import '../constants/default_location.dart';
 import '../providers/location_provider.dart';
+import '../utils/marker_colors.dart';
 
 class LocationMap extends ConsumerStatefulWidget {
-  const LocationMap({super.key});
+  final int groupId;
+
+  const LocationMap({super.key, required this.groupId});
 
   @override
   ConsumerState<LocationMap> createState() => _LocationMapState();
@@ -15,42 +18,40 @@ class LocationMap extends ConsumerStatefulWidget {
 
 class _LocationMapState extends ConsumerState<LocationMap> {
   final MapController _mapController = MapController();
-
   bool _hasCenteredOnUser = false;
 
   @override
   Widget build(BuildContext context) {
-    final locationState = ref.watch(locationProvider);
+    final state = ref.watch(locationProvider);
+    final ownSharing =
+        state.sharingForGroup(widget.groupId)?.effectiveLocationSharing ??
+        false;
+    final ownLocation = ownSharing ? state.currentLocation : null;
+    final members = state.visibleMembers.values.toList()
+      ..sort((a, b) => a.memberId.compareTo(b.memberId));
+    final markerIds = <int>[
+      if (ownLocation != null) -1,
+      ...members.map((member) => member.memberId),
+    ];
+    final colors = buildDistinctMarkerColors(markerIds);
 
-    if (!_hasCenteredOnUser && locationState.currentLocation != null) {
+    if (!_hasCenteredOnUser && ownLocation != null) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (!mounted || _hasCenteredOnUser) {
-          return;
-        }
-
+        if (!mounted || _hasCenteredOnUser) return;
         _mapController.move(
-          LatLng(
-            locationState.currentLocation!.latitude,
-            locationState.currentLocation!.longitude,
-          ),
+          LatLng(ownLocation.latitude, ownLocation.longitude),
           defaultZoom,
         );
-
         _hasCenteredOnUser = true;
       });
     }
 
-    final initialCenter = locationState.currentLocation != null
-        ? LatLng(
-            locationState.currentLocation!.latitude,
-            locationState.currentLocation!.longitude,
-          )
-        : defaultLocation;
-
     return FlutterMap(
       mapController: _mapController,
       options: MapOptions(
-        initialCenter: initialCenter,
+        initialCenter: ownLocation == null
+            ? defaultLocation
+            : LatLng(ownLocation.latitude, ownLocation.longitude),
         initialZoom: defaultZoom,
       ),
       children: [
@@ -58,26 +59,46 @@ class _LocationMapState extends ConsumerState<LocationMap> {
           urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
           userAgentPackageName: 'com.example.bond_front',
         ),
-
-        if (locationState.currentLocation != null)
-          MarkerLayer(
-            markers: [
-              Marker(
-                point: LatLng(
-                  locationState.currentLocation!.latitude,
-                  locationState.currentLocation!.longitude,
-                ),
-                width: 40,
-                height: 40,
-                child: const Icon(
-                  Icons.location_pin,
-                  size: 40,
-                  color: Colors.red,
-                ),
+        MarkerLayer(
+          markers: [
+            if (ownLocation != null)
+              _marker(
+                point: LatLng(ownLocation.latitude, ownLocation.longitude),
+                name: 'Vos',
+                color: colors[-1]!,
               ),
-            ],
-          ),
+            for (final member in members)
+              _marker(
+                point: LatLng(member.latitude, member.longitude),
+                name: member.name,
+                color: colors[member.memberId]!,
+              ),
+          ],
+        ),
       ],
+    );
+  }
+
+  Marker _marker({
+    required LatLng point,
+    required String name,
+    required Color color,
+  }) {
+    return Marker(
+      point: point,
+      width: 110,
+      height: 66,
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(Icons.location_pin, size: 42, color: color),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
+            color: Colors.black87,
+            child: Text(name, maxLines: 1, overflow: TextOverflow.ellipsis),
+          ),
+        ],
+      ),
     );
   }
 }

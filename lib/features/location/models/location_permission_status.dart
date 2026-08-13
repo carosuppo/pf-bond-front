@@ -1,6 +1,7 @@
 enum LocationPermissionStatus {
   unknown,
-  granted,
+  whileInUse,
+  always,
   denied,
   deniedForever,
   serviceDisabled,

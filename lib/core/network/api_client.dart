@@ -51,6 +51,32 @@ class ApiClient {
     return _handleResponse(response);
   }
 
+  Future<List<Map<String, dynamic>>> authenticatedGetList(String path) async {
+    final response = await http.get(
+      Uri.parse('${ApiConfig.baseUrl}$path'),
+      headers: await _buildHeaders(authenticated: true),
+    );
+    final decodedBody = _decodeSuccessfulResponse(response);
+    if (decodedBody is! List<Object?>) {
+      throw Exception('La respuesta del servidor no es una lista valida.');
+    }
+    return decodedBody
+        .map((item) => Map<String, dynamic>.from(item! as Map))
+        .toList(growable: false);
+  }
+
+  Future<Map<String, dynamic>> authenticatedPut(
+    String path,
+    Map<String, dynamic> body,
+  ) async {
+    final response = await http.put(
+      Uri.parse('${ApiConfig.baseUrl}$path'),
+      headers: await _buildHeaders(authenticated: true),
+      body: jsonEncode(body),
+    );
+    return _handleResponse(response);
+  }
+
   Future<Map<String, String>> _buildHeaders({
     bool authenticated = false,
   }) async {
@@ -88,14 +114,17 @@ class ApiClient {
   }
 
   Future<Map<String, dynamic>> _handleResponse(http.Response response) async {
-    final decodedBody = response.body.isNotEmpty
-        ? jsonDecode(response.body)
+    final decodedBody = _decodeSuccessfulResponse(response);
+    return Map<String, dynamic>.from(decodedBody as Map);
+  }
+
+  Object? _decodeSuccessfulResponse(http.Response response) {
+    final Object? decodedBody = response.body.isNotEmpty
+        ? jsonDecode(response.body) as Object?
         : null;
-
     if (response.statusCode >= 200 && response.statusCode < 300) {
-      return Future.value(decodedBody as Map<String, dynamic>);
+      return decodedBody;
     }
-
     throw Exception(_getErrorMessage(decodedBody));
   }
 }

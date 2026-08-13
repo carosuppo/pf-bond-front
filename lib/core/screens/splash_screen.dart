@@ -1,17 +1,19 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../../features/location/providers/location_provider.dart';
 
 import '../routes/app_routes.dart';
 import '../storage/session_storage_service.dart';
 
-class SplashScreen extends StatefulWidget {
+class SplashScreen extends ConsumerStatefulWidget {
   const SplashScreen({super.key});
 
   @override
-  State<SplashScreen> createState() => _SplashScreenState();
+  ConsumerState<SplashScreen> createState() => _SplashScreenState();
 }
 
-class _SplashScreenState extends State<SplashScreen> {
+class _SplashScreenState extends ConsumerState<SplashScreen> {
   @override
   void initState() {
     super.initState();
@@ -25,6 +27,10 @@ class _SplashScreenState extends State<SplashScreen> {
     final sessionStorage = context.read<SessionStorageService>();
 
     final hasValidSession = await sessionStorage.hasValidSession();
+
+    if (hasValidSession) {
+      await ref.read(locationProvider.notifier).restoreSharingAndTracking();
+    }
 
     if (!mounted) {
       return;

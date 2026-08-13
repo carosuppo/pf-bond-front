@@ -15,8 +15,9 @@ LocationModel mapPosition(Position position) {
 LocationPermissionStatus mapPermission(LocationPermission permission) {
   switch (permission) {
     case LocationPermission.always:
+      return LocationPermissionStatus.always;
     case LocationPermission.whileInUse:
-      return LocationPermissionStatus.granted;
+      return LocationPermissionStatus.whileInUse;
 
     case LocationPermission.denied:
       return LocationPermissionStatus.denied;

@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../../features/auth/screens/login_screen.dart';
 import '../../features/auth/screens/register_screen.dart';
 import '../../features/location/screens/map_screen.dart';
+import '../../features/location/models/map_route_arguments.dart';
 import '../screens/splash_screen.dart';
 import 'app_routes.dart';
 
@@ -30,8 +31,11 @@ class AppRouter {
         );
 
       case AppRoutes.map:
+        final arguments = settings.arguments;
         return MaterialPageRoute(
-          builder: (_) => const MapScreen(),
+          builder: (_) => MapScreen(
+            arguments: arguments is MapRouteArguments ? arguments : null,
+          ),
           settings: settings,
         );
 

@@ -1,20 +1,22 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/routes/app_routes.dart';
 import '../../../core/theme/app_colors.dart';
 import '../providers/auth_provider.dart';
 import '../widgets/auth_submit_button.dart';
 import '../widgets/auth_text_field.dart';
+import '../../location/providers/location_provider.dart';
 
-class LoginScreen extends StatefulWidget {
+class LoginScreen extends ConsumerStatefulWidget {
   const LoginScreen({super.key});
 
   @override
-  State<LoginScreen> createState() => _LoginScreenState();
+  ConsumerState<LoginScreen> createState() => _LoginScreenState();
 }
 
-class _LoginScreenState extends State<LoginScreen> {
+class _LoginScreenState extends ConsumerState<LoginScreen> {
   final _formKey = GlobalKey<FormState>();
 
   final _emailController = TextEditingController();
@@ -45,7 +47,9 @@ class _LoginScreenState extends State<LoginScreen> {
     }
 
     if (success) {
-      debugPrint('Session token: ${authProvider.authResponse?.sessionToken}');
+      await ref.read(locationProvider.notifier).restoreSharingAndTracking();
+
+      if (!mounted) return;
 
       Navigator.of(context).pushReplacementNamed(AppRoutes.map);
     } else {
