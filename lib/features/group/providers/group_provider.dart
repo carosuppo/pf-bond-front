@@ -13,14 +13,32 @@ class GroupProvider extends ChangeNotifier {
 
   bool isLoading = false;
   String? errorMessage;
+
+  List<GroupResponseModel> groups = [];
+
   CreateGroupResponseModel? group;
   GroupResponseModel? updatedGroup;
+
+  Future<void> loadGroups() async {
+    isLoading = true;
+    errorMessage = null;
+
+    notifyListeners();
+
+    try {
+      groups = await _groupService.getGroups();
+    } catch (error) {
+      errorMessage = error.toString().replaceFirst('Exception: ', '');
+    } finally {
+      isLoading = false;
+      notifyListeners();
+    }
+  }
 
   Future<bool> createGroup({
     required String name,
     String? description,
     required bool shareLocationMandatorily,
-    required int userId,
   }) async {
     isLoading = true;
     errorMessage = null;
@@ -35,7 +53,11 @@ class GroupProvider extends ChangeNotifier {
         shareLocationMandatorily: shareLocationMandatorily,
       );
 
-      group = await _groupService.createGroup(request: request, userId: userId);
+      group = await _groupService.createGroup(
+        request: request,
+      );
+
+      groups = await _groupService.getGroups();
 
       return true;
     } catch (error) {
@@ -80,6 +102,8 @@ class GroupProvider extends ChangeNotifier {
         request: request,
       );
 
+      groups = await _groupService.getGroups();
+
       return true;
     } catch (error) {
       errorMessage = error.toString().replaceFirst('Exception: ', '');
@@ -91,3 +115,4 @@ class GroupProvider extends ChangeNotifier {
     }
   }
 }
+

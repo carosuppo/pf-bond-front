@@ -9,11 +9,21 @@ class GroupService {
 
   GroupService(this._apiClient);
 
+  Future<List<GroupResponseModel>> getGroups() async {
+    final response = await _apiClient.authenticatedGetList('/group');
+
+    return response
+        .map(GroupResponseModel.fromJson)
+        .toList(growable: false);
+  }
+
   Future<CreateGroupResponseModel> createGroup({
     required CreateGroupRequest request,
-    required int userId,
   }) async {
-    final response = await _apiClient.post('/group/$userId', request.toJson());
+    final response = await _apiClient.authenticatedPost(
+      '/group',
+      request.toJson(),
+    );
 
     return CreateGroupResponseModel.fromJson(response);
   }
@@ -22,18 +32,11 @@ class GroupService {
     required String groupId,
     required UpdateGroupRequest request,
   }) async {
-    // Temporal hasta que exista el endpoint en backend.
-    // Endpoint esperado a futuro:
-    // final response = await _apiClient.patch('/group/$groupId', request.toJson());
-    // return GroupResponseModel.fromJson(response);
-
-    await Future.delayed(const Duration(milliseconds: 500));
-
-    return GroupResponseModel(
-      id: groupId,
-      name: request.name,
-      description: request.description,
-      shareLocationMandatorily: request.shareLocationMandatorily,
+    final response = await _apiClient.authenticatedPut(
+      '/group/$groupId',
+      request.toJson(),
     );
+
+    return GroupResponseModel.fromJson(response);
   }
 }

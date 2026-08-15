@@ -3,19 +3,24 @@ import 'package:provider/provider.dart';
 
 import '../../../core/widgets/buttons/app_primary_button.dart';
 import '../../../core/widgets/buttons/app_secondary_button.dart';
+
 import '../providers/group_provider.dart';
+
 import 'invitation_code_modal.dart';
 
 class CreateGroupForm extends StatefulWidget {
   const CreateGroupForm({super.key});
 
   @override
-  State<CreateGroupForm> createState() => _CreateGroupFormState();
+  State<CreateGroupForm> createState() =>
+      _CreateGroupFormState();
 }
 
-class _CreateGroupFormState extends State<CreateGroupForm> {
+class _CreateGroupFormState
+    extends State<CreateGroupForm> {
   final _nameController = TextEditingController();
-  final _descriptionController = TextEditingController();
+  final _descriptionController =
+      TextEditingController();
 
   bool _shareLocationMandatorily = false;
 
@@ -30,82 +35,108 @@ class _CreateGroupFormState extends State<CreateGroupForm> {
   Future<void> _createGroup() async {
     if (_nameController.text.trim().isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('El nombre del grupo es obligatorio')),
+        const SnackBar(
+          content: Text(
+            'El nombre del grupo es obligatorio',
+          ),
+        ),
       );
 
       return;
     }
-    final provider = context.read<GroupProvider>();
+
+    final provider =
+        context.read<GroupProvider>();
 
     final success = await provider.createGroup(
-      name: _nameController.text,
-      description: _descriptionController.text.isEmpty
+      name: _nameController.text.trim(),
+      description:
+          _descriptionController.text.trim().isEmpty
           ? null
-          : _descriptionController.text,
-      shareLocationMandatorily: _shareLocationMandatorily,
-
-      // Temporal hasta integrar autenticación
-      userId: 1,
+          : _descriptionController.text.trim(),
+      shareLocationMandatorily:
+          _shareLocationMandatorily,
     );
 
-    if (!mounted) return;
+    if (!mounted) {
+      return;
+    }
 
-    if (success) {
-      showModalBottomSheet(
+    if (!success) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            provider.errorMessage ??
+                'Error al crear grupo',
+          ),
+        ),
+      );
+
+      return;
+    }
+
+    final invitationCode =
+        provider.group?.invitationCode;
+
+    if (invitationCode != null) {
+      await showModalBottomSheet<void>(
         context: context,
-
         builder: (_) {
           return InvitationCodeModal(
-            invitationCode: provider.group!.invitationCode,
+            invitationCode: invitationCode,
           );
         },
       );
-
-      // Acá podrías navegar a la pantalla del grupo creado
-    } else {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(provider.errorMessage ?? 'Error al crear grupo'),
-        ),
-      );
     }
+
+    if (!mounted) {
+      return;
+    }
+
+    Navigator.of(context).pop();
   }
 
   @override
   Widget build(BuildContext context) {
-    final isLoading = context.watch<GroupProvider>().isLoading;
+    final isLoading =
+        context.watch<GroupProvider>().isLoading;
 
     return Padding(
       padding: const EdgeInsets.all(16),
-
       child: Column(
         children: [
           TextField(
             controller: _nameController,
-
-            decoration: const InputDecoration(labelText: 'Nombre del grupo'),
+            decoration: const InputDecoration(
+              labelText: 'Nombre del grupo',
+            ),
           ),
 
           const SizedBox(height: 16),
 
           TextField(
             controller: _descriptionController,
-
-            decoration: const InputDecoration(labelText: 'Descripción'),
+            decoration: const InputDecoration(
+              labelText: 'Descripción',
+            ),
           ),
 
           const SizedBox(height: 16),
 
           SwitchListTile(
-            title: const Text('Compartir ubicación obligatoriamente'),
-
-            value: _shareLocationMandatorily,
-
-            onChanged: (value) {
-              setState(() {
-                _shareLocationMandatorily = value;
-              });
-            },
+            title: const Text(
+              'Compartir ubicación obligatoriamente',
+            ),
+            value:
+                _shareLocationMandatorily,
+            onChanged: isLoading
+                ? null
+                : (value) {
+                    setState(() {
+                      _shareLocationMandatorily =
+                          value;
+                    });
+                  },
           ),
 
           const SizedBox(height: 16),
@@ -115,12 +146,13 @@ class _CreateGroupFormState extends State<CreateGroupForm> {
             loading: isLoading,
             onPressed: _createGroup,
           ),
+
           const SizedBox(height: 12),
 
           AppSecondaryButton(
             text: 'Cancelar',
             onPressed: () {
-              Navigator.pop(context);
+              Navigator.of(context).pop();
             },
           ),
         ],

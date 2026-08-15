@@ -8,14 +8,23 @@ import 'core/routes/app_router.dart';
 import 'core/routes/app_routes.dart';
 import 'core/storage/session_storage_service.dart';
 import 'core/theme/app_colors.dart';
+
 import 'features/auth/providers/auth_provider.dart';
 import 'features/auth/services/auth_service.dart';
 
+import 'features/group/providers/group_provider.dart';
+import 'features/group/services/group_service.dart';
+
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
+
   await dotenv.load(fileName: '.env');
 
-  runApp(const ProviderScope(child: MyApp()));
+  runApp(
+    const ProviderScope(
+      child: MyApp(),
+    ),
+  );
 }
 
 class MyApp extends StatelessWidget {
@@ -28,17 +37,36 @@ class MyApp extends StatelessWidget {
         provider.Provider<SessionStorageService>(
           create: (_) => SessionStorageService(),
         ),
+
         provider.Provider<ApiClient>(
-          create: (context) => ApiClient(context.read<SessionStorageService>()),
+          create: (context) => ApiClient(
+            context.read<SessionStorageService>(),
+          ),
         ),
+
         provider.Provider<AuthService>(
           create: (context) => AuthService(
             context.read<ApiClient>(),
             context.read<SessionStorageService>(),
           ),
         ),
+
         provider.ChangeNotifierProvider<AuthProvider>(
-          create: (context) => AuthProvider(context.read<AuthService>()),
+          create: (context) => AuthProvider(
+            context.read<AuthService>(),
+          ),
+        ),
+
+        provider.Provider<GroupService>(
+          create: (context) => GroupService(
+            context.read<ApiClient>(),
+          ),
+        ),
+
+        provider.ChangeNotifierProvider<GroupProvider>(
+          create: (context) => GroupProvider(
+            context.read<GroupService>(),
+          ),
         ),
       ],
       child: MaterialApp(
@@ -59,14 +87,18 @@ class MyApp extends StatelessWidget {
           ),
 
           inputDecorationTheme: const InputDecorationTheme(
-            labelStyle: TextStyle(color: AppColors.hint),
-
-            enabledBorder: OutlineInputBorder(
-              borderSide: BorderSide(color: AppColors.border),
+            labelStyle: TextStyle(
+              color: AppColors.hint,
             ),
-
+            enabledBorder: OutlineInputBorder(
+              borderSide: BorderSide(
+                color: AppColors.border,
+              ),
+            ),
             focusedBorder: OutlineInputBorder(
-              borderSide: BorderSide(color: AppColors.primary),
+              borderSide: BorderSide(
+                color: AppColors.primary,
+              ),
             ),
           ),
 
