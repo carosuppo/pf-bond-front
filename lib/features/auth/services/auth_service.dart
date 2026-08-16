@@ -10,15 +10,14 @@ class AuthService {
 
   AuthService(this._apiClient, this._sessionStorage);
 
-  Future<AuthResponse> register(RegisterRequest request) async {
-    final json = await _apiClient.post('/user', request.toJson());
+  Future<bool> register(RegisterRequest request) async {
+    await _apiClient.post('/user', request.toJson());
 
-    return AuthResponse.fromJson(json);
+    return true;
   }
 
   Future<AuthResponse> login(LoginRequest request) async {
     final json = await _apiClient.post('/user/login', request.toJson());
-
     final response = AuthResponse.fromJson(json);
 
     await _sessionStorage.saveSession(

@@ -10,6 +10,8 @@ import 'core/storage/session_storage_service.dart';
 import 'core/theme/app_colors.dart';
 import 'features/auth/providers/auth_provider.dart';
 import 'features/auth/services/auth_service.dart';
+import 'features/profile/providers/profile_provider.dart';
+import 'features/profile/services/profile_service.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -36,6 +38,12 @@ class MyApp extends StatelessWidget {
             context.read<ApiClient>(),
             context.read<SessionStorageService>(),
           ),
+        ),
+        provider.Provider<ProfileService>(
+          create: (context) => ProfileService(context.read<ApiClient>()),
+        ),
+        provider.ChangeNotifierProvider<ProfileProvider>(
+          create: (context) => ProfileProvider(context.read<ProfileService>()),
         ),
         provider.ChangeNotifierProvider<AuthProvider>(
           create: (context) => AuthProvider(context.read<AuthService>()),

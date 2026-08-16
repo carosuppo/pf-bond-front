@@ -3,6 +3,8 @@ import 'package:flutter/material.dart';
 import '../../features/auth/screens/login_screen.dart';
 import '../../features/auth/screens/register_screen.dart';
 import '../../features/location/screens/map_screen.dart';
+import '../../features/profile/screens/edit_profile_screen.dart';
+import '../../features/settings/screens/settings_screen.dart';
 import '../screens/splash_screen.dart';
 import 'app_routes.dart';
 
@@ -32,6 +34,18 @@ class AppRouter {
       case AppRoutes.map:
         return MaterialPageRoute(
           builder: (_) => const MapScreen(),
+          settings: settings,
+        );
+
+      case AppRoutes.settings:
+        return MaterialPageRoute(
+          builder: (_) => const SettingsScreen(),
+          settings: settings,
+        );
+
+      case AppRoutes.editProfile:
+        return MaterialPageRoute(
+          builder: (_) => const EditProfileScreen(),
           settings: settings,
         );
 

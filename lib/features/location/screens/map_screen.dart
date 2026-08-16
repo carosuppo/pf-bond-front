@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../core/widgets/app_bottom_nav_bar.dart';
 import '../providers/location_provider.dart';
 import '../widgets/location_map.dart';
 
@@ -23,6 +24,14 @@ class _MapScreenState extends ConsumerState<MapScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return const Scaffold(appBar: null, body: SafeArea(child: LocationMap()));
+    return Scaffold(
+      extendBody: true,
+      body: const LocationMap(),
+      bottomNavigationBar: AppBottomNavBar(
+        selectedDestination: AppBottomDestination.map,
+        onDestinationSelected: (destination) =>
+            navigateToAppDestination(context, destination),
+      ),
+    );
   }
 }
