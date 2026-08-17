@@ -40,7 +40,7 @@ class ApiClient {
     return _handleResponse(response);
   }
 
-  Future<List<dynamic>> authenticatedGet(String path) async {
+  Future<List<dynamic>> authenticatedGetList(String path) async {
     final uri = Uri.parse('${ApiConfig.baseUrl}$path');
 
     final response = await http.get(
@@ -49,6 +49,17 @@ class ApiClient {
     );
 
     return _handleListResponse(response);
+  }
+
+  Future<Map<String, dynamic>> authenticatedGet(String path) async {
+    final uri = Uri.parse('${ApiConfig.baseUrl}$path');
+
+    final response = await http.get(
+      uri,
+      headers: await _buildHeaders(authenticated: true),
+    );
+
+    return _handleResponse(response);
   }
 
   Future<Map<String, dynamic>> authenticatedPut(

@@ -1,6 +1,7 @@
 import '../../../core/network/api_client.dart';
 import '../models/create_group_model.request.dart';
 import '../models/create_group_model.response.dart';
+import '../models/get_group_model.response.dart';
 import '../models/get_groups_model.response.dart';
 import '../models/group_model.response.dart';
 import '../models/update_group_model.request.dart';
@@ -12,7 +13,6 @@ class GroupService {
 
   Future<CreateGroupResponseModel> createGroup({
     required CreateGroupRequest request,
-    required int userId,
   }) async {
     final response = await _apiClient.authenticatedPost(
       '/group',
@@ -22,7 +22,7 @@ class GroupService {
   }
 
   Future<GroupResponseModel> updateGroup({
-    required String groupId,
+    required int groupId,
     required UpdateGroupRequest request,
   }) async {
     final response = await _apiClient.authenticatedPut(
@@ -33,7 +33,7 @@ class GroupService {
   }
 
   Future<List<GetGroupsResponseModel>> getGroups() async {
-    final response = await _apiClient.authenticatedGet('/group');
+    final response = await _apiClient.authenticatedGetList('/group');
 
     return response
         .map(
@@ -41,5 +41,11 @@ class GroupService {
               GetGroupsResponseModel.fromJson(json as Map<String, dynamic>),
         )
         .toList();
+  }
+
+  Future<GetGroupResponseModel> getGroup({required int groupId}) async {
+    final response = await _apiClient.authenticatedGet('/group/$groupId');
+
+    return GetGroupResponseModel.fromJson(response);
   }
 }

@@ -1,9 +1,9 @@
 import 'package:flutter/material.dart';
 
 import '../models/auth_response.dart';
+import '../models/login_request.dart';
 import '../models/register_request.dart';
 import '../services/auth_service.dart';
-import '../models/login_request.dart';
 
 class AuthProvider extends ChangeNotifier {
   final AuthService _authService;
@@ -21,7 +21,6 @@ class AuthProvider extends ChangeNotifier {
   }) async {
     isLoading = true;
     errorMessage = null;
-    authResponse = null;
     notifyListeners();
 
     try {
@@ -31,7 +30,7 @@ class AuthProvider extends ChangeNotifier {
         password: password,
       );
 
-      authResponse = await _authService.register(request);
+      await _authService.register(request);
 
       return true;
     } catch (error) {
@@ -43,23 +42,17 @@ class AuthProvider extends ChangeNotifier {
     }
   }
 
-  Future<bool> login({
-    required String email,
-    required String password,
-  }) async {
+  Future<bool> login({required String email, required String password}) async {
     isLoading = true;
     errorMessage = null;
     authResponse = null;
     notifyListeners();
-  
+
     try {
-      final request = LoginRequest(
-        email: email,
-        password: password,
-      );
-  
+      final request = LoginRequest(email: email, password: password);
+
       authResponse = await _authService.login(request);
-  
+
       return true;
     } catch (error) {
       errorMessage = error.toString().replaceFirst('Exception: ', '');

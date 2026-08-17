@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:provider/provider.dart' as provider;
 
 import 'core/network/api_client.dart';
+import 'core/preferences/app_preferences_service.dart';
 import 'core/routes/app_router.dart';
 import 'core/routes/app_routes.dart';
 import 'core/storage/session_storage_service.dart';
@@ -30,6 +31,9 @@ class MyApp extends StatelessWidget {
         provider.Provider<SessionStorageService>(
           create: (_) => SessionStorageService(),
         ),
+        provider.Provider<AppPreferencesService>(
+          create: (_) => AppPreferencesService(),
+        ),
         provider.Provider<ApiClient>(
           create: (context) => ApiClient(context.read<SessionStorageService>()),
         ),
@@ -46,7 +50,10 @@ class MyApp extends StatelessWidget {
           create: (context) => GroupService(context.read<ApiClient>()),
         ),
         provider.ChangeNotifierProvider<GroupProvider>(
-          create: (context) => GroupProvider(context.read<GroupService>()),
+          create: (context) => GroupProvider(
+            context.read<GroupService>(),
+            context.read<AppPreferencesService>(),
+          ),
         ),
       ],
       child: MaterialApp(
