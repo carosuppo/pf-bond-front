@@ -10,6 +10,8 @@ import 'core/storage/session_storage_service.dart';
 import 'core/theme/app_colors.dart';
 import 'features/auth/providers/auth_provider.dart';
 import 'features/auth/services/auth_service.dart';
+import 'features/group/providers/group_provider.dart';
+import 'features/group/services/group_service.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -39,6 +41,12 @@ class MyApp extends StatelessWidget {
         ),
         provider.ChangeNotifierProvider<AuthProvider>(
           create: (context) => AuthProvider(context.read<AuthService>()),
+        ),
+        provider.Provider<GroupService>(
+          create: (context) => GroupService(context.read<ApiClient>()),
+        ),
+        provider.ChangeNotifierProvider<GroupProvider>(
+          create: (context) => GroupProvider(context.read<GroupService>()),
         ),
       ],
       child: MaterialApp(

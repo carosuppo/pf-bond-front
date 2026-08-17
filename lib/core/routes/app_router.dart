@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../features/auth/screens/login_screen.dart';
 import '../../features/auth/screens/register_screen.dart';
+import '../../features/group/screens/join_group_screen.dart';
 import '../../features/location/screens/map_screen.dart';
 import '../screens/splash_screen.dart';
 import 'app_routes.dart';
@@ -32,6 +33,12 @@ class AppRouter {
       case AppRoutes.map:
         return MaterialPageRoute(
           builder: (_) => const MapScreen(),
+          settings: settings,
+        );
+
+      case AppRoutes.joinGroup:
+        return MaterialPageRoute(
+          builder: (_) => const JoinGroupScreen(),
           settings: settings,
         );
 

@@ -3,6 +3,8 @@ import 'package:flutter/material.dart';
 import '../models/create_group_model.request.dart';
 import '../models/create_group_model.response.dart';
 import '../models/group_model.response.dart';
+import '../models/join_group_model.request.dart';
+import '../models/join_group_model.response.dart';
 import '../models/update_group_model.request.dart';
 import '../services/group_service.dart';
 
@@ -15,6 +17,7 @@ class GroupProvider extends ChangeNotifier {
   String? errorMessage;
   CreateGroupResponseModel? group;
   GroupResponseModel? updatedGroup;
+  JoinGroupResponseModel? joinResponse;
 
   Future<bool> createGroup({
     required String name,
@@ -36,6 +39,29 @@ class GroupProvider extends ChangeNotifier {
       );
 
       group = await _groupService.createGroup(request: request, userId: userId);
+
+      return true;
+    } catch (error) {
+      errorMessage = error.toString().replaceFirst('Exception: ', '');
+
+      return false;
+    } finally {
+      isLoading = false;
+      notifyListeners();
+    }
+  }
+
+  Future<bool> joinGroup({required String invitationCode}) async {
+    isLoading = true;
+    errorMessage = null;
+    joinResponse = null;
+
+    notifyListeners();
+
+    try {
+      final request = JoinGroupRequest(invitationCode: invitationCode);
+
+      joinResponse = await _groupService.joinGroup(request: request);
 
       return true;
     } catch (error) {

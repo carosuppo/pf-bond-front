@@ -3,6 +3,8 @@ import 'package:flutter/material.dart';
 class AppColors {
   static const primary = Color(0xFFFFC107);
 
+  static const onPrimary = Color(0xFF000000);
+
   static const background = Color(0xFF1F1F1F);
   //El que usaba login Color(0xFF242424);
 
