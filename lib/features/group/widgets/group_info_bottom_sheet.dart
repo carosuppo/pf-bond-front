@@ -133,7 +133,7 @@ class GroupInfoBottomSheet extends StatelessWidget {
                       borderRadius: BorderRadius.circular(12),
                     ),
                     child: Icon(
-                      Icons.location_on_outlined,
+                      Icons.location_on,
                       color: AppColors.primary,
                       size: 22,
                     ),
@@ -164,13 +164,6 @@ class GroupInfoBottomSheet extends StatelessWidget {
                       ],
                     ),
                   ),
-                  Icon(
-                    group.shareLocationMandatorily
-                        ? Icons.check_circle_outline
-                        : Icons.info_outline,
-                    color: AppColors.primary,
-                    size: 22,
-                  ),
                 ],
               ),
             ),
@@ -196,7 +189,7 @@ class GroupInfoBottomSheet extends StatelessWidget {
             Row(
               children: [
                 const Icon(
-                  Icons.people_outline,
+                  Icons.group_rounded,
                   color: AppColors.primary,
                   size: 22,
                 ),

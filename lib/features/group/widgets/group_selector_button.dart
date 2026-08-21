@@ -253,6 +253,29 @@ class _GroupList extends StatelessWidget {
             ),
           ),
         ),
+
+        InkWell(
+          onTap: () {
+            Navigator.pushNamed(context, AppRoutes.joinGroup);
+          },
+          child: const Padding(
+            padding: EdgeInsets.symmetric(horizontal: 16, vertical: 13),
+            child: Row(
+              children: [
+                _ActionIcon(icon: Icons.group_add_rounded),
+                SizedBox(width: 12),
+                Text(
+                  'Unirse a grupo',
+                  style: TextStyle(
+                    color: AppColors.primary,
+                    fontSize: 14,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
       ],
     );
   }

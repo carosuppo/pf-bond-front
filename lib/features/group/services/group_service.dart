@@ -4,6 +4,8 @@ import '../models/create_group_model.response.dart';
 import '../models/get_group_model.response.dart';
 import '../models/get_groups_model.response.dart';
 import '../models/group_model.response.dart';
+import '../models/join_group_model.request.dart';
+import '../models/join_group_model.response.dart';
 import '../models/update_group_model.request.dart';
 
 class GroupService {
@@ -19,6 +21,17 @@ class GroupService {
       request.toJson(),
     );
     return CreateGroupResponseModel.fromJson(response);
+  }
+
+  Future<JoinGroupResponseModel> joinGroup({
+    required JoinGroupRequest request,
+  }) async {
+    final response = await _apiClient.authenticatedPost(
+      '/group/join',
+      request.toJson(),
+    );
+
+    return JoinGroupResponseModel.fromJson(response);
   }
 
   Future<GroupResponseModel> updateGroup({
