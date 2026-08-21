@@ -226,12 +226,6 @@ class _GroupList extends StatelessWidget {
             ),
           ),
 
-        //for (final group in groups)
-        //  _GroupListItem(
-        //    group: group,
-        //    isSelected: group.id == activeGroupId,
-        //    onTap: () => onGroupSelected(group),
-        //  ),
         const Padding(
           padding: EdgeInsets.symmetric(horizontal: 12),
           child: Divider(height: 1, color: AppColors.divider),

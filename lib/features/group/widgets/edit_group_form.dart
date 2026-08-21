@@ -3,11 +3,11 @@ import 'package:provider/provider.dart';
 
 import '../../../core/widgets/buttons/app_primary_button.dart';
 import '../../../core/widgets/buttons/app_secondary_button.dart';
-import '../models/group_model.response.dart';
+import '../models/get_group_model.response.dart';
 import '../providers/group_provider.dart';
 
 class EditGroupForm extends StatefulWidget {
-  final GroupResponseModel group;
+  final GetGroupResponseModel group;
   final bool isCurrentUserAdmin;
 
   const EditGroupForm({
@@ -81,12 +81,20 @@ class _EditGroupFormState extends State<EditGroupForm> {
 
     if (success) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Grupo modificado correctamente'),
-        ),
+        const SnackBar(content: Text('Grupo modificado correctamente')),
       );
 
-      Navigator.pop(context, provider.updatedGroup);
+      if (!mounted) {
+        return;
+      }
+
+      await provider.getGroups();
+
+      if (!mounted) {
+        return;
+      }
+
+      Navigator.pop(context);
     } else {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
@@ -114,9 +122,7 @@ class _EditGroupFormState extends State<EditGroupForm> {
                 borderRadius: BorderRadius.circular(8),
                 border: Border.all(color: Colors.orange),
               ),
-              child: const Text(
-                'No tenés permisos para modificar este grupo.',
-              ),
+              child: const Text('No tenés permisos para modificar este grupo.'),
             ),
 
           TextField(

@@ -1,10 +1,10 @@
 import 'package:flutter/material.dart';
 
-import '../models/group_model.response.dart';
+import '../models/get_group_model.response.dart';
 import '../widgets/edit_group_form.dart';
 
 class EditGroupScreen extends StatelessWidget {
-  final GroupResponseModel group;
+  final GetGroupResponseModel group;
   final bool isCurrentUserAdmin;
 
   const EditGroupScreen({
@@ -16,13 +16,8 @@ class EditGroupScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('Modificar grupo'),
-      ),
-      body: EditGroupForm(
-        group: group,
-        isCurrentUserAdmin: isCurrentUserAdmin,
-      ),
+      appBar: AppBar(title: const Text('Modificar grupo')),
+      body: EditGroupForm(group: group, isCurrentUserAdmin: isCurrentUserAdmin),
     );
   }
 }

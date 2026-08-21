@@ -1,7 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:provider/provider.dart';
 
+import '../../../core/routes/app_routes.dart';
 import '../../../core/theme/app_colors.dart';
+import '../../../core/widgets/buttons/app_primary_button.dart';
+import '../../auth/providers/auth_provider.dart';
 import '../models/get_group_model.response.dart';
 import '../models/get_member_model.response.dart';
 
@@ -17,6 +21,13 @@ class GroupInfoBottomSheet extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final authProvider = context.watch<AuthProvider>();
+    final isCurrentUserAdmin = group.members.any(
+      (member) =>
+          member.idUser == authProvider.authResponse?.user.id &&
+          member.role == RoleEnum.admin,
+    );
+
     return SafeArea(
       child: SingleChildScrollView(
         controller: scrollController,
@@ -163,6 +174,23 @@ class GroupInfoBottomSheet extends StatelessWidget {
                 ],
               ),
             ),
+
+            if (isCurrentUserAdmin) ...[
+              const SizedBox(height: 16),
+              Center(
+                child: AppPrimaryButton(
+                  text: 'Modificar grupo',
+                  loading: false,
+                  onPressed: () {
+                    Navigator.pushNamed(
+                      context,
+                      AppRoutes.updateGroup,
+                      arguments: {'group': group, 'isCurrentUserAdmin': true},
+                    );
+                  },
+                ),
+              ),
+            ],
 
             const SizedBox(height: 28),
             Row(
