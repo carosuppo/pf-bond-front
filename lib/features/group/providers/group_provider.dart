@@ -85,10 +85,12 @@ class GroupProvider extends ChangeNotifier {
         shareLocationMandatorily: shareLocationMandatorily,
       );
 
-      updatedGroup = await _groupService.updateGroup(
+      final updatedGroup = await _groupService.updateGroup(
         groupId: groupId,
         request: request,
       );
+
+      _applyUpdatedGroup(updatedGroup);
 
       return true;
     } catch (error) {
@@ -98,6 +100,31 @@ class GroupProvider extends ChangeNotifier {
     } finally {
       isLoading = false;
       notifyListeners();
+    }
+  }
+
+  void _applyUpdatedGroup(GroupResponseModel updated) {
+    if (groupDetails != null && groupDetails!.id == updated.id) {
+      groupDetails = GetGroupResponseModel(
+        id: updated.id,
+        name: updated.name,
+        description: updated.description,
+        shareLocationMandatorily: updated.shareLocationMandatorily,
+        invitationCode: groupDetails!.invitationCode,
+        members: groupDetails!.members,
+      );
+    }
+
+    final index = groups.indexWhere((group) => group.id == updated.id);
+    if (index != -1) {
+      groups[index] = GetGroupsResponseModel(
+        id: updated.id,
+        name: updated.name,
+      );
+    }
+
+    if (activeGroup != null && activeGroup!.id == updated.id) {
+      activeGroup = GetGroupsResponseModel(id: updated.id, name: updated.name);
     }
   }
 
