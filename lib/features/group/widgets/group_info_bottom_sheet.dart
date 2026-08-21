@@ -6,6 +6,7 @@ import '../../../core/routes/app_routes.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/widgets/buttons/app_primary_button.dart';
 import '../../auth/providers/auth_provider.dart';
+import '../formatters/invitation_code_formatter.dart';
 import '../models/get_group_model.response.dart';
 import '../models/get_member_model.response.dart';
 
@@ -85,7 +86,7 @@ class GroupInfoBottomSheet extends StatelessWidget {
                     children: [
                       Expanded(
                         child: Text(
-                          group.invitationCode,
+                          formatInvitationCode(group.invitationCode),
                           style: const TextStyle(
                             color: AppColors.text,
                             fontSize: 20,

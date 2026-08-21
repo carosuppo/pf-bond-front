@@ -4,6 +4,7 @@ import 'package:flutter/services.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/widgets/buttons/app_primary_button.dart';
 import '../../../core/widgets/buttons/app_secondary_button.dart';
+import '../formatters/invitation_code_formatter.dart';
 
 class InvitationCodeModal extends StatelessWidget {
   final String invitationCode;
@@ -48,7 +49,7 @@ class InvitationCodeModal extends StatelessWidget {
             ),
 
             child: Text(
-              invitationCode,
+              formatInvitationCode(invitationCode),
 
               style: const TextStyle(
                 fontSize: 24,

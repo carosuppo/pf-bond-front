@@ -33,7 +33,6 @@ class GroupProvider extends ChangeNotifier {
     required String name,
     String? description,
     required bool shareLocationMandatorily,
-    required int userId,
   }) async {
     isLoading = true;
     errorMessage = null;

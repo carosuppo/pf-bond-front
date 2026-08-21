@@ -39,13 +39,10 @@ class _CreateGroupFormState extends State<CreateGroupForm> {
 
     final success = await provider.createGroup(
       name: _nameController.text,
-      description: _descriptionController.text.isEmpty
+      description: _descriptionController.text.trim().isEmpty
           ? null
           : _descriptionController.text,
       shareLocationMandatorily: _shareLocationMandatorily,
-
-      // Temporal hasta integrar autenticación
-      userId: 1,
     );
 
     if (!mounted) return;
@@ -100,7 +97,9 @@ class _CreateGroupFormState extends State<CreateGroupForm> {
           TextField(
             controller: _descriptionController,
 
-            decoration: const InputDecoration(labelText: 'Descripción'),
+            decoration: const InputDecoration(
+              labelText: 'Descripción (opcional)',
+            ),
           ),
 
           const SizedBox(height: 16),
