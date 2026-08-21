@@ -7,24 +7,33 @@ class AppSecondaryButton extends StatelessWidget {
     super.key,
     required this.text,
     required this.onPressed,
+    this.leading,
   });
+
   final String text;
   final VoidCallback? onPressed;
+  final Widget? leading;
+
   @override
   Widget build(BuildContext context) {
     return SizedBox(
-      width: double.infinity,
-      height: 52,
+      height: 48,
       child: OutlinedButton(
         onPressed: onPressed,
         style: OutlinedButton.styleFrom(
           foregroundColor: AppColors.primary,
-          side: const BorderSide(color: AppColors.primary),
+          side: const BorderSide(color: AppColors.primary, width: 1.4),
           shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(16),
+            borderRadius: BorderRadius.circular(14),
           ),
         ),
-        child: Text(text),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            if (leading != null) ...[leading!, const SizedBox(width: 8)],
+            Text(text, style: const TextStyle(fontWeight: FontWeight.w600)),
+          ],
+        ),
       ),
     );
   }

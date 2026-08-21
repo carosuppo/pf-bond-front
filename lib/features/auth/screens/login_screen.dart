@@ -3,8 +3,8 @@ import 'package:provider/provider.dart';
 
 import '../../../core/routes/app_routes.dart';
 import '../../../core/theme/app_colors.dart';
+import '../../../core/widgets/buttons/app_primary_button.dart';
 import '../providers/auth_provider.dart';
-import '../widgets/auth_submit_button.dart';
 import '../widgets/auth_text_field.dart';
 
 class LoginScreen extends StatefulWidget {
@@ -135,10 +135,13 @@ class _LoginScreenState extends State<LoginScreen> {
                         validator: _validatePassword,
                       ),
                       const SizedBox(height: 22),
-                      AuthSubmitButton(
-                        text: 'Ingresar',
-                        isLoading: authProvider.isLoading,
-                        onPressed: _submit,
+                      SizedBox(
+                        width: double.infinity,
+                        child: AppPrimaryButton(
+                          text: 'Ingresar',
+                          loading: authProvider.isLoading,
+                          onPressed: _submit,
+                        ),
                       ),
                       const SizedBox(height: 18),
                       Row(

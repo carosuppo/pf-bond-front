@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 
 import '../../../core/theme/app_colors.dart';
 import '../../../core/widgets/buttons/app_primary_button.dart';
+import '../../../core/widgets/buttons/app_secondary_button.dart';
 
 class InvitationCodeModal extends StatelessWidget {
   final String invitationCode;
@@ -11,6 +12,10 @@ class InvitationCodeModal extends StatelessWidget {
 
   void _copyCode(BuildContext context) async {
     await Clipboard.setData(ClipboardData(text: invitationCode));
+
+    if (!context.mounted) {
+      return;
+    }
 
     ScaffoldMessenger.of(
       context,
@@ -60,6 +65,15 @@ class InvitationCodeModal extends StatelessWidget {
 
             onPressed: () {
               _copyCode(context);
+            },
+          ),
+
+          const SizedBox(height: 12),
+
+          AppSecondaryButton(
+            text: 'Listo',
+            onPressed: () {
+              Navigator.pop(context);
             },
           ),
         ],

@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
+import '../../features/auth/providers/auth_provider.dart';
 import '../routes/app_routes.dart';
-import '../storage/session_storage_service.dart';
 
 class SplashScreen extends StatefulWidget {
   const SplashScreen({super.key});
@@ -17,14 +17,14 @@ class _SplashScreenState extends State<SplashScreen> {
     super.initState();
 
     WidgetsBinding.instance.addPostFrameCallback((_) async {
-      await _navigate();
+      await _restoreSessionAndNavigate();
     });
   }
 
-  Future<void> _navigate() async {
-    final sessionStorage = context.read<SessionStorageService>();
+  Future<void> _restoreSessionAndNavigate() async {
+    final authProvider = context.read<AuthProvider>();
 
-    final hasValidSession = await sessionStorage.hasValidSession();
+    final hasSession = await authProvider.restoreSession();
 
     if (!mounted) {
       return;
@@ -32,7 +32,7 @@ class _SplashScreenState extends State<SplashScreen> {
 
     Navigator.of(
       context,
-    ).pushReplacementNamed(hasValidSession ? AppRoutes.map : AppRoutes.login);
+    ).pushReplacementNamed(hasSession ? AppRoutes.map : AppRoutes.login);
   }
 
   @override

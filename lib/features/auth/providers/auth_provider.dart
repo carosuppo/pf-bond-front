@@ -62,4 +62,24 @@ class AuthProvider extends ChangeNotifier {
       notifyListeners();
     }
   }
+
+  Future<bool> restoreSession() async {
+    isLoading = true;
+    errorMessage = null;
+    notifyListeners();
+
+    try {
+      authResponse = await _authService.restoreSession();
+
+      return authResponse != null;
+    } catch (error) {
+      authResponse = null;
+      errorMessage = error.toString().replaceFirst('Exception: ', '');
+
+      return false;
+    } finally {
+      isLoading = false;
+      notifyListeners();
+    }
+  }
 }

@@ -4,12 +4,15 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:provider/provider.dart' as provider;
 
 import 'core/network/api_client.dart';
+import 'core/preferences/app_preferences_service.dart';
 import 'core/routes/app_router.dart';
 import 'core/routes/app_routes.dart';
 import 'core/storage/session_storage_service.dart';
 import 'core/theme/app_colors.dart';
 import 'features/auth/providers/auth_provider.dart';
 import 'features/auth/services/auth_service.dart';
+import 'features/group/providers/group_provider.dart';
+import 'features/group/services/group_service.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -28,6 +31,9 @@ class MyApp extends StatelessWidget {
         provider.Provider<SessionStorageService>(
           create: (_) => SessionStorageService(),
         ),
+        provider.Provider<AppPreferencesService>(
+          create: (_) => AppPreferencesService(),
+        ),
         provider.Provider<ApiClient>(
           create: (context) => ApiClient(context.read<SessionStorageService>()),
         ),
@@ -39,6 +45,15 @@ class MyApp extends StatelessWidget {
         ),
         provider.ChangeNotifierProvider<AuthProvider>(
           create: (context) => AuthProvider(context.read<AuthService>()),
+        ),
+        provider.Provider<GroupService>(
+          create: (context) => GroupService(context.read<ApiClient>()),
+        ),
+        provider.ChangeNotifierProvider<GroupProvider>(
+          create: (context) => GroupProvider(
+            context.read<GroupService>(),
+            context.read<AppPreferencesService>(),
+          ),
         ),
       ],
       child: MaterialApp(

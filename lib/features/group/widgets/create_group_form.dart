@@ -51,9 +51,8 @@ class _CreateGroupFormState extends State<CreateGroupForm> {
     if (!mounted) return;
 
     if (success) {
-      showModalBottomSheet(
+      await showModalBottomSheet<void>(
         context: context,
-
         builder: (_) {
           return InvitationCodeModal(
             invitationCode: provider.group!.invitationCode,
@@ -61,7 +60,17 @@ class _CreateGroupFormState extends State<CreateGroupForm> {
         },
       );
 
-      // Acá podrías navegar a la pantalla del grupo creado
+      if (!mounted) {
+        return;
+      }
+
+      await provider.getGroups();
+
+      if (!mounted) {
+        return;
+      }
+
+      Navigator.pop(context);
     } else {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(

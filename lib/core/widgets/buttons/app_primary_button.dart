@@ -8,39 +8,46 @@ class AppPrimaryButton extends StatelessWidget {
     required this.text,
     required this.onPressed,
     this.loading = false,
+    this.leading,
   });
+
   final String text;
   final VoidCallback? onPressed;
   final bool loading;
+  final Widget? leading;
+
   @override
   Widget build(BuildContext context) {
     return SizedBox(
-      width: double.infinity,
-      height: 52,
+      height: 48,
       child: FilledButton(
         onPressed: loading ? null : onPressed,
         style: FilledButton.styleFrom(
           backgroundColor: AppColors.primary,
           foregroundColor: Colors.black,
+          disabledBackgroundColor: AppColors.disabledBackgroundColorButton,
           shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(16),
+            borderRadius: BorderRadius.circular(14),
           ),
         ),
         child: loading
             ? const SizedBox(
-                height: 22,
                 width: 22,
+                height: 22,
                 child: CircularProgressIndicator(
                   strokeWidth: 2,
                   color: Colors.black,
                 ),
               )
-            : Text(
-                text,
-                style: const TextStyle(
-                  fontWeight: FontWeight.bold,
-                  fontSize: 16,
-                ),
+            : Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  if (leading != null) ...[leading!, const SizedBox(width: 8)],
+                  Text(
+                    text,
+                    style: const TextStyle(fontWeight: FontWeight.w600),
+                  ),
+                ],
               ),
       ),
     );
