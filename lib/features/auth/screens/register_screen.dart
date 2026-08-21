@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 
 import '../../../core/routes/app_routes.dart';
 import '../../../core/theme/app_colors.dart';
+import '../../../core/validators/form_validators.dart';
 import '../providers/auth_provider.dart';
 import '../widgets/auth_submit_button.dart';
 import '../widgets/auth_text_field.dart';
@@ -129,14 +130,14 @@ class _RegisterScreenState extends State<RegisterScreen> {
                       AuthTextField(
                         controller: _nameController,
                         label: 'Nombre',
-                        validator: _validateName,
+                        validator: FormValidators.validateName,
                       ),
                       const SizedBox(height: 14),
                       AuthTextField(
                         controller: _emailController,
                         label: 'Email',
                         keyboardType: TextInputType.emailAddress,
-                        validator: _validateEmail,
+                        validator: FormValidators.validateEmail,
                       ),
                       const SizedBox(height: 14),
                       AuthTextField(
@@ -209,42 +210,6 @@ class _RegisterScreenState extends State<RegisterScreen> {
         ),
       ),
     );
-  }
-
-  String? _validateName(String? value) {
-    final name = value?.trim() ?? '';
-
-    if (name.isEmpty) {
-      return 'El nombre es obligatorio.';
-    }
-
-    if (name.length < 2 || name.length > 100) {
-      return 'El nombre debe tener entre 2 y 100 caracteres.';
-    }
-
-    final nameRegex = RegExp(r"^[A-Za-zÁÉÍÓÚáéíóúÑñÜü\s'-]+$");
-
-    if (!nameRegex.hasMatch(name)) {
-      return 'El nombre solo puede contener letras, espacios, guiones o apóstrofes.';
-    }
-
-    return null;
-  }
-
-  String? _validateEmail(String? value) {
-    final email = value?.trim() ?? '';
-
-    if (email.isEmpty) {
-      return 'El email es obligatorio.';
-    }
-
-    final emailRegex = RegExp(r'^[^\s@]+@[^\s@]+\.[^\s@]+$');
-
-    if (!emailRegex.hasMatch(email)) {
-      return 'Ingresá un email válido.';
-    }
-
-    return null;
   }
 
   String? _validatePassword(String? value) {

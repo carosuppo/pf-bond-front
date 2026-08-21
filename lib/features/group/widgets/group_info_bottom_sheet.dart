@@ -47,12 +47,15 @@ class GroupInfoBottomSheet extends StatelessWidget {
               ),
             ),
             const SizedBox(height: 24),
-            Text(
-              group.name,
-              style: const TextStyle(
-                color: AppColors.text,
-                fontSize: 24,
-                fontWeight: FontWeight.w600,
+            Center(
+              child: Text(
+                group.name,
+                textAlign: TextAlign.center,
+                style: const TextStyle(
+                  color: AppColors.text,
+                  fontSize: 24,
+                  fontWeight: FontWeight.w600,
+                ),
               ),
             ),
             if (group.description != null &&

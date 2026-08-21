@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:provider/provider.dart';
 
+import '../../../core/widgets/app_bottom_nav_bar.dart';
 import '../../group/providers/group_provider.dart';
 import '../../group/widgets/group_info_bottom_sheet.dart';
 import '../../group/widgets/group_selector_button.dart';
@@ -42,7 +43,9 @@ class _MapScreenState extends ConsumerState<MapScreen> {
     final groupProvider = context.watch<GroupProvider>();
 
     return Scaffold(
+      extendBody: true,
       body: SafeArea(
+        bottom: false,
         child: Stack(
           children: [
             const Positioned.fill(child: LocationMap()),
@@ -55,11 +58,11 @@ class _MapScreenState extends ConsumerState<MapScreen> {
             if (groupProvider.groupDetails != null)
               Positioned.fill(
                 child: DraggableScrollableSheet(
-                  initialChildSize: 0.12,
-                  minChildSize: 0.12,
+                  initialChildSize: 0.25,
+                  minChildSize: 0.25,
                   maxChildSize: 0.6,
                   snap: true,
-                  snapSizes: const [0.12, 0.6],
+                  snapSizes: const [0.25, 0.6],
                   builder: (context, scrollController) {
                     return Material(
                       elevation: 8,
@@ -77,6 +80,11 @@ class _MapScreenState extends ConsumerState<MapScreen> {
               ),
           ],
         ),
+      ),
+      bottomNavigationBar: AppBottomNavBar(
+        selectedDestination: AppBottomDestination.map,
+        onDestinationSelected: (destination) =>
+            navigateToAppDestination(context, destination),
       ),
     );
   }

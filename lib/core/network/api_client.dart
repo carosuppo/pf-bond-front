@@ -40,6 +40,21 @@ class ApiClient {
     return _handleResponse(response);
   }
 
+  Future<Map<String, dynamic>> authenticatedPatch(
+    String path,
+    Map<String, dynamic> body,
+  ) async {
+    final uri = Uri.parse('${ApiConfig.baseUrl}$path');
+
+    final response = await http.patch(
+      uri,
+      headers: await _buildHeaders(authenticated: true),
+      body: jsonEncode(body),
+    );
+
+    return _handleResponse(response);
+  }
+
   Future<List<dynamic>> authenticatedGetList(String path) async {
     final uri = Uri.parse('${ApiConfig.baseUrl}$path');
 

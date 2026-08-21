@@ -5,6 +5,8 @@ class AppRoutes {
   static const String login = '/login';
   static const String register = '/register';
   static const String map = '/map';
+  static const String settings = '/settings';
+  static const String editProfile = '/edit-profile';
   static const String joinGroup = '/join-group';
   static const String createGroup = '/create-group';
   static const String updateGroup = '/update-group';

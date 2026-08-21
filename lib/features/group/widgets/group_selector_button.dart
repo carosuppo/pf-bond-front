@@ -119,20 +119,8 @@ class _GroupSelectorButtonState extends State<GroupSelectorButton> {
         child: Center(
           child: SizedBox(
             width: 280,
-            child: FilledButton.icon(
+            child: FilledButton(
               onPressed: _toggleOverlay,
-              label: Expanded(
-                child: Text(
-                  groupProvider.activeGroup?.name ?? 'Seleccionar grupo',
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(fontWeight: FontWeight.w600),
-                ),
-              ),
-              icon: Icon(
-                _isOpen ? Icons.keyboard_arrow_up : Icons.keyboard_arrow_down,
-                size: 20,
-              ),
               style: FilledButton.styleFrom(
                 backgroundColor: AppColors.cardColor,
                 foregroundColor: AppColors.text,
@@ -148,6 +136,27 @@ class _GroupSelectorButtonState extends State<GroupSelectorButton> {
                 shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(14),
                 ),
+              ),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Flexible(
+                    child: Text(
+                      groupProvider.activeGroup?.name ?? 'Seleccionar grupo',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      textAlign: TextAlign.center,
+                      style: const TextStyle(fontWeight: FontWeight.w600),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Icon(
+                    _isOpen
+                        ? Icons.keyboard_arrow_up
+                        : Icons.keyboard_arrow_down,
+                    size: 20,
+                  ),
+                ],
               ),
             ),
           ),

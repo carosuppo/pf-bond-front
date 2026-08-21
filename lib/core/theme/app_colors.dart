@@ -27,4 +27,8 @@ class AppColors {
   static const hint = Color(0xFF9E9E9E);
 
   static const error = Colors.redAccent;
+
+  static const bottomBarBackground = Colors.white;
+
+  static const bottomBarIconInactive = Color(0xFFC9C9C9);
 }
