@@ -17,25 +17,48 @@ class MapScreen extends ConsumerStatefulWidget {
 }
 
 class _MapScreenState extends ConsumerState<MapScreen> {
+  late final GroupProvider _groupProvider;
+  int? _viewingGroupId;
+
   @override
   void initState() {
     super.initState();
 
-    Future.microtask(() {
-      ref.read(locationProvider.notifier).initialize();
-    });
+    _groupProvider = context.read<GroupProvider>();
+    _groupProvider.addListener(_onGroupChanged);
 
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!mounted) {
-        return;
-      }
+    WidgetsBinding.instance.addPostFrameCallback((_) => _syncViewingGroup());
+  }
 
-      // MapScreen es actualmente el punto de entrada al área autenticada (pantalla inicial).
-      // Por eso inicializa el estado de grupos una sola vez mediante
-      // GroupProvider.initialize(), evitando que cada pantalla tenga
-      // que encargarse de cargar los grupos para mostrarlos en el GroupSelectorButton (Consultar mis grupos).
-      context.read<GroupProvider>().initialize();
-    });
+  void _onGroupChanged() => _syncViewingGroup();
+
+  void _syncViewingGroup() {
+    if (!mounted) return;
+
+    final activeGroupId = _groupProvider.activeGroup?.id;
+
+    if (activeGroupId == _viewingGroupId) return;
+
+    _viewingGroupId = activeGroupId;
+
+    final locationNotifier = ref.read(locationProvider.notifier);
+
+    if (activeGroupId == null) {
+      locationNotifier.stopViewingGroup();
+    } else {
+      locationNotifier.startViewingGroup(activeGroupId);
+    }
+  }
+
+  @override
+  void dispose() {
+    _groupProvider.removeListener(_onGroupChanged);
+
+    if (_viewingGroupId != null) {
+      ref.read(locationProvider.notifier).stopViewingGroup();
+    }
+
+    super.dispose();
   }
 
   @override
@@ -48,7 +71,9 @@ class _MapScreenState extends ConsumerState<MapScreen> {
         bottom: false,
         child: Stack(
           children: [
-            const Positioned.fill(child: LocationMap()),
+            Positioned.fill(
+              child: LocationMap(groupId: groupProvider.activeGroup?.id),
+            ),
             Positioned(
               top: 12,
               left: 0,

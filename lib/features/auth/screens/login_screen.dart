@@ -1,20 +1,24 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:provider/provider.dart';
 
 import '../../../core/routes/app_routes.dart';
+import '../../../core/routes/navigation/post_auth_navigator.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/widgets/buttons/app_primary_button.dart';
+import '../../group/providers/group_provider.dart';
+import '../../location/providers/location_provider.dart';
 import '../providers/auth_provider.dart';
 import '../widgets/auth_text_field.dart';
 
-class LoginScreen extends StatefulWidget {
+class LoginScreen extends ConsumerStatefulWidget {
   const LoginScreen({super.key});
 
   @override
-  State<LoginScreen> createState() => _LoginScreenState();
+  ConsumerState<LoginScreen> createState() => _LoginScreenState();
 }
 
-class _LoginScreenState extends State<LoginScreen> {
+class _LoginScreenState extends ConsumerState<LoginScreen> {
   final _formKey = GlobalKey<FormState>();
 
   final _emailController = TextEditingController();
@@ -44,11 +48,7 @@ class _LoginScreenState extends State<LoginScreen> {
       return;
     }
 
-    if (success) {
-      debugPrint('Session token: ${authProvider.authResponse?.sessionToken}');
-
-      Navigator.of(context).pushReplacementNamed(AppRoutes.map);
-    } else {
+    if (!success) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(
@@ -56,7 +56,14 @@ class _LoginScreenState extends State<LoginScreen> {
           ),
         ),
       );
+      return;
     }
+
+    await const PostAuthNavigator().navigate(
+      context: context,
+      groupProvider: context.read<GroupProvider>(),
+      locationNotifier: ref.read(locationProvider.notifier),
+    );
   }
 
   void _showGooglePendingMessage() {
@@ -84,6 +91,7 @@ class _LoginScreenState extends State<LoginScreen> {
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               const SizedBox(height: 40),
+
               const Text(
                 'Bond',
                 textAlign: TextAlign.center,
@@ -93,7 +101,9 @@ class _LoginScreenState extends State<LoginScreen> {
                   fontWeight: FontWeight.bold,
                 ),
               ),
+
               const SizedBox(height: 12),
+
               const Text(
                 'Iniciar sesión',
                 textAlign: TextAlign.center,
@@ -103,13 +113,17 @@ class _LoginScreenState extends State<LoginScreen> {
                   fontWeight: FontWeight.w600,
                 ),
               ),
+
               const SizedBox(height: 8),
+
               const Text(
                 'Ingresá para continuar con tus grupos.',
                 textAlign: TextAlign.center,
                 style: TextStyle(color: AppColors.mutedText, fontSize: 15),
               ),
+
               const SizedBox(height: 32),
+
               Container(
                 padding: const EdgeInsets.all(20),
                 decoration: BoxDecoration(
@@ -127,13 +141,16 @@ class _LoginScreenState extends State<LoginScreen> {
                         keyboardType: TextInputType.emailAddress,
                         validator: _validateEmail,
                       ),
+
                       const SizedBox(height: 14),
+
                       AuthTextField(
                         controller: _passwordController,
                         label: 'Contraseña',
                         obscureText: true,
                         validator: _validatePassword,
                       ),
+
                       const SizedBox(height: 22),
                       SizedBox(
                         width: double.infinity,
@@ -143,9 +160,11 @@ class _LoginScreenState extends State<LoginScreen> {
                           onPressed: _submit,
                         ),
                       ),
+
                       const SizedBox(height: 18),
-                      Row(
-                        children: const [
+
+                      const Row(
+                        children: [
                           Expanded(child: Divider(color: AppColors.divider)),
                           Padding(
                             padding: EdgeInsets.symmetric(horizontal: 12),
@@ -157,7 +176,9 @@ class _LoginScreenState extends State<LoginScreen> {
                           Expanded(child: Divider(color: AppColors.divider)),
                         ],
                       ),
+
                       const SizedBox(height: 18),
+
                       SizedBox(
                         width: double.infinity,
                         height: 48,
@@ -184,7 +205,9 @@ class _LoginScreenState extends State<LoginScreen> {
                           ),
                         ),
                       ),
+
                       const SizedBox(height: 18),
+
                       TextButton(
                         onPressed: _goToRegister,
                         child: const Text(

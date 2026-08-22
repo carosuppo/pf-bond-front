@@ -35,25 +35,38 @@ class _CreateGroupFormState extends State<CreateGroupForm> {
 
       return;
     }
+
     final provider = context.read<GroupProvider>();
 
     final success = await provider.createGroup(
-      name: _nameController.text,
+      name: _nameController.text.trim(),
       description: _descriptionController.text.trim().isEmpty
           ? null
-          : _descriptionController.text,
+          : _descriptionController.text.trim(),
       shareLocationMandatorily: _shareLocationMandatorily,
     );
 
-    if (!mounted) return;
+    if (!mounted) {
+      return;
+    }
 
-    if (success) {
+    if (!success) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(provider.errorMessage ?? 'Error al crear grupo'),
+        ),
+      );
+
+      return;
+    }
+
+    final invitationCode = provider.group?.invitationCode;
+
+    if (invitationCode != null) {
       await showModalBottomSheet<void>(
         context: context,
         builder: (_) {
-          return InvitationCodeModal(
-            invitationCode: provider.group!.invitationCode,
-          );
+          return InvitationCodeModal(invitationCode: invitationCode);
         },
       );
 
@@ -71,7 +84,9 @@ class _CreateGroupFormState extends State<CreateGroupForm> {
     } else {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text(provider.errorMessage ?? 'Error al crear grupo'),
+          content: Text(
+            provider.errorMessage ?? 'Error al generar código de invitación',
+          ),
         ),
       );
     }
@@ -83,12 +98,10 @@ class _CreateGroupFormState extends State<CreateGroupForm> {
 
     return Padding(
       padding: const EdgeInsets.all(16),
-
       child: Column(
         children: [
           TextField(
             controller: _nameController,
-
             decoration: const InputDecoration(labelText: 'Nombre del grupo'),
           ),
 
@@ -106,14 +119,14 @@ class _CreateGroupFormState extends State<CreateGroupForm> {
 
           SwitchListTile(
             title: const Text('Compartir ubicación obligatoriamente'),
-
             value: _shareLocationMandatorily,
-
-            onChanged: (value) {
-              setState(() {
-                _shareLocationMandatorily = value;
-              });
-            },
+            onChanged: isLoading
+                ? null
+                : (value) {
+                    setState(() {
+                      _shareLocationMandatorily = value;
+                    });
+                  },
           ),
 
           const SizedBox(height: 16),
@@ -123,12 +136,13 @@ class _CreateGroupFormState extends State<CreateGroupForm> {
             loading: isLoading,
             onPressed: _createGroup,
           ),
+
           const SizedBox(height: 12),
 
           AppSecondaryButton(
             text: 'Cancelar',
             onPressed: () {
-              Navigator.pop(context);
+              Navigator.of(context).pop();
             },
           ),
         ],

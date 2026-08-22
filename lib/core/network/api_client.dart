@@ -55,17 +55,6 @@ class ApiClient {
     return _handleResponse(response);
   }
 
-  Future<List<dynamic>> authenticatedGetList(String path) async {
-    final uri = Uri.parse('${ApiConfig.baseUrl}$path');
-
-    final response = await http.get(
-      uri,
-      headers: await _buildHeaders(authenticated: true),
-    );
-
-    return _handleListResponse(response);
-  }
-
   Future<Map<String, dynamic>> authenticatedGet(String path) async {
     final uri = Uri.parse('${ApiConfig.baseUrl}$path');
 
@@ -75,6 +64,20 @@ class ApiClient {
     );
 
     return _handleResponse(response);
+  }
+
+  Future<List<Map<String, dynamic>>> authenticatedGetList(String path) async {
+    final response = await http.get(
+      Uri.parse('${ApiConfig.baseUrl}$path'),
+      headers: await _buildHeaders(authenticated: true),
+    );
+    final decodedBody = _decodeSuccessfulResponse(response);
+    if (decodedBody is! List<Object?>) {
+      throw Exception('La respuesta del servidor no es una lista valida.');
+    }
+    return decodedBody
+        .map((item) => Map<String, dynamic>.from(item! as Map))
+        .toList(growable: false);
   }
 
   Future<Map<String, dynamic>> authenticatedPut(
@@ -129,26 +132,17 @@ class ApiClient {
   }
 
   Future<Map<String, dynamic>> _handleResponse(http.Response response) async {
-    final decodedBody = response.body.isNotEmpty
-        ? jsonDecode(response.body)
-        : null;
-
-    if (response.statusCode >= 200 && response.statusCode < 300) {
-      return Future.value(decodedBody as Map<String, dynamic>);
-    }
-
-    throw Exception(_getErrorMessage(decodedBody));
+    final decodedBody = _decodeSuccessfulResponse(response);
+    return Map<String, dynamic>.from(decodedBody as Map);
   }
 
-  Future<List<dynamic>> _handleListResponse(http.Response response) async {
-    final decodedBody = response.body.isNotEmpty
-        ? jsonDecode(response.body)
+  Object? _decodeSuccessfulResponse(http.Response response) {
+    final Object? decodedBody = response.body.isNotEmpty
+        ? jsonDecode(response.body) as Object?
         : null;
-
     if (response.statusCode >= 200 && response.statusCode < 300) {
-      return decodedBody as List<dynamic>;
+      return decodedBody;
     }
-
     throw Exception(_getErrorMessage(decodedBody));
   }
 }

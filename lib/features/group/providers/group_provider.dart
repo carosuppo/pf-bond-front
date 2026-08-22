@@ -29,6 +29,22 @@ class GroupProvider extends ChangeNotifier {
   List<GetGroupsResponseModel> groups = [];
   JoinGroupResponseModel? joinResponse;
 
+  Future<void> loadGroups() async {
+    isLoading = true;
+    errorMessage = null;
+
+    notifyListeners();
+
+    try {
+      groups = await _groupService.getGroups();
+    } catch (error) {
+      errorMessage = error.toString().replaceFirst('Exception: ', '');
+    } finally {
+      isLoading = false;
+      notifyListeners();
+    }
+  }
+
   Future<bool> createGroup({
     required String name,
     String? description,

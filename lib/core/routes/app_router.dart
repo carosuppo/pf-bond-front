@@ -5,6 +5,7 @@ import '../../features/auth/screens/register_screen.dart';
 import '../../features/group/models/get_group_model.response.dart';
 import '../../features/group/screens/create_group_screen.dart';
 import '../../features/group/screens/edit_group_screen.dart';
+import '../../features/group/screens/groups_screen.dart';
 import '../../features/group/screens/join_group_screen.dart';
 import '../../features/location/screens/map_screen.dart';
 import '../../features/profile/screens/edit_profile_screen.dart';
@@ -32,6 +33,12 @@ class AppRouter {
       case AppRoutes.register:
         return MaterialPageRoute(
           builder: (_) => const RegisterScreen(),
+          settings: settings,
+        );
+
+      case AppRoutes.groups:
+        return MaterialPageRoute(
+          builder: (_) => const GroupsScreen(),
           settings: settings,
         );
 

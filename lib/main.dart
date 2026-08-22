@@ -18,6 +18,7 @@ import 'features/profile/services/profile_service.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
+
   await dotenv.load(fileName: '.env');
 
   runApp(const ProviderScope(child: MyApp()));
@@ -39,6 +40,7 @@ class MyApp extends StatelessWidget {
         provider.Provider<ApiClient>(
           create: (context) => ApiClient(context.read<SessionStorageService>()),
         ),
+
         provider.Provider<AuthService>(
           create: (context) => AuthService(
             context.read<ApiClient>(),
@@ -83,11 +85,9 @@ class MyApp extends StatelessWidget {
 
           inputDecorationTheme: const InputDecorationTheme(
             labelStyle: TextStyle(color: AppColors.hint),
-
             enabledBorder: OutlineInputBorder(
               borderSide: BorderSide(color: AppColors.border),
             ),
-
             focusedBorder: OutlineInputBorder(
               borderSide: BorderSide(color: AppColors.primary),
             ),

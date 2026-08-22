@@ -48,12 +48,7 @@ class GroupService {
   Future<List<GetGroupsResponseModel>> getGroups() async {
     final response = await _apiClient.authenticatedGetList('/group');
 
-    return response
-        .map(
-          (json) =>
-              GetGroupsResponseModel.fromJson(json as Map<String, dynamic>),
-        )
-        .toList();
+    return response.map(GetGroupsResponseModel.fromJson).toList();
   }
 
   Future<GetGroupResponseModel> getGroup({required int groupId}) async {
