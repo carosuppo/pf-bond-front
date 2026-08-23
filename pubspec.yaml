@@ -55,6 +55,8 @@ dev_dependencies:
   # package. See that file for information about deactivating specific lint
   # rules and activating additional ones.
   flutter_lints: ^6.0.0
+  flutter_launcher_icons: ^0.13.1
+  flutter_native_splash: ^2.4.1
 
 # For information on the generic Dart part of this file, see the
 # following page: https://dart.dev/tools/pub/pubspec
@@ -67,6 +69,7 @@ flutter:
   uses-material-design: true
   assets:
     - .env
+    - assets/
 
   # To add assets to your application, add an assets section, like this:
   # assets:
@@ -98,3 +101,19 @@ flutter:
   #
   # For details regarding fonts from package dependencies,
   # see https://flutter.dev/to/font-from-package
+flutter_launcher_icons:
+  android: true
+  ios: false
+  image_path: "assets/logo_bond.png"
+
+flutter_native_splash:
+  color: "#1F1F1F"
+  image: assets/logo_bond.png
+  android: true
+  ios: false
+  android_gravity: center
+  fullscreen: false
+  android_12:
+    image: assets/logo_bond_achicado.png
+    icon_background_color: "#1F1F1F"
+    color: "#1F1F1F"
