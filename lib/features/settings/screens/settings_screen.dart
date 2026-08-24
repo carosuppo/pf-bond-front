@@ -9,16 +9,13 @@ import '../widgets/settings_option_tile.dart';
 class SettingsScreen extends StatelessWidget {
   const SettingsScreen({super.key});
 
-  /// Opciones disponibles en la pantalla.
-  ///
-  /// Agregar una nueva opción es tan simple como agregar un elemento a esta
-  /// lista (abierta a extensión, cerrada a modificación).
   List<SettingsOption> _buildOptions(BuildContext context) {
     return [
       SettingsOption(
         icon: Icons.person_outline,
         title: 'Modificar mi perfil',
-        onTap: () => Navigator.of(context).pushNamed(AppRoutes.editProfile),
+        onTap: () =>
+            Navigator.of(context).pushNamed(AppRoutes.editProfile),
       ),
     ];
   }
@@ -28,22 +25,31 @@ class SettingsScreen extends StatelessWidget {
     final options = _buildOptions(context);
 
     return Scaffold(
-      extendBody: true,
       appBar: AppBar(
         automaticallyImplyLeading: false,
         title: const Text('Configuración'),
       ),
+
       body: ListView.separated(
         itemCount: options.length,
-        separatorBuilder: (_, _) =>
-            const Divider(height: 1, color: AppColors.divider),
+        separatorBuilder: (_, _) => const Divider(
+          height: 1,
+          color: AppColors.divider,
+        ),
         itemBuilder: (context, index) =>
             SettingsOptionTile(option: options[index]),
       ),
-      bottomNavigationBar: AppBottomNavBar(
-        selectedDestination: AppBottomDestination.settings,
-        onDestinationSelected: (destination) =>
-            navigateToAppDestination(context, destination),
+
+      bottomNavigationBar: SafeArea(
+        top: false,
+        child: AppBottomNavBar(
+          selectedDestination: AppBottomDestination.settings,
+          onDestinationSelected: (destination) =>
+              navigateToAppDestination(
+                context,
+                destination,
+              ),
+        ),
       ),
     );
   }

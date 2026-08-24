@@ -50,7 +50,11 @@ class _JoinGroupFormState extends State<JoinGroupForm> {
 
       ScaffoldMessenger.of(
         context,
-      ).showSnackBar(SnackBar(content: Text(message)));
+      ).showSnackBar(
+        SnackBar(
+          content: Text(message),
+        ),
+      );
 
       await groupProvider.getGroups();
 
@@ -60,11 +64,17 @@ class _JoinGroupFormState extends State<JoinGroupForm> {
 
       Navigator.of(context).pop();
     } else {
-      ScaffoldMessenger.of(context).showSnackBar(
+      final errorMessage = groupProvider.errorMessage;
+
+      final message = errorMessage == 'Ya eres miembro de este grupo.'
+          ? 'Ya perteneces a este grupo'
+          : errorMessage ?? 'No se pudo ingresar al grupo.';
+
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(
         SnackBar(
-          content: Text(
-            groupProvider.errorMessage ?? 'No se pudo ingresar al grupo.',
-          ),
+          content: Text(message),
         ),
       );
     }
@@ -94,9 +104,13 @@ class _JoinGroupFormState extends State<JoinGroupForm> {
     return LayoutBuilder(
       builder: (context, constraints) {
         return SingleChildScrollView(
-          padding: EdgeInsets.symmetric(horizontal: horizontalPadding),
+          padding: EdgeInsets.symmetric(
+            horizontal: horizontalPadding,
+          ),
           child: ConstrainedBox(
-            constraints: BoxConstraints(maxWidth: maxContentWidth),
+            constraints: BoxConstraints(
+              maxWidth: maxContentWidth,
+            ),
             child: Center(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -117,7 +131,10 @@ class _JoinGroupFormState extends State<JoinGroupForm> {
                   const Text(
                     'Ingresá el código de invitación que te compartieron',
                     textAlign: TextAlign.center,
-                    style: TextStyle(color: AppColors.mutedText, fontSize: 15),
+                    style: TextStyle(
+                      color: AppColors.mutedText,
+                      fontSize: 15,
+                    ),
                   ),
 
                   const SizedBox(height: 28),
@@ -129,25 +146,28 @@ class _JoinGroupFormState extends State<JoinGroupForm> {
                       borderRadius: BorderRadius.circular(14),
                       boxShadow: [
                         BoxShadow(
-                          color: Colors.black.withValues(alpha: 0.15),
+                          color: Colors.black.withValues(
+                            alpha: 0.15,
+                          ),
                           blurRadius: 16,
                           offset: const Offset(0, 6),
                         ),
                       ],
                     ),
-
                     child: Form(
                       key: _formKey,
-
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.stretch,
                         children: [
                           GlobalTextField(
                             controller: _codeController,
                             label: 'Código de invitación',
-                            textCapitalization: TextCapitalization.characters,
+                            textCapitalization:
+                                TextCapitalization.characters,
                             maxLength: 7,
-                            inputFormatters: [InvitationCodeFormatter()],
+                            inputFormatters: [
+                              InvitationCodeFormatter(),
+                            ],
                             validator: _validateCode,
                             style: const TextStyle(
                               color: AppColors.text,
@@ -168,7 +188,10 @@ class _JoinGroupFormState extends State<JoinGroupForm> {
 
                           const SizedBox(height: 12),
 
-                          AppSecondaryButton(text: 'Atrás', onPressed: _goBack),
+                          AppSecondaryButton(
+                            text: 'Atrás',
+                            onPressed: _goBack,
+                          ),
 
                           const SizedBox(height: 16),
                         ],

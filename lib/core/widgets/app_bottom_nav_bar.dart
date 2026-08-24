@@ -23,11 +23,13 @@ class _BottomNavItem {
   const _BottomNavItem({
     required this.destination,
     required this.icon,
+    required this.selectedIcon,
     required this.tooltip,
   });
 
   final AppBottomDestination destination;
   final IconData icon;
+  final IconData selectedIcon;
   final String tooltip;
 }
 
@@ -41,12 +43,14 @@ class AppBottomNavBar extends StatelessWidget {
   static const _items = [
     _BottomNavItem(
       destination: AppBottomDestination.map,
-      icon: Icons.map,
-      tooltip: 'Mapa',
+      icon: Icons.location_on_outlined,
+      selectedIcon: Icons.location_on,
+      tooltip: 'Ubicación',
     ),
     _BottomNavItem(
       destination: AppBottomDestination.settings,
-      icon: Icons.settings,
+      icon: Icons.settings_outlined,
+      selectedIcon: Icons.settings,
       tooltip: 'Configuración',
     ),
   ];
@@ -56,20 +60,26 @@ class AppBottomNavBar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Center(
-      heightFactor: 1,
-      child: Container(
-        margin: const EdgeInsets.only(bottom: 15),
-        padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 10),
-        decoration: BoxDecoration(
-          color: AppColors.bottomBarBackground,
-          borderRadius: BorderRadius.circular(50),
+    return Container(
+      width: double.infinity,
+      decoration: BoxDecoration(
+        color: AppColors.bottomBarBackground,
+        border: Border(
+          top: BorderSide(
+            color: Colors.white.withValues(alpha: 0.25),
+            width: 0.5,
+          ),
         ),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          spacing: 20,
-          children: [for (final item in _items) _buildButton(item)],
-        ),
+      ),
+      padding: const EdgeInsets.symmetric(
+        horizontal: 40,
+        vertical: 2,
+      ),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+        children: [
+          for (final item in _items) _buildButton(item),
+        ],
       ),
     );
   }
@@ -77,26 +87,20 @@ class AppBottomNavBar extends StatelessWidget {
   Widget _buildButton(_BottomNavItem item) {
     final isSelected = item.destination == selectedDestination;
 
-    return Container(
-      width: 35,
-      height: 35,
-      decoration: BoxDecoration(
-        color: isSelected ? AppColors.primary.withValues(alpha: 0.6) : null,
-        shape: BoxShape.circle,
+    return IconButton(
+      tooltip: item.tooltip,
+      onPressed: isSelected
+          ? null
+          : () => onDestinationSelected(item.destination),
+      padding: EdgeInsets.zero,
+      constraints: const BoxConstraints(
+        minWidth: 40,
+        minHeight: 36,
       ),
-      child: IconButton(
-        tooltip: item.tooltip,
-        onPressed: isSelected
-            ? null
-            : () => onDestinationSelected(item.destination),
-        padding: EdgeInsets.zero,
-        icon: Icon(
-          item.icon,
-          color: isSelected
-              ? AppColors.onPrimary
-              : AppColors.bottomBarIconInactive,
-          size: 28,
-        ),
+      icon: Icon(
+        isSelected ? item.selectedIcon : item.icon,
+        size: 30,
+        color: Colors.white,
       ),
     );
   }

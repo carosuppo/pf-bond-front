@@ -24,6 +24,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
   String? _initialEmail;
 
   bool _hasLoaded = false;
+  bool _allowPopAfterSave = false;
 
   @override
   void initState() {
@@ -93,19 +94,31 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
     }
 
     if (success) {
-      _initialName = name;
-      _initialEmail = email;
+      setState(() {
+        _initialName = name;
+        _initialEmail = email;
+        _allowPopAfterSave = true;
+      });
 
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Perfil actualizado correctamente.')),
+        const SnackBar(
+          content: Text('Perfil actualizado correctamente.'),
+        ),
       );
 
-      Navigator.of(context).pop();
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) {
+          return;
+        }
+
+        Navigator.of(context).pop();
+      });
     } else {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(
-            profileProvider.errorMessage ?? 'No se pudo actualizar el perfil.',
+            profileProvider.errorMessage ??
+                'No se pudo actualizar el perfil.',
           ),
         ),
       );
@@ -121,7 +134,9 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
       context: context,
       builder: (dialogContext) => AlertDialog(
         title: const Text('Descartar cambios'),
-        content: const Text('Tenés cambios sin guardar. ¿Querés descartarlos?'),
+        content: const Text(
+          'Tenés cambios sin guardar. ¿Querés descartarlos?',
+        ),
         actions: [
           TextButton(
             onPressed: () => Navigator.of(dialogContext).pop(false),
@@ -148,20 +163,26 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
     final profileProvider = context.watch<ProfileProvider>();
 
     return PopScope(
-      canPop: !_isDirty,
+      canPop: _allowPopAfterSave || !_isDirty,
       onPopInvokedWithResult: (didPop, result) {
         _handlePopAttempt(didPop);
       },
       child: Scaffold(
-        appBar: AppBar(title: const Text('Modificar mi perfil')),
-        body: SafeArea(child: _buildBody(profileProvider)),
+        appBar: AppBar(
+          title: const Text('Modificar mi perfil'),
+        ),
+        body: SafeArea(
+          child: _buildBody(profileProvider),
+        ),
       ),
     );
   }
 
   Widget _buildBody(ProfileProvider profileProvider) {
     if (!_hasLoaded) {
-      return const Center(child: CircularProgressIndicator());
+      return const Center(
+        child: CircularProgressIndicator(),
+      );
     }
 
     if (profileProvider.user == null) {
@@ -170,11 +191,16 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
             Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 24),
+              padding: const EdgeInsets.symmetric(
+                horizontal: 24,
+              ),
               child: Text(
-                profileProvider.errorMessage ?? 'No se pudo cargar tu perfil.',
+                profileProvider.errorMessage ??
+                    'No se pudo cargar tu perfil.',
                 textAlign: TextAlign.center,
-                style: const TextStyle(color: AppColors.mutedText),
+                style: const TextStyle(
+                  color: AppColors.mutedText,
+                ),
               ),
             ),
             const SizedBox(height: 16),
@@ -188,7 +214,10 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
     }
 
     return SingleChildScrollView(
-      padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 28),
+      padding: const EdgeInsets.symmetric(
+        horizontal: 24,
+        vertical: 28,
+      ),
       child: Form(
         key: _formKey,
         child: Column(
