@@ -26,6 +26,6 @@ LocationPermissionStatus mapPermission(LocationPermission permission) {
       return LocationPermissionStatus.deniedForever;
 
     case LocationPermission.unableToDetermine:
-      return LocationPermissionStatus.denied;
+      return LocationPermissionStatus.unknown;
   }
 }

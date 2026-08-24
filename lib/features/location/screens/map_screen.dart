@@ -1,3 +1,4 @@
+import 'package:bond_front/core/theme/app_colors.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:provider/provider.dart';
@@ -17,8 +18,15 @@ class MapScreen extends ConsumerStatefulWidget {
 }
 
 class _MapScreenState extends ConsumerState<MapScreen> {
+  static const _minChildSize = 0.2;
+  static const _maxChildSize = 0.5;
+
   late final GroupProvider _groupProvider;
+  late final DraggableScrollableController _sheetController;
+  ScrollController? _sheetScrollController;
+
   int? _viewingGroupId;
+  bool _sheetExpanded = false;
 
   @override
   void initState() {
@@ -27,7 +35,43 @@ class _MapScreenState extends ConsumerState<MapScreen> {
     _groupProvider = context.read<GroupProvider>();
     _groupProvider.addListener(_onGroupChanged);
 
+    _sheetController = DraggableScrollableController()
+      ..addListener(_onSheetSizeChanged);
+
     WidgetsBinding.instance.addPostFrameCallback((_) => _syncViewingGroup());
+  }
+
+  void _onSheetSizeChanged() {
+    final expanded = _sheetController.size >= _maxChildSize - 0.001;
+
+    if (expanded == _sheetExpanded) return;
+
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+
+      setState(() => _sheetExpanded = expanded);
+    });
+  }
+
+  void _collapseSheet() {
+    if (!_sheetController.isAttached) return;
+
+    // Primero colapsa la hoja: animateTo ejecuta goIdle() de forma síncrona,
+    // lo que cancelaría una animación de scroll en curso. Por eso el scroll
+    // al tope se inicia después.
+    _sheetController.animateTo(
+      _minChildSize,
+      duration: const Duration(milliseconds: 300),
+      curve: Curves.easeOut,
+    );
+
+    if (_sheetScrollController?.hasClients ?? false) {
+      _sheetScrollController!.animateTo(
+        0,
+        duration: const Duration(milliseconds: 300),
+        curve: Curves.easeOut,
+      );
+    }
   }
 
   void _onGroupChanged() => _syncViewingGroup();
@@ -53,6 +97,7 @@ class _MapScreenState extends ConsumerState<MapScreen> {
   @override
   void dispose() {
     _groupProvider.removeListener(_onGroupChanged);
+    _sheetController.dispose();
 
     if (_viewingGroupId != null) {
       ref.read(locationProvider.notifier).stopViewingGroup();
@@ -72,7 +117,22 @@ class _MapScreenState extends ConsumerState<MapScreen> {
         child: Stack(
           children: [
             Positioned.fill(
-              child: LocationMap(groupId: groupProvider.activeGroup?.id),
+              child: Stack(
+                children: [
+                  LocationMap(groupId: groupProvider.activeGroup?.id),
+                  // Barrera transparente: si la hoja está en su tamaño máximo,
+                  // tocar fuera de ella la colapsa al mínimo. Va dentro del
+                  // mismo Positioned.fill para no reordenar los hijos del
+                  // Stack principal (evita re-montar la hoja).
+                  if (groupProvider.groupDetails != null && _sheetExpanded)
+                    Positioned.fill(
+                      child: GestureDetector(
+                        behavior: HitTestBehavior.opaque,
+                        onTap: _collapseSheet,
+                      ),
+                    ),
+                ],
+              ),
             ),
             Positioned(
               top: 12,
@@ -83,33 +143,64 @@ class _MapScreenState extends ConsumerState<MapScreen> {
             if (groupProvider.groupDetails != null)
               Positioned.fill(
                 child: DraggableScrollableSheet(
-                  initialChildSize: 0.25,
-                  minChildSize: 0.25,
-                  maxChildSize: 0.6,
+                  controller: _sheetController,
+                  initialChildSize: _minChildSize,
+                  minChildSize: _minChildSize,
+                  maxChildSize: _maxChildSize,
                   snap: true,
-                  snapSizes: const [0.25, 0.6],
+                  snapSizes: const [_minChildSize, _maxChildSize],
                   builder: (context, scrollController) {
+                    _sheetScrollController = scrollController;
+
                     return Material(
                       elevation: 8,
                       borderRadius: const BorderRadius.vertical(
                         top: Radius.circular(20),
                       ),
                       clipBehavior: Clip.antiAlias,
-                      child: GroupInfoBottomSheet(
-                        group: groupProvider.groupDetails!,
-                        scrollController: scrollController,
+
+                      child: Column(
+                        children: [
+                          Padding(
+                            padding: const EdgeInsets.only(top: 10, bottom: 10),
+                            child: Center(
+                              child: Container(
+                                width: 30,
+                                height: 2,
+                                decoration: BoxDecoration(
+                                  color: AppColors.mutedText,
+                                  borderRadius: BorderRadius.circular(2),
+                                ),
+                              ),
+                            ),
+                          ),
+                          Expanded(
+                            child: GroupInfoBottomSheet(
+                              group: groupProvider.groupDetails!,
+                              scrollController: scrollController,
+                            ),
+                          ),
+                        ],
                       ),
                     );
                   },
                 ),
               ),
+            Positioned(
+              left: 0,
+              right: 0,
+              bottom: 0,
+              child: SafeArea(
+                top: false,
+                child: AppBottomNavBar(
+                  selectedDestination: AppBottomDestination.map,
+                  onDestinationSelected: (destination) =>
+                      navigateToAppDestination(context, destination),
+                ),
+              ),
+            ),
           ],
         ),
-      ),
-      bottomNavigationBar: AppBottomNavBar(
-        selectedDestination: AppBottomDestination.map,
-        onDestinationSelected: (destination) =>
-            navigateToAppDestination(context, destination),
       ),
     );
   }

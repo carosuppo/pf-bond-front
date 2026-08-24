@@ -32,20 +32,10 @@ class GroupInfoBottomSheet extends StatelessWidget {
     return SafeArea(
       child: SingleChildScrollView(
         controller: scrollController,
-        padding: const EdgeInsets.fromLTRB(20, 12, 20, 24),
+        padding: const EdgeInsets.fromLTRB(20, 12, 20, 80),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Center(
-              child: Container(
-                width: 40,
-                height: 4,
-                decoration: BoxDecoration(
-                  color: AppColors.mutedText,
-                  borderRadius: BorderRadius.circular(2),
-                ),
-              ),
-            ),
             const SizedBox(height: 24),
             Center(
               child: Text(

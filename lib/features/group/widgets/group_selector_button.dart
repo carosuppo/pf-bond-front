@@ -49,18 +49,18 @@ class _GroupSelectorButtonState extends State<GroupSelectorButton> {
               ),
             ),
             Positioned(
-              width: 280,
+              width: 250,
               child: CompositedTransformFollower(
                 link: _layerLink,
                 showWhenUnlinked: false,
 
                 targetAnchor: Alignment.bottomCenter,
                 followerAnchor: Alignment.topCenter,
-                offset: const Offset(0, 6),
+                offset: Offset.zero,
                 child: Material(
                   color: Colors.transparent,
                   child: SizedBox(
-                    width: 280,
+                    width: 250,
                     child: Container(
                       decoration: BoxDecoration(
                         color: AppColors.cardColor,
@@ -118,16 +118,17 @@ class _GroupSelectorButtonState extends State<GroupSelectorButton> {
         link: _layerLink,
         child: Center(
           child: SizedBox(
-            width: 280,
+            width: 250,
             child: FilledButton(
               onPressed: _toggleOverlay,
               style: FilledButton.styleFrom(
                 backgroundColor: AppColors.cardColor,
                 foregroundColor: AppColors.text,
                 elevation: 0,
-                side: BorderSide(
-                  color: _isOpen ? AppColors.primary : AppColors.border,
-                  width: _isOpen ? 1.4 : 1,
+                tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                side: const BorderSide(
+                  color: AppColors.border,
+                  width: 1,
                 ),
                 padding: const EdgeInsets.symmetric(
                   horizontal: 16,
@@ -182,20 +183,6 @@ class _GroupList extends StatelessWidget {
     return Column(
       mainAxisSize: MainAxisSize.min,
       children: [
-        const Padding(
-          padding: EdgeInsets.fromLTRB(16, 14, 16, 10),
-          child: Align(
-            alignment: Alignment.centerLeft,
-            child: Text(
-              'Tus grupos',
-              style: TextStyle(
-                color: AppColors.mutedText,
-                fontSize: 13,
-                fontWeight: FontWeight.w600,
-              ),
-            ),
-          ),
-        ),
         if (groups.isEmpty)
           const Padding(
             padding: EdgeInsets.fromLTRB(16, 8, 16, 18),

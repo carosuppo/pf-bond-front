@@ -3,6 +3,9 @@ import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 class AppPreferencesService {
   static const String _activeGroupIdKey = 'active_group_id';
 
+  static const String _locationPermissionStatusKey =
+      'location_permission_status';
+
   final FlutterSecureStorage _storage;
 
   AppPreferencesService({FlutterSecureStorage? storage})
@@ -24,5 +27,13 @@ class AppPreferencesService {
 
   Future<void> clearActiveGroupId() async {
     await _storage.delete(key: _activeGroupIdKey);
+  }
+
+  Future<void> saveLocationPermissionStatus(String status) async {
+    await _storage.write(key: _locationPermissionStatusKey, value: status);
+  }
+
+  Future<String?> getLocationPermissionStatus() async {
+    return _storage.read(key: _locationPermissionStatusKey);
   }
 }

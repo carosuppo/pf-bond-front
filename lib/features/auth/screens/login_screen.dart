@@ -114,14 +114,6 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                 ),
               ),
 
-              const SizedBox(height: 8),
-
-              const Text(
-                'Ingresá para continuar con tus grupos.',
-                textAlign: TextAlign.center,
-                style: TextStyle(color: AppColors.mutedText, fontSize: 15),
-              ),
-
               const SizedBox(height: 32),
 
               Container(

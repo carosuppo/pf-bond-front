@@ -31,11 +31,6 @@ class _BottomNavItem {
   final String tooltip;
 }
 
-// Barra de navegación inferior de la aplicación.
-//
-// Para agregar un nuevo destino alcanza con: agregar un valor al enum
-// [AppBottomDestination], mapear su ruta en la extensión y agregar un
-// elemento a [_items] (abierta a extensión, cerrada a modificación).
 class AppBottomNavBar extends StatelessWidget {
   const AppBottomNavBar({
     super.key,
@@ -64,7 +59,7 @@ class AppBottomNavBar extends StatelessWidget {
     return Center(
       heightFactor: 1,
       child: Container(
-        margin: const EdgeInsets.all(30),
+        margin: const EdgeInsets.only(bottom: 15),
         padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 10),
         decoration: BoxDecoration(
           color: AppColors.bottomBarBackground,
@@ -72,7 +67,7 @@ class AppBottomNavBar extends StatelessWidget {
         ),
         child: Row(
           mainAxisSize: MainAxisSize.min,
-          spacing: 40,
+          spacing: 20,
           children: [for (final item in _items) _buildButton(item)],
         ),
       ),
@@ -83,8 +78,8 @@ class AppBottomNavBar extends StatelessWidget {
     final isSelected = item.destination == selectedDestination;
 
     return Container(
-      width: 48,
-      height: 48,
+      width: 35,
+      height: 35,
       decoration: BoxDecoration(
         color: isSelected ? AppColors.primary.withValues(alpha: 0.6) : null,
         shape: BoxShape.circle,
@@ -94,6 +89,7 @@ class AppBottomNavBar extends StatelessWidget {
         onPressed: isSelected
             ? null
             : () => onDestinationSelected(item.destination),
+        padding: EdgeInsets.zero,
         icon: Icon(
           item.icon,
           color: isSelected
