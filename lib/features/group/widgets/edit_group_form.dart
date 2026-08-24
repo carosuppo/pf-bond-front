@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
+import '../../../core/theme/app_colors.dart';
 import '../../../core/widgets/buttons/app_primary_button.dart';
 import '../../../core/widgets/buttons/app_secondary_button.dart';
+import '../../../core/widgets/global_text_field.dart';
 import '../models/get_group_model.response.dart';
 import '../providers/group_provider.dart';
 
@@ -107,70 +109,114 @@ class _EditGroupFormState extends State<EditGroupForm> {
   @override
   Widget build(BuildContext context) {
     final isLoading = context.watch<GroupProvider>().isLoading;
+    final theme = Theme.of(context);
+    final screenWidth = MediaQuery.of(context).size.width;
 
-    return Padding(
-      padding: const EdgeInsets.all(16),
-      child: Column(
-        children: [
-          if (!widget.isCurrentUserAdmin)
-            Container(
-              width: double.infinity,
-              margin: const EdgeInsets.only(bottom: 16),
-              padding: const EdgeInsets.all(12),
-              decoration: BoxDecoration(
-                color: Colors.orange.withValues(alpha: 0.15),
-                borderRadius: BorderRadius.circular(8),
-                border: Border.all(color: Colors.orange),
+    final maxContentWidth = screenWidth > 600 ? 480.0 : double.infinity;
+    final horizontalPadding = screenWidth > 600 ? 32.0 : 24.0;
+
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        return SingleChildScrollView(
+          padding: EdgeInsets.symmetric(horizontal: horizontalPadding),
+          child: ConstrainedBox(
+            constraints: BoxConstraints(maxWidth: maxContentWidth),
+            child: Center(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  const SizedBox(height: 20),
+
+                  Text(
+                    'Editar grupo',
+                    textAlign: TextAlign.center,
+                    style: theme.textTheme.headlineMedium?.copyWith(
+                      color: AppColors.text,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+
+                  const SizedBox(height: 24),
+                  if (!widget.isCurrentUserAdmin)
+                    Container(
+                      width: double.infinity,
+                      margin: const EdgeInsets.only(bottom: 16),
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: AppColors.primary.withValues(alpha: 0.15),
+                        borderRadius: BorderRadius.circular(14),
+                        border: Border.all(color: AppColors.primary),
+                      ),
+                      child: const Text(
+                        'No tenés permisos para modificar este grupo.',
+                        style: TextStyle(color: AppColors.text),
+                      ),
+                    ),
+
+                  GlobalTextField(
+                    controller: _nameController,
+                    label: 'Nombre del grupo',
+                    enabled: widget.isCurrentUserAdmin,
+                  ),
+
+                  const SizedBox(height: 16),
+
+                  GlobalTextField(
+                    controller: _descriptionController,
+                    label: 'Descripción',
+                    enabled: widget.isCurrentUserAdmin,
+                  ),
+
+                  const SizedBox(height: 16),
+
+                  Container(
+                    decoration: BoxDecoration(
+                      color: AppColors.fieldColor,
+                      borderRadius: BorderRadius.circular(14),
+                    ),
+                    child: SwitchListTile(
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(14),
+                      ),
+                      title: const Text(
+                        'Compartir ubicación obligatoriamente',
+                        style: TextStyle(color: AppColors.text),
+                      ),
+                      activeThumbColor: AppColors.primary,
+                      value: _shareLocationMandatorily,
+                      onChanged: widget.isCurrentUserAdmin
+                          ? (value) {
+                              setState(() {
+                                _shareLocationMandatorily = value;
+                              });
+                            }
+                          : null,
+                    ),
+                  ),
+
+                  const SizedBox(height: 24),
+
+                  AppPrimaryButton(
+                    text: 'Guardar cambios',
+                    loading: isLoading,
+                    onPressed: widget.isCurrentUserAdmin ? _updateGroup : null,
+                  ),
+
+                  const SizedBox(height: 12),
+
+                  AppSecondaryButton(
+                    text: 'Cancelar',
+                    onPressed: () {
+                      Navigator.pop(context);
+                    },
+                  ),
+                  const SizedBox(height: 16),
+                ],
               ),
-              child: const Text('No tenés permisos para modificar este grupo.'),
             ),
-
-          TextField(
-            controller: _nameController,
-            enabled: widget.isCurrentUserAdmin,
-            decoration: const InputDecoration(labelText: 'Nombre del grupo'),
           ),
-
-          const SizedBox(height: 16),
-
-          TextField(
-            controller: _descriptionController,
-            enabled: widget.isCurrentUserAdmin,
-            decoration: const InputDecoration(labelText: 'Descripción'),
-          ),
-
-          const SizedBox(height: 16),
-
-          SwitchListTile(
-            title: const Text('Compartir ubicación obligatoriamente'),
-            value: _shareLocationMandatorily,
-            onChanged: widget.isCurrentUserAdmin
-                ? (value) {
-                    setState(() {
-                      _shareLocationMandatorily = value;
-                    });
-                  }
-                : null,
-          ),
-
-          const SizedBox(height: 16),
-
-          AppPrimaryButton(
-            text: 'Guardar cambios',
-            loading: isLoading,
-            onPressed: widget.isCurrentUserAdmin ? _updateGroup : null,
-          ),
-
-          const SizedBox(height: 12),
-
-          AppSecondaryButton(
-            text: 'Cancelar',
-            onPressed: () {
-              Navigator.pop(context);
-            },
-          ),
-        ],
-      ),
+        );
+      },
     );
   }
 }

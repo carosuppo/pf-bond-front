@@ -10,6 +10,12 @@ class ApiClient {
 
   ApiClient(this._sessionStorage);
 
+  static const _timeout = Duration(seconds: 20);
+
+  Future<http.Response> _send(Future<http.Response> Function() request) {
+    return request().timeout(_timeout);
+  }
+
   Future<Map<String, dynamic>> post(
     String path,
     Map<String, dynamic> body,
@@ -57,19 +63,17 @@ class ApiClient {
 
   Future<Map<String, dynamic>> authenticatedGet(String path) async {
     final uri = Uri.parse('${ApiConfig.baseUrl}$path');
+    final headers = await _buildHeaders(authenticated: true);
 
-    final response = await http.get(
-      uri,
-      headers: await _buildHeaders(authenticated: true),
-    );
+    final response = await _send(() => http.get(uri, headers: headers));
 
     return _handleResponse(response);
   }
 
   Future<List<Map<String, dynamic>>> authenticatedGetList(String path) async {
-    final response = await http.get(
-      Uri.parse('${ApiConfig.baseUrl}$path'),
-      headers: await _buildHeaders(authenticated: true),
+    final headers = await _buildHeaders(authenticated: true);
+    final response = await _send(
+      () => http.get(Uri.parse('${ApiConfig.baseUrl}$path'), headers: headers),
     );
     final decodedBody = _decodeSuccessfulResponse(response);
     if (decodedBody is! List<Object?>) {

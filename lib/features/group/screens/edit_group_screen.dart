@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../../../core/theme/app_colors.dart';
 import '../models/get_group_model.response.dart';
 import '../widgets/edit_group_form.dart';
 
@@ -16,7 +17,7 @@ class EditGroupScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Modificar grupo')),
+      appBar: AppBar(backgroundColor: AppColors.background, elevation: 0),
       body: EditGroupForm(group: group, isCurrentUserAdmin: isCurrentUserAdmin),
     );
   }

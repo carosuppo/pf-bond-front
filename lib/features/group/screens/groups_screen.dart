@@ -52,14 +52,6 @@ class _GroupsScreenState extends State<GroupsScreen> {
 
     return Scaffold(
       backgroundColor: AppColors.background,
-      appBar: AppBar(
-        backgroundColor: AppColors.background,
-        elevation: 0,
-        title: const Text(
-          'Mis grupos',
-          style: TextStyle(color: AppColors.text, fontWeight: FontWeight.w600),
-        ),
-      ),
       body: SafeArea(
         child: LayoutBuilder(
           builder: (context, constraints) {
@@ -182,9 +174,6 @@ class _EmptyGroupsContent extends StatelessWidget {
   }
 }
 
-/// Tarjeta grande y táctil para cada acción principal.
-/// El tamaño generoso y el texto de apoyo (subtitle) buscan que
-/// la opción sea clara sin depender solo del ícono.
 class _ActionCard extends StatelessWidget {
   final IconData icon;
   final String title;
