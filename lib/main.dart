@@ -11,6 +11,8 @@ import 'core/storage/session_storage_service.dart';
 import 'core/theme/app_colors.dart';
 import 'features/auth/providers/auth_provider.dart';
 import 'features/auth/services/auth_service.dart';
+import 'features/event/providers/event_provider.dart';
+import 'features/event/services/event_service.dart';
 import 'features/group/providers/group_provider.dart';
 import 'features/group/services/group_service.dart';
 import 'features/profile/providers/profile_provider.dart';
@@ -64,6 +66,12 @@ class MyApp extends StatelessWidget {
             context.read<GroupService>(),
             context.read<AppPreferencesService>(),
           ),
+        ),
+        provider.Provider<EventService>(
+          create: (context) => EventService(context.read<ApiClient>()),
+        ),
+        provider.ChangeNotifierProvider<EventProvider>(
+          create: (context) => EventProvider(context.read<EventService>()),
         ),
       ],
       child: MaterialApp(

@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 
 import '../../features/auth/screens/login_screen.dart';
 import '../../features/auth/screens/register_screen.dart';
+import '../../features/event/screens/create_event_screen.dart';
+import '../../features/event/screens/events_screen.dart';
 import '../../features/group/models/get_group_model.response.dart';
 import '../../features/group/screens/create_group_screen.dart';
 import '../../features/group/screens/edit_group_screen.dart';
@@ -80,6 +82,18 @@ class AppRouter {
             group: args['group'] as GetGroupResponseModel,
             isCurrentUserAdmin: args['isCurrentUserAdmin'] as bool,
           ),
+        );
+
+      case AppRoutes.events:
+        return MaterialPageRoute(
+          builder: (_) => const EventsScreen(),
+          settings: settings,
+        );
+
+      case AppRoutes.createEvent:
+        return MaterialPageRoute(
+          builder: (_) => const CreateEventScreen(),
+          settings: settings,
         );
 
       default:

@@ -3,11 +3,12 @@ import 'package:flutter/material.dart';
 import '../routes/app_routes.dart';
 import '../theme/app_colors.dart';
 
-enum AppBottomDestination { map, settings }
+enum AppBottomDestination { map, events, settings }
 
 extension AppBottomDestinationRoute on AppBottomDestination {
   String get route => switch (this) {
     AppBottomDestination.map => AppRoutes.map,
+    AppBottomDestination.events => AppRoutes.events,
     AppBottomDestination.settings => AppRoutes.settings,
   };
 }
@@ -48,6 +49,12 @@ class AppBottomNavBar extends StatelessWidget {
       tooltip: 'Ubicación',
     ),
     _BottomNavItem(
+      destination: AppBottomDestination.events,
+      icon: Icons.event_outlined,
+      selectedIcon: Icons.event_rounded,
+      tooltip: 'Eventos',
+    ),
+    _BottomNavItem(
       destination: AppBottomDestination.settings,
       icon: Icons.settings_outlined,
       selectedIcon: Icons.settings,
@@ -71,15 +78,10 @@ class AppBottomNavBar extends StatelessWidget {
           ),
         ),
       ),
-      padding: const EdgeInsets.symmetric(
-        horizontal: 40,
-        vertical: 2,
-      ),
+      padding: const EdgeInsets.symmetric(horizontal: 40, vertical: 2),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-        children: [
-          for (final item in _items) _buildButton(item),
-        ],
+        children: [for (final item in _items) _buildButton(item)],
       ),
     );
   }
@@ -93,10 +95,7 @@ class AppBottomNavBar extends StatelessWidget {
           ? null
           : () => onDestinationSelected(item.destination),
       padding: EdgeInsets.zero,
-      constraints: const BoxConstraints(
-        minWidth: 40,
-        minHeight: 36,
-      ),
+      constraints: const BoxConstraints(minWidth: 40, minHeight: 36),
       icon: Icon(
         isSelected ? item.selectedIcon : item.icon,
         size: 30,

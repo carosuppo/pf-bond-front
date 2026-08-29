@@ -5,10 +5,10 @@ class AppColors {
 
   static const onPrimary = Color(0xFF000000);
 
-  static const background = Color(0xFF1F1F1F);
+  static const background = Color(0xFF0c1014);
   //El que usaba login Color(0xFF242424);
 
-  static const cardColor = Color(0xFF303030);
+  static const cardColor = Color(0xFF1e1e1e);
 
   static const surface = Color(0xFF323232);
 
@@ -22,7 +22,7 @@ class AppColors {
 
   static const disabledBackgroundColorButton = Color(0xFF7A6A2A);
 
-  static const fieldColor = Color(0xFF3A3A3A);
+  static const fieldColor = Color(0xFF313131);
 
   static const hint = Color(0xFF9E9E9E);
 
