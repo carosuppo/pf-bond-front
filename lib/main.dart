@@ -9,6 +9,7 @@ import 'core/routes/app_router.dart';
 import 'core/routes/app_routes.dart';
 import 'core/storage/session_storage_service.dart';
 import 'core/theme/app_colors.dart';
+import 'core/timezone/app_timezone.dart';
 import 'features/auth/providers/auth_provider.dart';
 import 'features/auth/services/auth_service.dart';
 import 'features/event/providers/event_provider.dart';
@@ -22,6 +23,8 @@ Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
   await dotenv.load(fileName: '.env');
+
+  AppTimezone.initialize();
 
   runApp(const ProviderScope(child: MyApp()));
 }

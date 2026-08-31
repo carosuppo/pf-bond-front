@@ -1,3 +1,5 @@
+import '../../../core/timezone/app_timezone.dart';
+
 class CreateEventRequestModel {
   final String name;
   final String? description;
@@ -17,8 +19,10 @@ class CreateEventRequestModel {
     return {
       'name': name,
       'description': description,
-      'startAt': startAt.toUtc().toIso8601String(),
-      'endAt': endAt?.toUtc().toIso8601String(),
+      'startAt': AppTimezone.argentinaToUtc(startAt).toIso8601String(),
+      'endAt': endAt != null
+          ? AppTimezone.argentinaToUtc(endAt!).toIso8601String()
+          : null,
       'memberIds': memberIds,
     };
   }
