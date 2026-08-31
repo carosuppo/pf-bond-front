@@ -43,7 +43,7 @@ class GroupInfoBottomSheet extends StatelessWidget {
                 textAlign: TextAlign.center,
                 style: const TextStyle(
                   color: AppColors.text,
-                  fontSize: 24,
+                  fontSize: 25,
                   fontWeight: FontWeight.w600,
                 ),
               ),
