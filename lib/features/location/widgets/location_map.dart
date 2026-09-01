@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
@@ -20,6 +21,7 @@ class LocationMap extends ConsumerStatefulWidget {
   final double? previewRadius;
   final ValueChanged<LatLng>? onTap;
   final MapController? controller;
+  final double indicatorBottomFraction;
 
   const LocationMap({
     super.key,
@@ -29,6 +31,7 @@ class LocationMap extends ConsumerStatefulWidget {
     this.previewRadius,
     this.onTap,
     this.controller,
+    this.indicatorBottomFraction = 0,
   });
 
   @override
@@ -190,6 +193,17 @@ class _LocationMapState extends ConsumerState<LocationMap> {
               ),
           ],
         ),
+        Positioned.fill(
+          child: _OffscreenMemberIndicatorLayer(
+            members: members,
+            colors: colors,
+            staleMemberIds: {
+              for (final member in members)
+                if (_isStale(member, now)) member.memberId,
+            },
+            bottomFraction: widget.indicatorBottomFraction,
+          ),
+        ),
       ],
     );
   }
@@ -238,6 +252,8 @@ class _LocationMapState extends ConsumerState<LocationMap> {
 
     return Marker(
       point: point,
+
+      rotate: true,
 
       width: 150,
 
@@ -307,4 +323,185 @@ class _LocationMapState extends ConsumerState<LocationMap> {
 
     return 'Actualizado hace ${age.inDays} d';
   }
+}
+
+class _OffscreenMemberIndicatorLayer extends StatelessWidget {
+  static const _indicatorSize = Size(112, 36);
+  static const _edgePadding = EdgeInsets.fromLTRB(12, 72, 12, 12);
+
+  const _OffscreenMemberIndicatorLayer({
+    required this.members,
+    required this.colors,
+    required this.staleMemberIds,
+    required this.bottomFraction,
+  });
+
+  final List<MemberLocationModel> members;
+  final Map<int, Color> colors;
+  final Set<int> staleMemberIds;
+  final double bottomFraction;
+
+  @override
+  Widget build(BuildContext context) {
+    final camera = MapCamera.of(context);
+
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final size = constraints.biggest;
+
+        if (!size.width.isFinite ||
+            !size.height.isFinite ||
+            size.isEmpty) {
+          return const SizedBox.shrink();
+        }
+
+        final viewport = Offset.zero & size;
+        final safeBounds = Rect.fromLTRB(
+          _edgePadding.left + _indicatorSize.width / 2,
+          _edgePadding.top + _indicatorSize.height / 2,
+          size.width - _edgePadding.right - _indicatorSize.width / 2,
+          size.height * (1 - bottomFraction) -
+              _edgePadding.bottom -
+              _indicatorSize.height / 2,
+        );
+
+        if (safeBounds.width <= 0 || safeBounds.height <= 0) {
+          return const SizedBox.shrink();
+        }
+
+        return IgnorePointer(
+          child: Stack(
+            children: [
+              for (final member in members)
+                if (_indicatorPosition(
+                      camera: camera,
+                      viewport: viewport,
+                      safeBounds: safeBounds,
+                      point: LatLng(member.latitude, member.longitude),
+                    )
+                    case final indicator?)
+                  Positioned(
+                    left: indicator.position.dx - _indicatorSize.width / 2,
+                    top: indicator.position.dy - _indicatorSize.height / 2,
+                    width: _indicatorSize.width,
+                    height: _indicatorSize.height,
+                    child: _OffscreenMemberIndicator(
+                      name: member.name,
+                      color: _markerColor(member),
+                      angle: indicator.angle,
+                    ),
+                  ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  _IndicatorPlacement? _indicatorPosition({
+    required MapCamera camera,
+    required Rect viewport,
+    required Rect safeBounds,
+    required LatLng point,
+  }) {
+    final projected = camera.latLngToScreenOffset(point);
+
+    if (!projected.dx.isFinite ||
+        !projected.dy.isFinite ||
+        viewport.contains(projected)) {
+      return null;
+    }
+
+    final direction = projected - viewport.center;
+    if (direction.distanceSquared == 0) {
+      return null;
+    }
+
+    final origin = safeBounds.center;
+    final horizontalScale = direction.dx == 0
+        ? double.infinity
+        : (direction.dx > 0
+                  ? safeBounds.right - origin.dx
+                  : safeBounds.left - origin.dx) /
+              direction.dx;
+    final verticalScale = direction.dy == 0
+        ? double.infinity
+        : (direction.dy > 0
+                  ? safeBounds.bottom - origin.dy
+                  : safeBounds.top - origin.dy) /
+              direction.dy;
+    final scale = math.min(horizontalScale, verticalScale);
+
+    if (!scale.isFinite || scale < 0) {
+      return null;
+    }
+
+    return _IndicatorPlacement(
+      position: origin + direction * scale,
+      angle: math.atan2(direction.dy, direction.dx) + math.pi / 2,
+    );
+  }
+
+  Color _markerColor(MemberLocationModel member) {
+    final color = colors[member.memberId] ?? Colors.blue;
+    if (staleMemberIds.contains(member.memberId)) {
+      return color.withAlpha(110);
+    }
+
+    return color;
+  }
+}
+
+class _OffscreenMemberIndicator extends StatelessWidget {
+  const _OffscreenMemberIndicator({
+    required this.name,
+    required this.color,
+    required this.angle,
+  });
+
+  final String name;
+  final Color color;
+  final double angle;
+
+  @override
+  Widget build(BuildContext context) {
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        color: AppColors.surface.withValues(alpha: 0.9),
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(color: color, width: 1.5),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 8),
+        child: Row(
+          children: [
+            Transform.rotate(
+              angle: angle,
+              child: Icon(Icons.navigation, size: 18, color: color),
+            ),
+            const SizedBox(width: 4),
+            Expanded(
+              child: Text(
+                name,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(
+                  color: AppColors.text,
+                  fontSize: 12,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _IndicatorPlacement {
+  const _IndicatorPlacement({required this.position, required this.angle});
+
+  final Offset position;
+  final double angle;
 }

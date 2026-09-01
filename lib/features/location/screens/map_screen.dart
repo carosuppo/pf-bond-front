@@ -430,6 +430,13 @@ class _MapScreenState extends ConsumerState<MapScreen> {
                       previewRadius: _editing && _draftLocation != null
                           ? _draftRadius
                           : null,
+                      indicatorBottomFraction: _editing
+                          ? _poiMaxChildSize
+                          : groupProvider.groupDetails == null
+                          ? 0
+                          : _sheetExpanded
+                          ? _maxChildSize
+                          : _minChildSize,
                       controller: _mapController,
                       onTap: _editing
                           ? (point) {

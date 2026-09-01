@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:latlong2/latlong.dart';
 
+import '../../../core/theme/app_colors.dart';
 import '../../location/models/location_permission_status.dart';
 import '../../location/services/location_service.dart';
 import '../models/geocoding_result.dart';
@@ -372,24 +373,45 @@ class PointOfInterestEditorState extends State<PointOfInterestEditor> {
                   ),
                 ],
               ),
-              for (final result in _results)
-                ListTile(
-                  dense: true,
-                  title: Text(
-                    result.displayName,
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
+              for (final result in _results) ...[
+                const SizedBox(height: 8),
+                Card(
+                  margin: EdgeInsets.zero,
+                  color: AppColors.cardColor,
+                  elevation: 0,
+                  clipBehavior: Clip.antiAlias,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12),
+                    side: const BorderSide(color: AppColors.border),
                   ),
-                  onTap: () {
-                    widget.onLocationChanged(
-                      LatLng(result.latitude, result.longitude),
-                    );
+                  child: InkWell(
+                    onTap: () {
+                      widget.onLocationChanged(
+                        LatLng(result.latitude, result.longitude),
+                      );
 
-                    setState(() {
-                      _results = [];
-                    });
-                  },
+                      setState(() {
+                        _results = [];
+                      });
+                    },
+                    child: ListTile(
+                      contentPadding: const EdgeInsets.symmetric(
+                        horizontal: 14,
+                        vertical: 4,
+                      ),
+                      leading: const Icon(
+                        Icons.location_on_outlined,
+                        color: AppColors.primary,
+                      ),
+                      title: Text(
+                        result.displayName,
+                        maxLines: 3,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                  ),
                 ),
+              ],
               TextButton.icon(
                 onPressed: _useCurrentLocation,
                 icon: const Icon(Icons.my_location),
