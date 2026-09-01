@@ -46,6 +46,17 @@ class ApiClient {
     return _handleResponse(response);
   }
 
+  Future<void> authenticatedPostNoContent(String path) async {
+    final uri = Uri.parse('${ApiConfig.baseUrl}$path');
+    final headers = await _buildHeaders(authenticated: true);
+  
+    final response = await _send(
+      () => http.post(uri, headers: headers),
+    );
+  
+    _decodeSuccessfulResponse(response);
+  }
+
   Future<Map<String, dynamic>> authenticatedPatch(
     String path,
     Map<String, dynamic> body,
@@ -68,6 +79,13 @@ class ApiClient {
     final response = await _send(() => http.get(uri, headers: headers));
 
     return _handleResponse(response);
+  }
+
+  Future<void> authenticatedDelete(String path) async {
+    final uri = Uri.parse('${ApiConfig.baseUrl}$path');
+    final headers = await _buildHeaders(authenticated: true);
+    final response = await _send(() => http.delete(uri, headers: headers));
+    _decodeSuccessfulResponse(response);
   }
 
   Future<List<Map<String, dynamic>>> authenticatedGetList(String path) async {

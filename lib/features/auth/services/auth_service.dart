@@ -53,4 +53,9 @@ class AuthService {
       return null;
     }
   }
+
+  Future<void> logout() async {
+    await _apiClient.authenticatedPostNoContent('/user/logout');
+    await _sessionStorage.clearSession();
+  }
 }

@@ -15,6 +15,8 @@ import 'features/group/providers/group_provider.dart';
 import 'features/group/services/group_service.dart';
 import 'features/profile/providers/profile_provider.dart';
 import 'features/profile/services/profile_service.dart';
+import 'features/point_of_interest/providers/point_of_interest_provider.dart';
+import 'features/point_of_interest/services/point_of_interest_service.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -64,6 +66,14 @@ class MyApp extends StatelessWidget {
             context.read<GroupService>(),
             context.read<AppPreferencesService>(),
           ),
+        ),
+        provider.Provider<PointOfInterestService>(
+          create: (context) =>
+              PointOfInterestService(context.read<ApiClient>()),
+        ),
+        provider.ChangeNotifierProvider<PointOfInterestProvider>(
+          create: (context) =>
+              PointOfInterestProvider(context.read<PointOfInterestService>()),
         ),
       ],
       child: MaterialApp(

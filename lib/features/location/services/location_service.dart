@@ -30,6 +30,17 @@ class LocationService {
     return mapPermission(permission);
   }
 
+  Future<LocationPermissionStatus> requestForegroundPermission() async {
+    if (!await Geolocator.isLocationServiceEnabled()) {
+      return LocationPermissionStatus.serviceDisabled;
+    }
+    var permission = await Geolocator.checkPermission();
+    if (permission == LocationPermission.denied) {
+      permission = await Geolocator.requestPermission();
+    }
+    return mapPermission(permission);
+  }
+
   Future<bool> openAppSettings() => Geolocator.openAppSettings();
 
   Future<bool> openLocationSettings() => Geolocator.openLocationSettings();

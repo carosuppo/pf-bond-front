@@ -6,22 +6,38 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:latlong2/latlong.dart';
 
 import '../constants/default_location.dart';
+import '../../../core/theme/app_colors.dart';
 import '../constants/location_tracking_config.dart';
 import '../models/member_location_model.dart';
 import '../providers/location_provider.dart';
 import '../utils/marker_colors.dart';
+import '../../point_of_interest/models/point_of_interest.dart';
 
 class LocationMap extends ConsumerStatefulWidget {
   final int? groupId;
+  final List<PointOfInterest> points;
+  final LatLng? previewPoint;
+  final double? previewRadius;
+  final ValueChanged<LatLng>? onTap;
+  final MapController? controller;
 
-  const LocationMap({super.key, required this.groupId});
+  const LocationMap({
+    super.key,
+    required this.groupId,
+    this.points = const [],
+    this.previewPoint,
+    this.previewRadius,
+    this.onTap,
+    this.controller,
+  });
 
   @override
   ConsumerState<LocationMap> createState() => _LocationMapState();
 }
 
 class _LocationMapState extends ConsumerState<LocationMap> {
-  final MapController _mapController = MapController();
+  late final MapController _mapController =
+      widget.controller ?? MapController();
 
   bool _hasCenteredOnUser = false;
 
@@ -103,6 +119,7 @@ class _LocationMapState extends ConsumerState<LocationMap> {
             : LatLng(ownLocation.latitude, ownLocation.longitude),
 
         initialZoom: defaultZoom,
+        onTap: widget.onTap == null ? null : (_, point) => widget.onTap!(point),
       ),
 
       children: [
@@ -112,6 +129,28 @@ class _LocationMapState extends ConsumerState<LocationMap> {
           userAgentPackageName: 'com.example.bond_front',
         ),
 
+        CircleLayer(
+          circles: [
+            for (final point in widget.points)
+              CircleMarker(
+                point: LatLng(point.latitude, point.longitude),
+                radius: point.radius,
+                useRadiusInMeter: true,
+                color: AppColors.primary.withAlpha(45),
+                borderColor: AppColors.primary,
+                borderStrokeWidth: 2,
+              ),
+            if (widget.previewPoint != null && widget.previewRadius != null)
+              CircleMarker(
+                point: widget.previewPoint!,
+                radius: widget.previewRadius!,
+                useRadiusInMeter: true,
+                color: Colors.orange.withAlpha(55),
+                borderColor: Colors.orange,
+                borderStrokeWidth: 2,
+              ),
+          ],
+        ),
         MarkerLayer(
           markers: [
             if (ownLocation != null)
@@ -136,6 +175,18 @@ class _LocationMapState extends ConsumerState<LocationMap> {
                 lastSeenAt: member.lastSeenAt,
 
                 now: now,
+              ),
+            for (final point in widget.points)
+              _marker(
+                point: LatLng(point.latitude, point.longitude),
+                name: point.name,
+                color: AppColors.primary,
+              ),
+            if (widget.previewPoint != null)
+              _marker(
+                point: widget.previewPoint!,
+                name: 'Vista previa',
+                color: Colors.orange,
               ),
           ],
         ),
