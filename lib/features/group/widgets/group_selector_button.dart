@@ -126,10 +126,7 @@ class _GroupSelectorButtonState extends State<GroupSelectorButton> {
                 foregroundColor: AppColors.text,
                 elevation: 0,
                 tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                side: const BorderSide(
-                  color: AppColors.border,
-                  width: 1,
-                ),
+                side: const BorderSide(color: AppColors.border, width: 1),
                 padding: const EdgeInsets.symmetric(
                   horizontal: 16,
                   vertical: 11,

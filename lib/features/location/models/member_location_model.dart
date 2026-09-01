@@ -22,46 +22,27 @@ class MemberLocationModel {
     this.lastSeenAt,
   });
 
-  factory MemberLocationModel.fromJson(
-    Map<String, dynamic> json,
-  ) {
+  factory MemberLocationModel.fromJson(Map<String, dynamic> json) {
     return MemberLocationModel(
-      memberId:
-          json['memberId'] as int,
+      memberId: json['memberId'] as int,
 
-      userId:
-          json['userId'] as int,
+      userId: json['userId'] as int,
 
-      name:
-          json['name'] as String,
+      name: json['name'] as String,
 
-      latitude:
-          (json['latitude'] as num)
-              .toDouble(),
+      latitude: (json['latitude'] as num).toDouble(),
 
-      longitude:
-          (json['longitude'] as num)
-              .toDouble(),
+      longitude: (json['longitude'] as num).toDouble(),
 
-      accuracy:
-          (json['accuracy'] as num?)
-              ?.toDouble(),
+      accuracy: (json['accuracy'] as num?)?.toDouble(),
 
-      capturedAt:
-          json['capturedAt'] == null
-              ? null
-              : DateTime.parse(
-                  json['capturedAt']
-                      as String,
-                ),
+      capturedAt: json['capturedAt'] == null
+          ? null
+          : DateTime.parse(json['capturedAt'] as String),
 
-      lastSeenAt:
-          json['lastSeenAt'] == null
-              ? null
-              : DateTime.parse(
-                  json['lastSeenAt']
-                      as String,
-                ),
+      lastSeenAt: json['lastSeenAt'] == null
+          ? null
+          : DateTime.parse(json['lastSeenAt'] as String),
     );
   }
 
@@ -76,29 +57,21 @@ class MemberLocationModel {
     DateTime? lastSeenAt,
   }) {
     return MemberLocationModel(
-      memberId:
-          memberId ?? this.memberId,
+      memberId: memberId ?? this.memberId,
 
-      userId:
-          userId ?? this.userId,
+      userId: userId ?? this.userId,
 
-      name:
-          name ?? this.name,
+      name: name ?? this.name,
 
-      latitude:
-          latitude ?? this.latitude,
+      latitude: latitude ?? this.latitude,
 
-      longitude:
-          longitude ?? this.longitude,
+      longitude: longitude ?? this.longitude,
 
-      accuracy:
-          accuracy ?? this.accuracy,
+      accuracy: accuracy ?? this.accuracy,
 
-      capturedAt:
-          capturedAt ?? this.capturedAt,
+      capturedAt: capturedAt ?? this.capturedAt,
 
-      lastSeenAt:
-          lastSeenAt ?? this.lastSeenAt,
+      lastSeenAt: lastSeenAt ?? this.lastSeenAt,
     );
   }
 }

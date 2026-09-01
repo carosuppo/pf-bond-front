@@ -13,10 +13,7 @@ class SettingsOptionTile extends StatelessWidget {
   Widget build(BuildContext context) {
     return ListTile(
       leading: Icon(option.icon, color: AppColors.mutedText),
-      title: Text(
-        option.title,
-        style: const TextStyle(color: AppColors.text),
-      ),
+      title: Text(option.title, style: const TextStyle(color: AppColors.text)),
       trailing: option.onTap == null
           ? null
           : const Icon(Icons.chevron_right, color: AppColors.mutedText),

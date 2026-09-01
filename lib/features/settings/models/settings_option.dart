@@ -5,11 +5,7 @@ import 'package:flutter/material.dart';
 /// Para agregar una nueva opción a la pantalla alcanza con agregar una
 /// instancia a la lista de opciones, sin modificar la lógica de renderizado.
 class SettingsOption {
-  const SettingsOption({
-    required this.icon,
-    required this.title,
-    this.onTap,
-  });
+  const SettingsOption({required this.icon, required this.title, this.onTap});
 
   final IconData icon;
   final String title;

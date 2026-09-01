@@ -10,6 +10,7 @@ import '../services/geocoding_service.dart';
 
 class PointOfInterestEditor extends StatefulWidget {
   final PointOfInterest? initial;
+  final ScrollController scrollController;
   final LatLng? selectedLocation;
   final ValueChanged<LatLng> onLocationChanged;
   final ValueChanged<double> onRadiusChanged;
@@ -20,6 +21,7 @@ class PointOfInterestEditor extends StatefulWidget {
   const PointOfInterestEditor({
     super.key,
     this.initial,
+    required this.scrollController,
     required this.selectedLocation,
     required this.onLocationChanged,
     required this.onRadiusChanged,
@@ -35,23 +37,29 @@ class PointOfInterestEditor extends StatefulWidget {
 class PointOfInterestEditorState extends State<PointOfInterestEditor> {
   final _formKey = GlobalKey<FormState>();
   final _addressController = TextEditingController();
+
   late final TextEditingController _nameController;
   late final TextEditingController _descriptionController;
   late final TextEditingController _radiusController;
+
   final _locationService = LocationService();
   final _geocodingService = GeocodingService();
+
   List<GeocodingResult> _results = [];
+
   bool _searching = false;
   bool _submitting = false;
 
   bool get _dirty {
     final initial = widget.initial;
+
     if (initial == null) {
       return _nameController.text.isNotEmpty ||
           _descriptionController.text.isNotEmpty ||
           _radiusController.text != '100' ||
           widget.selectedLocation != null;
     }
+
     return _nameController.text != initial.name ||
         _descriptionController.text != (initial.description ?? '') ||
         double.tryParse(_radiusController.text) != initial.radius ||
@@ -62,10 +70,13 @@ class PointOfInterestEditorState extends State<PointOfInterestEditor> {
   @override
   void initState() {
     super.initState();
+
     _nameController = TextEditingController(text: widget.initial?.name ?? '');
+
     _descriptionController = TextEditingController(
       text: widget.initial?.description ?? '',
     );
+
     _radiusController = TextEditingController(
       text: widget.initial?.radius.toString() ?? '100',
     )..addListener(_notifyRadius);
@@ -77,46 +88,65 @@ class PointOfInterestEditorState extends State<PointOfInterestEditor> {
     _descriptionController.dispose();
     _radiusController.dispose();
     _addressController.dispose();
+
     super.dispose();
   }
 
   void _notifyRadius() {
     final radius = double.tryParse(_radiusController.text);
-    if (radius != null && radius > 0) widget.onRadiusChanged(radius);
+
+    if (radius != null && radius > 0) {
+      widget.onRadiusChanged(radius);
+    }
   }
 
   Future<void> requestClose() async {
     if (_dirty && widget.initial != null) {
       final discard = await showDialog<bool>(
         context: context,
-        builder: (context) => AlertDialog(
+        builder: (dialogContext) => AlertDialog(
           title: const Text('¿Descartar cambios?'),
           actions: [
             TextButton(
-              onPressed: () => Navigator.pop(context, false),
+              onPressed: () => Navigator.pop(dialogContext, false),
               child: const Text('Seguir editando'),
             ),
             TextButton(
-              onPressed: () => Navigator.pop(context, true),
+              onPressed: () => Navigator.pop(dialogContext, true),
               child: const Text('Descartar cambios'),
             ),
           ],
         ),
       );
-      if (discard != true) return;
+
+      if (!mounted || discard != true) {
+        return;
+      }
     }
+
     widget.onClosed();
   }
 
   Future<void> _useCurrentLocation() async {
     final permission = await _locationService.requestForegroundPermission();
+
+    if (!mounted) {
+      return;
+    }
+
     if (permission != LocationPermissionStatus.whileInUse &&
         permission != LocationPermissionStatus.always) {
       _show('Bond necesita permiso de ubicación mientras usás la app.');
       return;
     }
+
     try {
       final location = await _locationService.getCurrentLocation();
+
+      if (!mounted) {
+        return;
+      }
+
       widget.onLocationChanged(LatLng(location.latitude, location.longitude));
     } catch (_) {
       _show('No se pudo obtener tu ubicación actual.');
@@ -124,55 +154,136 @@ class PointOfInterestEditorState extends State<PointOfInterestEditor> {
   }
 
   Future<void> _searchAddress() async {
-    if (_addressController.text.trim().isEmpty) return;
-    setState(() => _searching = true);
+    if (_addressController.text.trim().isEmpty) {
+      return;
+    }
+
+    setState(() {
+      _searching = true;
+    });
+
     try {
       final results = await _geocodingService.search(_addressController.text);
-      if (mounted) setState(() => _results = results);
+
+      if (!mounted) {
+        return;
+      }
+
+      setState(() {
+        _results = results;
+      });
     } catch (error) {
       _show(error.toString().replaceFirst('Exception: ', ''));
     } finally {
-      if (mounted) setState(() => _searching = false);
+      if (mounted) {
+        setState(() {
+          _searching = false;
+        });
+      }
     }
   }
 
   Future<void> _submit() async {
-    if (!_formKey.currentState!.validate()) return;
+    if (!_formKey.currentState!.validate()) {
+      return;
+    }
+
     final location = widget.selectedLocation;
+
     if (location == null) {
       _show(
-        'Seleccioná una ubicación en el mapa, por dirección o usando tu ubicación.',
+        'Seleccioná una ubicación en el mapa, '
+        'por dirección o usando tu ubicación.',
       );
       return;
     }
-    setState(() => _submitting = true);
+
+    // Se obtiene antes del await para no buscar ancestros
+    // usando un BuildContext después de una operación async.
+    final messenger = ScaffoldMessenger.of(context);
+
+    setState(() {
+      _submitting = true;
+    });
+
     final description = _descriptionController.text;
     final radius = double.parse(_radiusController.text);
-    final success = widget.initial == null
-        ? await widget.onCreate!(
-            CreatePointOfInterestRequest(
-              name: _nameController.text,
-              description: description,
-              radius: radius,
-              latitude: location.latitude,
-              longitude: location.longitude,
-            ),
-          )
-        : await widget.onUpdate!(
-            UpdatePointOfInterestRequest(
-              name: _nameController.text,
-              description: description,
-              radius: radius,
-              latitude: location.latitude,
-              longitude: location.longitude,
-            ),
-          );
-    if (mounted) setState(() => _submitting = false);
-    if (success) widget.onClosed();
+
+    bool success = false;
+    String? submitError;
+
+    try {
+      if (widget.initial == null) {
+        success = await widget.onCreate!(
+          CreatePointOfInterestRequest(
+            name: _nameController.text,
+            description: description,
+            radius: radius,
+            latitude: location.latitude,
+            longitude: location.longitude,
+          ),
+        );
+      } else {
+        success = await widget.onUpdate!(
+          UpdatePointOfInterestRequest(
+            name: _nameController.text,
+            description: description,
+            radius: radius,
+            latitude: location.latitude,
+            longitude: location.longitude,
+          ),
+        );
+      }
+    } catch (error) {
+      submitError = error.toString().replaceFirst('Exception: ', '');
+    } finally {
+      if (mounted) {
+        setState(() {
+          _submitting = false;
+        });
+      }
+    }
+
+    if (!mounted) {
+      return;
+    }
+
+    if (submitError != null) {
+      messenger.showSnackBar(SnackBar(content: Text(submitError)));
+      return;
+    }
+
+    if (!success) {
+      messenger.showSnackBar(
+        SnackBar(
+          content: Text(
+            widget.initial == null
+                ? 'No se pudo registrar el punto de interés.'
+                : 'No se pudo actualizar el punto de interés.',
+          ),
+        ),
+      );
+      return;
+    }
+
+    messenger.showSnackBar(
+      SnackBar(
+        content: Text(
+          widget.initial == null
+              ? 'Punto de interés registrado.'
+              : 'Punto de interés actualizado.',
+        ),
+      ),
+    );
+
+    widget.onClosed();
   }
 
   void _show(String message) {
-    if (!mounted) return;
+    if (!mounted) {
+      return;
+    }
+
     ScaffoldMessenger.of(
       context,
     ).showSnackBar(SnackBar(content: Text(message)));
@@ -184,6 +295,8 @@ class PointOfInterestEditorState extends State<PointOfInterestEditor> {
       elevation: 12,
       borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
       child: SingleChildScrollView(
+        controller: widget.scrollController,
+        keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
         padding: EdgeInsets.fromLTRB(
           16,
           16,
@@ -204,9 +317,13 @@ class PointOfInterestEditorState extends State<PointOfInterestEditor> {
               TextFormField(
                 controller: _nameController,
                 decoration: const InputDecoration(labelText: 'Nombre *'),
-                validator: (value) => value == null || value.trim().isEmpty
-                    ? 'Ingresá un nombre.'
-                    : null,
+                validator: (value) {
+                  if (value == null || value.trim().isEmpty) {
+                    return 'Ingresá un nombre.';
+                  }
+
+                  return null;
+                },
               ),
               const SizedBox(height: 8),
               TextFormField(
@@ -226,9 +343,12 @@ class PointOfInterestEditorState extends State<PointOfInterestEditor> {
                 ),
                 validator: (value) {
                   final radius = double.tryParse(value ?? '');
-                  return radius == null || radius <= 0
-                      ? 'Ingresá un radio mayor a 0.'
-                      : null;
+
+                  if (radius == null || radius <= 0) {
+                    return 'Ingresá un radio mayor a 0.';
+                  }
+
+                  return null;
                 },
               ),
               const SizedBox(height: 8),
@@ -264,7 +384,10 @@ class PointOfInterestEditorState extends State<PointOfInterestEditor> {
                     widget.onLocationChanged(
                       LatLng(result.latitude, result.longitude),
                     );
-                    setState(() => _results = []);
+
+                    setState(() {
+                      _results = [];
+                    });
                   },
                 ),
               TextButton.icon(
@@ -275,14 +398,15 @@ class PointOfInterestEditorState extends State<PointOfInterestEditor> {
               Text(
                 widget.selectedLocation == null
                     ? 'Tocá el mapa para elegir la ubicación.'
-                    : '${widget.selectedLocation!.latitude.toStringAsFixed(5)}, ${widget.selectedLocation!.longitude.toStringAsFixed(5)}',
+                    : '${widget.selectedLocation!.latitude.toStringAsFixed(5)}, '
+                          '${widget.selectedLocation!.longitude.toStringAsFixed(5)}',
               ),
               const SizedBox(height: 8),
               Row(
                 mainAxisAlignment: MainAxisAlignment.end,
                 children: [
                   TextButton(
-                    onPressed: requestClose,
+                    onPressed: _submitting ? null : requestClose,
                     child: const Text('Cancelar'),
                   ),
                   const SizedBox(width: 8),

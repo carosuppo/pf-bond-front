@@ -71,15 +71,10 @@ class AppBottomNavBar extends StatelessWidget {
           ),
         ),
       ),
-      padding: const EdgeInsets.symmetric(
-        horizontal: 40,
-        vertical: 2,
-      ),
+      padding: const EdgeInsets.symmetric(horizontal: 40, vertical: 2),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-        children: [
-          for (final item in _items) _buildButton(item),
-        ],
+        children: [for (final item in _items) _buildButton(item)],
       ),
     );
   }
@@ -93,10 +88,7 @@ class AppBottomNavBar extends StatelessWidget {
           ? null
           : () => onDestinationSelected(item.destination),
       padding: EdgeInsets.zero,
-      constraints: const BoxConstraints(
-        minWidth: 40,
-        minHeight: 36,
-      ),
+      constraints: const BoxConstraints(minWidth: 40, minHeight: 36),
       icon: Icon(
         isSelected ? item.selectedIcon : item.icon,
         size: 30,

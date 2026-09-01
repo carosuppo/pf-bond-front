@@ -48,12 +48,11 @@ class ApiClient {
 
   Future<void> authenticatedPostNoContent(String path) async {
     final uri = Uri.parse('${ApiConfig.baseUrl}$path');
+
     final headers = await _buildHeaders(authenticated: true);
-  
-    final response = await _send(
-      () => http.post(uri, headers: headers),
-    );
-  
+
+    final response = await _send(() => http.post(uri, headers: headers));
+
     _decodeSuccessfulResponse(response);
   }
 
@@ -63,10 +62,10 @@ class ApiClient {
   ) async {
     final uri = Uri.parse('${ApiConfig.baseUrl}$path');
 
-    final response = await http.patch(
-      uri,
-      headers: await _buildHeaders(authenticated: true),
-      body: jsonEncode(body),
+    final headers = await _buildHeaders(authenticated: true);
+
+    final response = await _send(
+      () => http.patch(uri, headers: headers, body: jsonEncode(body)),
     );
 
     return _handleResponse(response);
@@ -74,6 +73,7 @@ class ApiClient {
 
   Future<Map<String, dynamic>> authenticatedGet(String path) async {
     final uri = Uri.parse('${ApiConfig.baseUrl}$path');
+
     final headers = await _buildHeaders(authenticated: true);
 
     final response = await _send(() => http.get(uri, headers: headers));
@@ -83,20 +83,27 @@ class ApiClient {
 
   Future<void> authenticatedDelete(String path) async {
     final uri = Uri.parse('${ApiConfig.baseUrl}$path');
+
     final headers = await _buildHeaders(authenticated: true);
+
     final response = await _send(() => http.delete(uri, headers: headers));
+
     _decodeSuccessfulResponse(response);
   }
 
   Future<List<Map<String, dynamic>>> authenticatedGetList(String path) async {
     final headers = await _buildHeaders(authenticated: true);
+
     final response = await _send(
       () => http.get(Uri.parse('${ApiConfig.baseUrl}$path'), headers: headers),
     );
+
     final decodedBody = _decodeSuccessfulResponse(response);
+
     if (decodedBody is! List<Object?>) {
       throw Exception('La respuesta del servidor no es una lista valida.');
     }
+
     return decodedBody
         .map((item) => Map<String, dynamic>.from(item! as Map))
         .toList(growable: false);
@@ -155,6 +162,7 @@ class ApiClient {
 
   Future<Map<String, dynamic>> _handleResponse(http.Response response) async {
     final decodedBody = _decodeSuccessfulResponse(response);
+
     return Map<String, dynamic>.from(decodedBody as Map);
   }
 
@@ -162,9 +170,11 @@ class ApiClient {
     final Object? decodedBody = response.body.isNotEmpty
         ? jsonDecode(response.body) as Object?
         : null;
+
     if (response.statusCode >= 200 && response.statusCode < 300) {
       return decodedBody;
     }
+
     throw Exception(_getErrorMessage(decodedBody));
   }
 }

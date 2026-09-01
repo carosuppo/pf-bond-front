@@ -13,15 +13,12 @@ import '../models/member_location_model.dart';
 class LocationSocketService {
   final SessionStorageService _sessionStorage;
 
-  final StreamController<LocationSocketEvent>
-      _events =
-      StreamController<LocationSocketEvent>
-          .broadcast();
+  final StreamController<LocationSocketEvent> _events =
+      StreamController<LocationSocketEvent>.broadcast();
 
   WebSocketChannel? _channel;
 
-  StreamSubscription<Object?>?
-      _subscription;
+  StreamSubscription<Object?>? _subscription;
 
   Timer? _reconnectTimer;
 
@@ -29,17 +26,11 @@ class LocationSocketService {
 
   bool _closedByUser = false;
 
-  LocationSocketService(
-    this._sessionStorage,
-  );
+  LocationSocketService(this._sessionStorage);
 
-  Stream<LocationSocketEvent>
-      get events =>
-          _events.stream;
+  Stream<LocationSocketEvent> get events => _events.stream;
 
-  Future<void> connect(
-    int groupId,
-  ) async {
+  Future<void> connect(int groupId) async {
     await disconnect();
 
     _closedByUser = false;
@@ -49,255 +40,156 @@ class LocationSocketService {
   }
 
   Future<void> _open() async {
-    final token =
-        await _sessionStorage
-            .getSessionToken();
+    final token = await _sessionStorage.getSessionToken();
 
-    if (
-        token == null ||
-        token.isEmpty ||
-        _groupId == null ||
-        _closedByUser) {
+    if (token == null || token.isEmpty || _groupId == null || _closedByUser) {
       return;
     }
 
-    final baseUri =
-        Uri.parse(
-      ApiConfig.baseUrl,
-    );
+    final baseUri = Uri.parse(ApiConfig.baseUrl);
 
-    final uri =
-        baseUri.replace(
-      scheme:
-          baseUri.scheme == 'https'
-              ? 'wss'
-              : 'ws',
+    final uri = baseUri.replace(
+      scheme: baseUri.scheme == 'https' ? 'wss' : 'ws',
 
-      path:
-          '/location/ws',
+      path: '/location/ws',
 
       query: null,
     );
 
-    final channel =
-        WebSocketChannel.connect(
-      uri,
-    );
+    final channel = WebSocketChannel.connect(uri);
 
     _channel = channel;
 
-    _subscription =
-        channel.stream.listen(
+    _subscription = channel.stream.listen(
       _handleMessage,
 
-      onError: (_) =>
-          _scheduleReconnect(),
+      onError: (_) => _scheduleReconnect(),
 
-      onDone:
-          _scheduleReconnect,
+      onDone: _scheduleReconnect,
 
       cancelOnError: true,
     );
 
     channel.sink.add(
-      jsonEncode(
-        <String, Object>{
-          'event':
-              'authenticate',
+      jsonEncode(<String, Object>{
+        'event': 'authenticate',
 
-          'data':
-              <String, String>{
-            'sessionToken':
-                token,
-          },
-        },
-      ),
+        'data': <String, String>{'sessionToken': token},
+      }),
     );
   }
 
-  void _handleMessage(
-    Object? rawMessage,
-  ) {
+  void _handleMessage(Object? rawMessage) {
     if (rawMessage is! String) {
       return;
     }
 
-    final decoded =
-        jsonDecode(
-      rawMessage,
-    );
+    final decoded = jsonDecode(rawMessage);
 
     if (decoded is! Map) {
       return;
     }
 
-    final message =
-        Map<String, dynamic>.from(
-      decoded,
-    );
+    final message = Map<String, dynamic>.from(decoded);
 
-    final event =
-        message['event'];
+    final event = message['event'];
 
-    final rawData =
-        message['data'];
+    final rawData = message['data'];
 
-    if (
-        event is! String ||
-        rawData is! Map) {
+    if (event is! String || rawData is! Map) {
       return;
     }
 
-    final data =
-        Map<String, dynamic>.from(
-      rawData,
-    );
+    final data = Map<String, dynamic>.from(rawData);
 
-    if (
-        event ==
-        'authenticated') {
-      _events.add(
-        const LocationSocketAuthenticated(),
-      );
+    if (event == 'authenticated') {
+      _events.add(const LocationSocketAuthenticated());
 
       _channel?.sink.add(
-        jsonEncode(
-          <String, Object>{
-            'event':
-                'subscribeGroup',
+        jsonEncode(<String, Object>{
+          'event': 'subscribeGroup',
 
-            'data':
-                <String, int>{
-              'groupId':
-                  _groupId!,
-            },
-          },
-        ),
+          'data': <String, int>{'groupId': _groupId!},
+        }),
       );
 
       return;
     }
 
-    if (
-        event ==
-        'authenticationFailed') {
+    if (event == 'authenticationFailed') {
       _closedByUser = true;
 
-      _reconnectTimer
-          ?.cancel();
+      _reconnectTimer?.cancel();
 
       _reconnectTimer = null;
 
-      _channel
-          ?.sink
-          .close();
+      _channel?.sink.close();
 
       return;
     }
 
-    if (
-        event ==
-        'memberLocationUpdated') {
+    if (event == 'memberLocationUpdated') {
       _events.add(
         MemberLocationUpdated(
-          groupId:
-              data['groupId']
-                  as int,
+          groupId: data['groupId'] as int,
 
-          member:
-              MemberLocationModel.fromJson(
-            data,
-          ),
+          member: MemberLocationModel.fromJson(data),
         ),
       );
 
       return;
     }
 
-    if (
-        event ==
-        'memberLocationRemoved') {
+    if (event == 'memberLocationRemoved') {
       _events.add(
         MemberLocationRemoved(
-          groupId:
-              data['groupId']
-                  as int,
+          groupId: data['groupId'] as int,
 
-          memberId:
-              data['memberId']
-                  as int,
+          memberId: data['memberId'] as int,
 
-          userId:
-              data['userId']
-                  as int,
+          userId: data['userId'] as int,
         ),
       );
 
       return;
     }
 
-    if (
-        event ==
-        'memberLocationHeartbeat') {
+    if (event == 'memberLocationHeartbeat') {
       _events.add(
         MemberLocationHeartbeat(
-          groupId:
-              data['groupId']
-                  as int,
+          groupId: data['groupId'] as int,
 
-          memberId:
-              data['memberId']
-                  as int,
+          memberId: data['memberId'] as int,
 
-          userId:
-              data['userId']
-                  as int,
+          userId: data['userId'] as int,
 
-          lastSeenAt:
-              DateTime.parse(
-            data['lastSeenAt']
-                as String,
-          ),
+          lastSeenAt: DateTime.parse(data['lastSeenAt'] as String),
         ),
       );
     }
   }
 
   void _scheduleReconnect() {
-    if (
-        _closedByUser ||
+    if (_closedByUser ||
         _groupId == null ||
-        _reconnectTimer
-                ?.isActive ==
-            true) {
+        _reconnectTimer?.isActive == true) {
       return;
     }
 
-    _reconnectTimer =
-        Timer(
-      LocationTrackingConfig
-          .reconnectDelay,
-
-      _open,
-    );
+    _reconnectTimer = Timer(LocationTrackingConfig.reconnectDelay, _open);
   }
 
-  Future<void>
-  disconnect() async {
+  Future<void> disconnect() async {
     _closedByUser = true;
     _groupId = null;
 
-    _reconnectTimer
-        ?.cancel();
+    _reconnectTimer?.cancel();
 
     _reconnectTimer = null;
 
-    await _subscription
-        ?.cancel();
+    await _subscription?.cancel();
 
-    await _channel
-        ?.sink
-        .close();
+    await _channel?.sink.close();
 
     _subscription = null;
     _channel = null;

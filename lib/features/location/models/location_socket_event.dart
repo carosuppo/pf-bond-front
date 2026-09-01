@@ -4,25 +4,19 @@ sealed class LocationSocketEvent {
   const LocationSocketEvent();
 }
 
-class LocationSocketAuthenticated
-    extends LocationSocketEvent {
+class LocationSocketAuthenticated extends LocationSocketEvent {
   const LocationSocketAuthenticated();
 }
 
-class MemberLocationUpdated
-    extends LocationSocketEvent {
+class MemberLocationUpdated extends LocationSocketEvent {
   final int groupId;
 
   final MemberLocationModel member;
 
-  const MemberLocationUpdated({
-    required this.groupId,
-    required this.member,
-  });
+  const MemberLocationUpdated({required this.groupId, required this.member});
 }
 
-class MemberLocationRemoved
-    extends LocationSocketEvent {
+class MemberLocationRemoved extends LocationSocketEvent {
   final int groupId;
   final int memberId;
   final int userId;
@@ -34,8 +28,7 @@ class MemberLocationRemoved
   });
 }
 
-class MemberLocationHeartbeat
-    extends LocationSocketEvent {
+class MemberLocationHeartbeat extends LocationSocketEvent {
   final int groupId;
   final int memberId;
   final int userId;

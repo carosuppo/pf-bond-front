@@ -1,7 +1,7 @@
 import 'package:bond_front/core/theme/app_colors.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_map/flutter_map.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:provider/provider.dart';
 
@@ -9,11 +9,11 @@ import '../../../core/widgets/app_bottom_nav_bar.dart';
 import '../../group/providers/group_provider.dart';
 import '../../group/widgets/group_info_bottom_sheet.dart';
 import '../../group/widgets/group_selector_button.dart';
-import '../providers/location_provider.dart';
-import '../widgets/location_map.dart';
 import '../../point_of_interest/models/point_of_interest.dart';
 import '../../point_of_interest/providers/point_of_interest_provider.dart';
 import '../../point_of_interest/widgets/point_of_interest_editor.dart';
+import '../providers/location_provider.dart';
+import '../widgets/location_map.dart';
 
 class MapScreen extends ConsumerStatefulWidget {
   const MapScreen({super.key});
@@ -25,16 +25,22 @@ class MapScreen extends ConsumerStatefulWidget {
 class _MapScreenState extends ConsumerState<MapScreen> {
   static const _minChildSize = 0.2;
   static const _maxChildSize = 0.5;
+  static const _poiMinChildSize = 0.12;
+  static const _poiMaxChildSize = 0.58;
 
   late final GroupProvider _groupProvider;
   late final DraggableScrollableController _sheetController;
+  late final DraggableScrollableController _poiSheetController;
 
   ScrollController? _sheetScrollController;
+  ScrollController? _poiSheetScrollController;
 
   int? _viewingGroupId;
   bool _sheetExpanded = false;
+
   final MapController _mapController = MapController();
   final GlobalKey<PointOfInterestEditorState> _editorKey = GlobalKey();
+
   PointOfInterest? _editingPoint;
   bool _editing = false;
   LatLng? _draftLocation;
@@ -49,6 +55,7 @@ class _MapScreenState extends ConsumerState<MapScreen> {
 
     _sheetController = DraggableScrollableController()
       ..addListener(_onSheetSizeChanged);
+    _poiSheetController = DraggableScrollableController();
 
     WidgetsBinding.instance.addPostFrameCallback((_) => _syncViewingGroup());
   }
@@ -111,13 +118,9 @@ class _MapScreenState extends ConsumerState<MapScreen> {
     final delta = details.primaryDelta ?? 0;
 
     final minPixels = _sheetController.sizeToPixels(_minChildSize);
+
     final maxPixels = _sheetController.sizeToPixels(_maxChildSize);
 
-    // Al mover el dedo hacia abajo, delta es positivo,
-    // por lo que reducimos la altura del panel.
-    //
-    // Al moverlo hacia arriba, delta es negativo,
-    // por lo que aumentamos su altura.
     final nextPixels = (_sheetController.pixels - delta)
         .clamp(minPixels, maxPixels)
         .toDouble();
@@ -134,21 +137,16 @@ class _MapScreenState extends ConsumerState<MapScreen> {
 
     final velocity = details.primaryVelocity ?? 0;
 
-    // Si el usuario suelta realizando un gesto claro hacia abajo,
-    // terminamos de cerrar el panel.
     if (velocity > 300) {
       _collapseSheet();
       return;
     }
 
-    // Si lo suelta realizando un gesto claro hacia arriba,
-    // terminamos de abrirlo.
     if (velocity < -300) {
       _expandSheet();
       return;
     }
 
-    // Si lo suelta lentamente, se acomoda al estado más cercano.
     final middleSize = (_minChildSize + _maxChildSize) / 2;
 
     if (_sheetController.size < middleSize) {
@@ -158,7 +156,74 @@ class _MapScreenState extends ConsumerState<MapScreen> {
     }
   }
 
-  void _onGroupChanged() => _syncViewingGroup();
+  void _collapsePoiSheet() {
+    if (!_poiSheetController.isAttached) return;
+
+    _poiSheetController.animateTo(
+      _poiMinChildSize,
+      duration: const Duration(milliseconds: 250),
+      curve: Curves.easeOut,
+    );
+
+    if (_poiSheetScrollController?.hasClients ?? false) {
+      _poiSheetScrollController!.animateTo(
+        0,
+        duration: const Duration(milliseconds: 250),
+        curve: Curves.easeOut,
+      );
+    }
+  }
+
+  void _expandPoiSheet() {
+    if (!_poiSheetController.isAttached) return;
+
+    _poiSheetController.animateTo(
+      _poiMaxChildSize,
+      duration: const Duration(milliseconds: 250),
+      curve: Curves.easeOut,
+    );
+  }
+
+  void _handlePoiSheetDragUpdate(DragUpdateDetails details) {
+    if (!_poiSheetController.isAttached) return;
+
+    final delta = details.primaryDelta ?? 0;
+    final minPixels = _poiSheetController.sizeToPixels(_poiMinChildSize);
+    final maxPixels = _poiSheetController.sizeToPixels(_poiMaxChildSize);
+    final nextPixels = (_poiSheetController.pixels - delta)
+        .clamp(minPixels, maxPixels)
+        .toDouble();
+
+    _poiSheetController.jumpTo(_poiSheetController.pixelsToSize(nextPixels));
+  }
+
+  void _handlePoiSheetDragEnd(DragEndDetails details) {
+    if (!_poiSheetController.isAttached) return;
+
+    final velocity = details.primaryVelocity ?? 0;
+
+    if (velocity > 300) {
+      _collapsePoiSheet();
+      return;
+    }
+
+    if (velocity < -300) {
+      _expandPoiSheet();
+      return;
+    }
+
+    final middleSize = (_poiMinChildSize + _poiMaxChildSize) / 2;
+
+    if (_poiSheetController.size < middleSize) {
+      _collapsePoiSheet();
+    } else {
+      _expandPoiSheet();
+    }
+  }
+
+  void _onGroupChanged() {
+    _syncViewingGroup();
+  }
 
   void _syncViewingGroup() {
     if (!mounted) {
@@ -175,6 +240,7 @@ class _MapScreenState extends ConsumerState<MapScreen> {
     _closeEditor();
 
     final pointProvider = context.read<PointOfInterestProvider>();
+
     if (activeGroupId == null) {
       pointProvider.clear();
     } else {
@@ -197,6 +263,8 @@ class _MapScreenState extends ConsumerState<MapScreen> {
       _draftLocation = null;
       _draftRadius = 100;
     });
+
+    WidgetsBinding.instance.addPostFrameCallback((_) => _expandPoiSheet());
   }
 
   void _startEdit(PointOfInterest point) {
@@ -206,11 +274,16 @@ class _MapScreenState extends ConsumerState<MapScreen> {
       _draftLocation = LatLng(point.latitude, point.longitude);
       _draftRadius = point.radius;
     });
+
     _mapController.move(_draftLocation!, 16);
+    WidgetsBinding.instance.addPostFrameCallback((_) => _expandPoiSheet());
   }
 
   void _closeEditor() {
-    if (!mounted) return;
+    if (!mounted) {
+      return;
+    }
+
     setState(() {
       _editing = false;
       _editingPoint = null;
@@ -221,6 +294,7 @@ class _MapScreenState extends ConsumerState<MapScreen> {
 
   void _selectPoint(PointOfInterest point) {
     _mapController.move(LatLng(point.latitude, point.longitude), 16);
+
     _collapseSheet();
   }
 
@@ -234,7 +308,10 @@ class _MapScreenState extends ConsumerState<MapScreen> {
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text(point.name, style: Theme.of(context).textTheme.titleLarge),
+              Text(
+                point.name,
+                style: Theme.of(sheetContext).textTheme.titleLarge,
+              ),
               const SizedBox(height: 8),
               Text(
                 point.description?.isNotEmpty == true
@@ -271,27 +348,38 @@ class _MapScreenState extends ConsumerState<MapScreen> {
   }
 
   Future<void> _confirmDelete(PointOfInterest point) async {
+    final messenger = ScaffoldMessenger.of(context);
+
     final confirmed = await showDialog<bool>(
       context: context,
-      builder: (context) => AlertDialog(
+      builder: (dialogContext) => AlertDialog(
         title: const Text('¿Eliminar este punto de interés?'),
         actions: [
           TextButton(
-            onPressed: () => Navigator.pop(context, false),
+            onPressed: () => Navigator.pop(dialogContext, false),
             child: const Text('Cancelar'),
           ),
           FilledButton(
-            onPressed: () => Navigator.pop(context, true),
+            onPressed: () => Navigator.pop(dialogContext, true),
             child: const Text('Eliminar'),
           ),
         ],
       ),
     );
-    if (confirmed != true || !mounted) return;
+
+    if (confirmed != true || !mounted) {
+      return;
+    }
+
     final provider = context.read<PointOfInterestProvider>();
+
     final success = await provider.delete(point.groupId, point.id);
-    if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
+
+    if (!mounted) {
+      return;
+    }
+
+    messenger.showSnackBar(
       SnackBar(
         content: Text(
           success
@@ -306,6 +394,7 @@ class _MapScreenState extends ConsumerState<MapScreen> {
   void dispose() {
     _groupProvider.removeListener(_onGroupChanged);
     _sheetController.dispose();
+    _poiSheetController.dispose();
 
     if (_viewingGroupId != null) {
       ref.read(locationProvider.notifier).stopViewingGroup();
@@ -322,7 +411,9 @@ class _MapScreenState extends ConsumerState<MapScreen> {
     return PopScope(
       canPop: !_editing,
       onPopInvokedWithResult: (didPop, _) {
-        if (!didPop && _editing) _editorKey.currentState?.requestClose();
+        if (!didPop && _editing) {
+          _editorKey.currentState?.requestClose();
+        }
       },
       child: Scaffold(
         body: SafeArea(
@@ -341,13 +432,16 @@ class _MapScreenState extends ConsumerState<MapScreen> {
                           : null,
                       controller: _mapController,
                       onTap: _editing
-                          ? (point) => setState(() => _draftLocation = point)
+                          ? (point) {
+                              setState(() {
+                                _draftLocation = point;
+                              });
+                            }
                           : null,
                     ),
-
-                    // Si el panel está completamente desplegado,
-                    // tocar el mapa lo vuelve a contraer.
-                    if (groupProvider.groupDetails != null && _sheetExpanded)
+                    if (groupProvider.groupDetails != null &&
+                        _sheetExpanded &&
+                        !_editing)
                       Positioned.fill(
                         child: GestureDetector(
                           behavior: HitTestBehavior.opaque,
@@ -357,14 +451,12 @@ class _MapScreenState extends ConsumerState<MapScreen> {
                   ],
                 ),
               ),
-
               Positioned(
                 top: 12,
                 left: 0,
                 right: 0,
                 child: const GroupSelectorButton(),
               ),
-
               if (groupProvider.groupDetails != null && !_editing)
                 Positioned.fill(
                   child: DraggableScrollableSheet(
@@ -385,11 +477,6 @@ class _MapScreenState extends ConsumerState<MapScreen> {
                         clipBehavior: Clip.antiAlias,
                         child: Column(
                           children: [
-                            // Manijita del panel.
-                            //
-                            // Esta zona controla directamente el tamaño del
-                            // DraggableScrollableSheet, haciendo que el panel
-                            // acompañe al dedo durante todo el gesto.
                             GestureDetector(
                               behavior: HitTestBehavior.opaque,
                               onVerticalDragUpdate: _handleSheetDragUpdate,
@@ -411,7 +498,6 @@ class _MapScreenState extends ConsumerState<MapScreen> {
                                 ),
                               ),
                             ),
-
                             Expanded(
                               child: Column(
                                 children: [
@@ -429,6 +515,7 @@ class _MapScreenState extends ConsumerState<MapScreen> {
                                         itemBuilder: (context, index) {
                                           final point =
                                               pointProvider.points[index];
+
                                           return Card(
                                             child: InkWell(
                                               onTap: () => _selectPoint(point),
@@ -478,71 +565,124 @@ class _MapScreenState extends ConsumerState<MapScreen> {
                   ),
                 ),
               if (_editing)
-                Positioned(
-                  left: 0,
-                  right: 0,
-                  bottom: 0,
-                  child: ConstrainedBox(
-                    constraints: BoxConstraints(
-                      maxHeight: MediaQuery.sizeOf(context).height * 0.58,
-                    ),
-                    child: PointOfInterestEditor(
-                      key: _editorKey,
-                      initial: _editingPoint,
-                      selectedLocation: _draftLocation,
-                      onLocationChanged: (point) {
-                        setState(() => _draftLocation = point);
-                        _mapController.move(point, 16);
-                      },
-                      onRadiusChanged: (radius) =>
-                          setState(() => _draftRadius = radius),
-                      onCreate: (request) async {
-                        final groupId = groupProvider.activeGroup!.id;
-                        final success = await pointProvider.create(
-                          groupId,
-                          request,
-                        );
-                        if (!success && mounted) {
-                          ScaffoldMessenger.of(this.context).showSnackBar(
-                            SnackBar(
-                              content: Text(
-                                pointProvider.errorMessage ??
-                                    'No se pudo registrar.',
+                Positioned.fill(
+                  child: DraggableScrollableSheet(
+                    controller: _poiSheetController,
+                    initialChildSize: _poiMaxChildSize,
+                    minChildSize: _poiMinChildSize,
+                    maxChildSize: _poiMaxChildSize,
+                    snap: true,
+                    snapSizes: const [_poiMinChildSize, _poiMaxChildSize],
+                    builder: (context, scrollController) {
+                      _poiSheetScrollController = scrollController;
+
+                      return Material(
+                        elevation: 12,
+                        borderRadius: const BorderRadius.vertical(
+                          top: Radius.circular(20),
+                        ),
+                        clipBehavior: Clip.antiAlias,
+                        child: Column(
+                          children: [
+                            GestureDetector(
+                              behavior: HitTestBehavior.opaque,
+                              onVerticalDragUpdate: _handlePoiSheetDragUpdate,
+                              onVerticalDragEnd: _handlePoiSheetDragEnd,
+                              child: Padding(
+                                padding: const EdgeInsets.only(
+                                  top: 10,
+                                  bottom: 8,
+                                ),
+                                child: Column(
+                                  children: [
+                                    Container(
+                                      width: 36,
+                                      height: 4,
+                                      decoration: BoxDecoration(
+                                        color: AppColors.mutedText,
+                                        borderRadius: BorderRadius.circular(2),
+                                      ),
+                                    ),
+                                    const SizedBox(height: 6),
+                                    Text(
+                                      _editingPoint == null
+                                          ? 'Creando punto de interés'
+                                          : 'Editando punto de interés',
+                                      style: Theme.of(
+                                        context,
+                                      ).textTheme.labelLarge,
+                                    ),
+                                  ],
+                                ),
                               ),
                             ),
-                          );
-                        }
-                        return success;
-                      },
-                      onUpdate: (request) async {
-                        final point = _editingPoint!;
-                        final success = await pointProvider.update(
-                          point.groupId,
-                          point.id,
-                          request,
-                        );
-                        if (mounted) {
-                          ScaffoldMessenger.of(this.context).showSnackBar(
-                            SnackBar(
-                              content: Text(
-                                success
-                                    ? 'Punto de interés actualizado.'
-                                    : pointProvider.errorMessage ??
-                                          'No se pudo actualizar.',
+                            Expanded(
+                              child: PointOfInterestEditor(
+                                key: _editorKey,
+                                scrollController: scrollController,
+                                initial: _editingPoint,
+                                selectedLocation: _draftLocation,
+                                onLocationChanged: (point) {
+                                  setState(() {
+                                    _draftLocation = point;
+                                  });
+
+                                  _mapController.move(point, 16);
+                                },
+                                onRadiusChanged: (radius) {
+                                  setState(() {
+                                    _draftRadius = radius;
+                                  });
+                                },
+                                onCreate: (request) async {
+                                  final groupId = groupProvider.activeGroup!.id;
+
+                                  final success = await pointProvider.create(
+                                    groupId,
+                                    request,
+                                  );
+
+                                  if (!success) {
+                                    throw Exception(
+                                      pointProvider.errorMessage ??
+                                          'No se pudo registrar '
+                                              'el punto de interés.',
+                                    );
+                                  }
+
+                                  return true;
+                                },
+                                onUpdate: (request) async {
+                                  final point = _editingPoint!;
+
+                                  final success = await pointProvider.update(
+                                    point.groupId,
+                                    point.id,
+                                    request,
+                                  );
+
+                                  if (!success) {
+                                    throw Exception(
+                                      pointProvider.errorMessage ??
+                                          'No se pudo actualizar '
+                                              'el punto de interés.',
+                                    );
+                                  }
+
+                                  return true;
+                                },
+                                onClosed: _closeEditor,
                               ),
                             ),
-                          );
-                        }
-                        return success;
-                      },
-                      onClosed: _closeEditor,
-                    ),
+                          ],
+                        ),
+                      );
+                    },
                   ),
                 ),
             ],
           ),
         ),
-
         bottomNavigationBar: SafeArea(
           top: false,
           child: AppBottomNavBar(
