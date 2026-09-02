@@ -194,13 +194,25 @@ class _LocationMapState extends ConsumerState<LocationMap> {
           ],
         ),
         Positioned.fill(
-          child: _OffscreenMemberIndicatorLayer(
-            members: members,
-            colors: colors,
-            staleMemberIds: {
+          child: _OffscreenLocationIndicatorLayer(
+            locations: [
+              if (ownLocation != null)
+                _OffscreenLocation(
+                  point: LatLng(
+                    ownLocation.latitude,
+                    ownLocation.longitude,
+                  ),
+                  name: 'Vos',
+                  color: colors[-1] ?? Colors.blue,
+                ),
               for (final member in members)
-                if (_isStale(member, now)) member.memberId,
-            },
+                _OffscreenLocation(
+                  point: LatLng(member.latitude, member.longitude),
+                  name: member.name,
+                  color: colors[member.memberId] ?? Colors.blue,
+                  stale: _isStale(member, now),
+                ),
+            ],
             bottomFraction: widget.indicatorBottomFraction,
           ),
         ),
@@ -325,20 +337,16 @@ class _LocationMapState extends ConsumerState<LocationMap> {
   }
 }
 
-class _OffscreenMemberIndicatorLayer extends StatelessWidget {
+class _OffscreenLocationIndicatorLayer extends StatelessWidget {
   static const _indicatorSize = Size(112, 36);
   static const _edgePadding = EdgeInsets.fromLTRB(12, 72, 12, 12);
 
-  const _OffscreenMemberIndicatorLayer({
-    required this.members,
-    required this.colors,
-    required this.staleMemberIds,
+  const _OffscreenLocationIndicatorLayer({
+    required this.locations,
     required this.bottomFraction,
   });
 
-  final List<MemberLocationModel> members;
-  final Map<int, Color> colors;
-  final Set<int> staleMemberIds;
+  final List<_OffscreenLocation> locations;
   final double bottomFraction;
 
   @override
@@ -372,12 +380,12 @@ class _OffscreenMemberIndicatorLayer extends StatelessWidget {
         return IgnorePointer(
           child: Stack(
             children: [
-              for (final member in members)
+              for (final location in locations)
                 if (_indicatorPosition(
                       camera: camera,
                       viewport: viewport,
                       safeBounds: safeBounds,
-                      point: LatLng(member.latitude, member.longitude),
+                      point: location.point,
                     )
                     case final indicator?)
                   Positioned(
@@ -385,9 +393,9 @@ class _OffscreenMemberIndicatorLayer extends StatelessWidget {
                     top: indicator.position.dy - _indicatorSize.height / 2,
                     width: _indicatorSize.width,
                     height: _indicatorSize.height,
-                    child: _OffscreenMemberIndicator(
-                      name: member.name,
-                      color: _markerColor(member),
+                    child: _OffscreenLocationIndicator(
+                      name: location.name,
+                      color: location.displayColor,
                       angle: indicator.angle,
                     ),
                   ),
@@ -441,19 +449,10 @@ class _OffscreenMemberIndicatorLayer extends StatelessWidget {
       angle: math.atan2(direction.dy, direction.dx) + math.pi / 2,
     );
   }
-
-  Color _markerColor(MemberLocationModel member) {
-    final color = colors[member.memberId] ?? Colors.blue;
-    if (staleMemberIds.contains(member.memberId)) {
-      return color.withAlpha(110);
-    }
-
-    return color;
-  }
 }
 
-class _OffscreenMemberIndicator extends StatelessWidget {
-  const _OffscreenMemberIndicator({
+class _OffscreenLocationIndicator extends StatelessWidget {
+  const _OffscreenLocationIndicator({
     required this.name,
     required this.color,
     required this.angle,
@@ -497,6 +496,22 @@ class _OffscreenMemberIndicator extends StatelessWidget {
       ),
     );
   }
+}
+
+class _OffscreenLocation {
+  const _OffscreenLocation({
+    required this.point,
+    required this.name,
+    required this.color,
+    this.stale = false,
+  });
+
+  final LatLng point;
+  final String name;
+  final Color color;
+  final bool stale;
+
+  Color get displayColor => stale ? color.withAlpha(110) : color;
 }
 
 class _IndicatorPlacement {
