@@ -46,12 +46,21 @@ class ApiClient {
     return _handleResponse(response);
   }
 
-  Future<void> authenticatedPostNoContent(String path) async {
+  Future<void> authenticatedPostNoContent(
+    String path, {
+    Map<String, dynamic>? body,
+  }) async {
     final uri = Uri.parse('${ApiConfig.baseUrl}$path');
 
     final headers = await _buildHeaders(authenticated: true);
 
-    final response = await _send(() => http.post(uri, headers: headers));
+    final response = await _send(
+      () => http.post(
+        uri,
+        headers: headers,
+        body: body == null ? null : jsonEncode(body),
+      ),
+    );
 
     _decodeSuccessfulResponse(response);
   }

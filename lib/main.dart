@@ -13,6 +13,8 @@ import 'features/auth/providers/auth_provider.dart';
 import 'features/auth/services/auth_service.dart';
 import 'features/group/providers/group_provider.dart';
 import 'features/group/services/group_service.dart';
+import 'features/notification/services/notification_api_service.dart';
+import 'features/notification/services/push_notification_service.dart';
 import 'features/profile/providers/profile_provider.dart';
 import 'features/profile/services/profile_service.dart';
 import 'features/point_of_interest/providers/point_of_interest_provider.dart';
@@ -43,10 +45,22 @@ class MyApp extends StatelessWidget {
           create: (context) => ApiClient(context.read<SessionStorageService>()),
         ),
 
+        provider.Provider<NotificationApiService>(
+          create: (context) =>
+              NotificationApiService(context.read<ApiClient>()),
+        ),
+        provider.Provider<PushNotificationService>(
+          create: (context) => PushNotificationService(
+            context.read<NotificationApiService>(),
+            context.read<AppPreferencesService>(),
+          ),
+          dispose: (_, service) => service.dispose(),
+        ),
         provider.Provider<AuthService>(
           create: (context) => AuthService(
             context.read<ApiClient>(),
             context.read<SessionStorageService>(),
+            context.read<PushNotificationService>(),
           ),
         ),
         provider.Provider<ProfileService>(
