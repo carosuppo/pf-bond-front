@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:bond_front/core/network/api_client.dart';
 import 'package:bond_front/core/storage/session_storage_service.dart';
 import 'package:bond_front/features/point_of_interest/models/point_of_interest.dart';
@@ -62,6 +64,17 @@ class _FakeService extends PointOfInterestService {
   Future<void> delete(int groupId, int pointId) async {
     if (error != null) throw error!;
     stored.removeWhere((point) => point.id == pointId);
+  }
+}
+
+class _ControlledService extends _FakeService {
+  final requests = <Completer<List<PointOfInterest>>>[];
+
+  @override
+  Future<List<PointOfInterest>> getAll(int groupId) {
+    final request = Completer<List<PointOfInterest>>();
+    requests.add(request);
+    return request.future;
   }
 }
 
@@ -142,4 +155,22 @@ void main() {
     expect(provider.points, hasLength(1));
     expect(provider.errorMessage, 'No perteneces a este grupo.');
   });
+
+  test(
+    'una respuesta vieja del mismo grupo no pisa la carga más reciente',
+    () async {
+      final service = _ControlledService();
+      final provider = PointOfInterestProvider(service);
+
+      final firstLoad = provider.loadPoints(3);
+      final secondLoad = provider.loadPoints(3);
+      service.requests[1].complete([_point(id: 2, name: 'Nuevo')]);
+      await secondLoad;
+      service.requests[0].complete([_point(id: 1, name: 'Viejo')]);
+      await firstLoad;
+
+      expect(provider.points.single.id, 2);
+      expect(provider.points.single.name, 'Nuevo');
+    },
+  );
 }

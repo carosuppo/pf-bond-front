@@ -52,7 +52,6 @@ class _LocationMapState extends ConsumerState<LocationMap> {
 
     _freshnessTimer = Timer.periodic(
       LocationTrackingConfig.freshnessRefreshInterval,
-
       (_) {
         if (mounted) {
           setState(() {});
@@ -92,7 +91,6 @@ class _LocationMapState extends ConsumerState<LocationMap> {
     // porque uno quedó temporalmente oculto.
     final markerIds = <int>[
       if (ownLocation != null) -1,
-
       ...allMembers.map((member) => member.memberId),
     ];
 
@@ -115,23 +113,18 @@ class _LocationMapState extends ConsumerState<LocationMap> {
 
     return FlutterMap(
       mapController: _mapController,
-
       options: MapOptions(
         initialCenter: ownLocation == null
             ? defaultLocation
             : LatLng(ownLocation.latitude, ownLocation.longitude),
-
         initialZoom: defaultZoom,
         onTap: widget.onTap == null ? null : (_, point) => widget.onTap!(point),
       ),
-
       children: [
         TileLayer(
           urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
-
           userAgentPackageName: 'com.example.bond_front',
         ),
-
         CircleLayer(
           circles: [
             for (final point in widget.points)
@@ -159,24 +152,16 @@ class _LocationMapState extends ConsumerState<LocationMap> {
             if (ownLocation != null)
               _marker(
                 point: LatLng(ownLocation.latitude, ownLocation.longitude),
-
                 name: 'Vos',
-
                 color: colors[-1] ?? Colors.blue,
               ),
-
             for (final member in members)
               _marker(
                 point: LatLng(member.latitude, member.longitude),
-
                 name: member.name,
-
                 color: colors[member.memberId] ?? Colors.blue,
-
                 isStale: _isStale(member, now),
-
                 lastSeenAt: member.lastSeenAt,
-
                 now: now,
               ),
             for (final point in widget.points)
@@ -198,17 +183,12 @@ class _LocationMapState extends ConsumerState<LocationMap> {
             locations: [
               if (ownLocation != null)
                 _OffscreenLocation(
-                  point: LatLng(
-                    ownLocation.latitude,
-                    ownLocation.longitude,
-                  ),
-                  name: 'Vos',
+                  point: LatLng(ownLocation.latitude, ownLocation.longitude),
                   color: colors[-1] ?? Colors.blue,
                 ),
               for (final member in members)
                 _OffscreenLocation(
                   point: LatLng(member.latitude, member.longitude),
-                  name: member.name,
                   color: colors[member.memberId] ?? Colors.blue,
                   stale: _isStale(member, now),
                 ),
@@ -264,52 +244,33 @@ class _LocationMapState extends ConsumerState<LocationMap> {
 
     return Marker(
       point: point,
-
       rotate: true,
-
       width: 150,
-
       height: isStale ? 84 : 66,
-
       child: Column(
         mainAxisSize: MainAxisSize.min,
-
         children: [
           Icon(Icons.location_pin, size: 42, color: markerColor),
-
           Text(
             name,
-
             maxLines: 1,
-
             overflow: TextOverflow.ellipsis,
-
             textAlign: TextAlign.center,
-
             style: TextStyle(
               color: isStale ? Colors.black54 : Colors.black87,
-
               fontSize: 13,
-
               fontWeight: FontWeight.w600,
             ),
           ),
-
           if (isStale && lastSeenAt != null && now != null)
             Text(
               _formatLastSeen(lastSeenAt, now),
-
               maxLines: 1,
-
               overflow: TextOverflow.ellipsis,
-
               textAlign: TextAlign.center,
-
               style: const TextStyle(
                 color: Colors.black54,
-
                 fontSize: 10,
-
                 fontWeight: FontWeight.w500,
               ),
             ),
@@ -338,7 +299,8 @@ class _LocationMapState extends ConsumerState<LocationMap> {
 }
 
 class _OffscreenLocationIndicatorLayer extends StatelessWidget {
-  static const _indicatorSize = Size(112, 36);
+  static const _indicatorSize = Size(36, 36);
+
   static const _edgePadding = EdgeInsets.fromLTRB(12, 72, 12, 12);
 
   const _OffscreenLocationIndicatorLayer({
@@ -357,13 +319,12 @@ class _OffscreenLocationIndicatorLayer extends StatelessWidget {
       builder: (context, constraints) {
         final size = constraints.biggest;
 
-        if (!size.width.isFinite ||
-            !size.height.isFinite ||
-            size.isEmpty) {
+        if (!size.width.isFinite || !size.height.isFinite || size.isEmpty) {
           return const SizedBox.shrink();
         }
 
         final viewport = Offset.zero & size;
+
         final safeBounds = Rect.fromLTRB(
           _edgePadding.left + _indicatorSize.width / 2,
           _edgePadding.top + _indicatorSize.height / 2,
@@ -394,7 +355,6 @@ class _OffscreenLocationIndicatorLayer extends StatelessWidget {
                     width: _indicatorSize.width,
                     height: _indicatorSize.height,
                     child: _OffscreenLocationIndicator(
-                      name: location.name,
                       color: location.displayColor,
                       angle: indicator.angle,
                     ),
@@ -421,23 +381,27 @@ class _OffscreenLocationIndicatorLayer extends StatelessWidget {
     }
 
     final direction = projected - viewport.center;
+
     if (direction.distanceSquared == 0) {
       return null;
     }
 
     final origin = safeBounds.center;
+
     final horizontalScale = direction.dx == 0
         ? double.infinity
         : (direction.dx > 0
                   ? safeBounds.right - origin.dx
                   : safeBounds.left - origin.dx) /
               direction.dx;
+
     final verticalScale = direction.dy == 0
         ? double.infinity
         : (direction.dy > 0
                   ? safeBounds.bottom - origin.dy
                   : safeBounds.top - origin.dy) /
               direction.dy;
+
     final scale = math.min(horizontalScale, verticalScale);
 
     if (!scale.isFinite || scale < 0) {
@@ -452,46 +416,27 @@ class _OffscreenLocationIndicatorLayer extends StatelessWidget {
 }
 
 class _OffscreenLocationIndicator extends StatelessWidget {
-  const _OffscreenLocationIndicator({
-    required this.name,
-    required this.color,
-    required this.angle,
-  });
+  const _OffscreenLocationIndicator({required this.color, required this.angle});
 
-  final String name;
   final Color color;
   final double angle;
 
   @override
   Widget build(BuildContext context) {
-    return DecoratedBox(
+    return Container(
+      width: 36,
+      height: 36,
       decoration: BoxDecoration(
-        color: AppColors.surface.withValues(alpha: 0.9),
-        borderRadius: BorderRadius.circular(18),
-        border: Border.all(color: color, width: 1.5),
+        color: color,
+        shape: BoxShape.circle,
+        boxShadow: const [
+          BoxShadow(color: Colors.black26, blurRadius: 5, offset: Offset(0, 2)),
+        ],
       ),
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 8),
-        child: Row(
-          children: [
-            Transform.rotate(
-              angle: angle,
-              child: Icon(Icons.navigation, size: 18, color: color),
-            ),
-            const SizedBox(width: 4),
-            Expanded(
-              child: Text(
-                name,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: const TextStyle(
-                  color: AppColors.text,
-                  fontSize: 12,
-                  fontWeight: FontWeight.w600,
-                ),
-              ),
-            ),
-          ],
+      child: Center(
+        child: Transform.rotate(
+          angle: angle,
+          child: const Icon(Icons.navigation, size: 20, color: Colors.white),
         ),
       ),
     );
@@ -501,17 +446,17 @@ class _OffscreenLocationIndicator extends StatelessWidget {
 class _OffscreenLocation {
   const _OffscreenLocation({
     required this.point,
-    required this.name,
     required this.color,
     this.stale = false,
   });
 
   final LatLng point;
-  final String name;
   final Color color;
   final bool stale;
 
-  Color get displayColor => stale ? color.withAlpha(110) : color;
+  Color get displayColor {
+    return stale ? color.withAlpha(110) : color;
+  }
 }
 
 class _IndicatorPlacement {

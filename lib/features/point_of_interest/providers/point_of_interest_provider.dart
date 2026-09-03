@@ -16,8 +16,10 @@ class PointOfInterestProvider extends ChangeNotifier {
   bool deleting = false;
   String? errorMessage;
   int? _groupId;
+  int _loadVersion = 0;
 
   Future<void> loadPoints(int groupId) async {
+    final loadVersion = ++_loadVersion;
     _groupId = groupId;
     points = [];
     loading = true;
@@ -25,16 +27,21 @@ class PointOfInterestProvider extends ChangeNotifier {
     notifyListeners();
     try {
       final loaded = await _service.getAll(groupId);
-      if (_groupId == groupId) points = loaded;
+      if (_groupId == groupId && _loadVersion == loadVersion) points = loaded;
     } catch (error) {
-      if (_groupId == groupId) errorMessage = _message(error);
+      if (_groupId == groupId && _loadVersion == loadVersion) {
+        errorMessage = _message(error);
+      }
     } finally {
-      if (_groupId == groupId) loading = false;
-      notifyListeners();
+      if (_groupId == groupId && _loadVersion == loadVersion) {
+        loading = false;
+        notifyListeners();
+      }
     }
   }
 
   void clear() {
+    _loadVersion++;
     _groupId = null;
     points = [];
     errorMessage = null;

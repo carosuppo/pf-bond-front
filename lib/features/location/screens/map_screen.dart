@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:bond_front/core/theme/app_colors.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
@@ -11,8 +13,10 @@ import '../../group/widgets/group_info_bottom_sheet.dart';
 import '../../group/widgets/group_selector_button.dart';
 import '../../point_of_interest/models/point_of_interest.dart';
 import '../../point_of_interest/providers/point_of_interest_provider.dart';
+import '../../point_of_interest/services/point_of_interest_realtime_sync.dart';
 import '../../point_of_interest/widgets/point_of_interest_editor.dart';
 import '../providers/location_provider.dart';
+import '../models/location_socket_event.dart';
 import '../widgets/location_map.dart';
 
 class MapScreen extends ConsumerStatefulWidget {
@@ -31,6 +35,7 @@ class _MapScreenState extends ConsumerState<MapScreen> {
   late final GroupProvider _groupProvider;
   late final DraggableScrollableController _sheetController;
   late final DraggableScrollableController _poiSheetController;
+  StreamSubscription<LocationSocketEvent>? _groupEventSubscription;
 
   ScrollController? _sheetScrollController;
   ScrollController? _poiSheetScrollController;
@@ -57,7 +62,24 @@ class _MapScreenState extends ConsumerState<MapScreen> {
       ..addListener(_onSheetSizeChanged);
     _poiSheetController = DraggableScrollableController();
 
+    _groupEventSubscription = ref
+        .read(locationSocketServiceProvider)
+        .events
+        .listen(_onGroupEvent);
+
     WidgetsBinding.instance.addPostFrameCallback((_) => _syncViewingGroup());
+  }
+
+  void _onGroupEvent(LocationSocketEvent event) {
+    if (!mounted) return;
+
+    unawaited(
+      refreshPointsForSocketEvent(
+        event: event,
+        viewingGroupId: _viewingGroupId,
+        loadPoints: context.read<PointOfInterestProvider>().loadPoints,
+      ),
+    );
   }
 
   void _onSheetSizeChanged() {
@@ -393,6 +415,7 @@ class _MapScreenState extends ConsumerState<MapScreen> {
   @override
   void dispose() {
     _groupProvider.removeListener(_onGroupChanged);
+    unawaited(_groupEventSubscription?.cancel());
     _sheetController.dispose();
     _poiSheetController.dispose();
 

@@ -387,6 +387,10 @@ class LocationProvider extends Notifier<LocationState> {
   }
 
   void _handleSocketEvent(LocationSocketEvent event) {
+    if (event is PointOfInterestSocketEvent) {
+      return;
+    }
+
     final activeGroupId = state.activeGroupId;
 
     if (activeGroupId == null) {

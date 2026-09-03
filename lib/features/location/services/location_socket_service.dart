@@ -8,7 +8,6 @@ import '../../../core/storage/session_storage_service.dart';
 
 import '../constants/location_tracking_config.dart';
 import '../models/location_socket_event.dart';
-import '../models/member_location_model.dart';
 
 class LocationSocketService {
   final SessionStorageService _sessionStorage;
@@ -128,45 +127,8 @@ class LocationSocketService {
       return;
     }
 
-    if (event == 'memberLocationUpdated') {
-      _events.add(
-        MemberLocationUpdated(
-          groupId: data['groupId'] as int,
-
-          member: MemberLocationModel.fromJson(data),
-        ),
-      );
-
-      return;
-    }
-
-    if (event == 'memberLocationRemoved') {
-      _events.add(
-        MemberLocationRemoved(
-          groupId: data['groupId'] as int,
-
-          memberId: data['memberId'] as int,
-
-          userId: data['userId'] as int,
-        ),
-      );
-
-      return;
-    }
-
-    if (event == 'memberLocationHeartbeat') {
-      _events.add(
-        MemberLocationHeartbeat(
-          groupId: data['groupId'] as int,
-
-          memberId: data['memberId'] as int,
-
-          userId: data['userId'] as int,
-
-          lastSeenAt: DateTime.parse(data['lastSeenAt'] as String),
-        ),
-      );
-    }
+    final socketEvent = parseLocationSocketEvent(event, data);
+    if (socketEvent != null) _events.add(socketEvent);
   }
 
   void _scheduleReconnect() {
