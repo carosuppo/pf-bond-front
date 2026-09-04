@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../models/auth_response.dart';
+import '../models/change_password_request.dart';
 import '../models/login_request.dart';
 import '../models/register_request.dart';
 import '../services/auth_service.dart';
@@ -11,6 +12,7 @@ class AuthProvider extends ChangeNotifier {
   AuthProvider(this._authService);
 
   bool isLoading = false;
+  bool isChangingPassword = false;
   String? errorMessage;
   AuthResponse? authResponse;
 
@@ -79,6 +81,33 @@ class AuthProvider extends ChangeNotifier {
       return false;
     } finally {
       isLoading = false;
+      notifyListeners();
+    }
+  }
+
+  Future<bool> changePassword({
+    required String currentPassword,
+    required String newPassword,
+  }) async {
+    isChangingPassword = true;
+    errorMessage = null;
+    notifyListeners();
+
+    try {
+      final request = ChangePasswordRequest(
+        currentPassword: currentPassword,
+        newPassword: newPassword,
+      );
+
+      await _authService.changePassword(request);
+
+      return true;
+    } catch (error) {
+      errorMessage = error.toString().replaceFirst('Exception: ', '');
+
+      return false;
+    } finally {
+      isChangingPassword = false;
       notifyListeners();
     }
   }

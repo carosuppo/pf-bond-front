@@ -1,6 +1,7 @@
 import '../../../core/network/api_client.dart';
 import '../../../core/storage/session_storage_service.dart';
 import '../models/auth_response.dart';
+import '../models/change_password_request.dart';
 import '../models/login_request.dart';
 import '../models/register_request.dart';
 import '../models/user_model.dart';
@@ -52,5 +53,9 @@ class AuthService {
 
       return null;
     }
+  }
+
+  Future<void> changePassword(ChangePasswordRequest request) async {
+    await _apiClient.authenticatedPatch('/user/password', request.toJson());
   }
 }

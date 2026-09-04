@@ -17,6 +17,12 @@ class SettingsScreen extends StatelessWidget {
         onTap: () =>
             Navigator.of(context).pushNamed(AppRoutes.editProfile),
       ),
+      SettingsOption(
+        icon: Icons.lock_outline,
+        title: 'Modificar mi contraseña',
+        onTap: () =>
+            Navigator.of(context).pushNamed(AppRoutes.changePassword),
+      ),
     ];
   }
 

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../../features/auth/screens/change_password_screen.dart';
 import '../../features/auth/screens/login_screen.dart';
 import '../../features/auth/screens/register_screen.dart';
 import '../../features/group/models/get_group_model.response.dart';
@@ -57,6 +58,12 @@ class AppRouter {
       case AppRoutes.editProfile:
         return MaterialPageRoute(
           builder: (_) => const EditProfileScreen(),
+          settings: settings,
+        );
+
+      case AppRoutes.changePassword:
+        return MaterialPageRoute(
+          builder: (_) => const ChangePasswordScreen(),
           settings: settings,
         );
 
