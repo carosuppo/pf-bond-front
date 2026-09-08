@@ -1,3 +1,7 @@
+import 'package:provider/provider.dart';
+import '../../features/notification/providers/notification_preferences_provider.dart';
+import '../../features/notification/services/notification_api_service.dart';
+import '../../features/notification/screens/notification_preferences_screen.dart';
 import 'package:flutter/material.dart';
 
 import '../../features/auth/screens/login_screen.dart';
@@ -45,6 +49,17 @@ class AppRouter {
       case AppRoutes.map:
         return MaterialPageRoute(
           builder: (_) => const MapScreen(),
+          settings: settings,
+        );
+
+      case AppRoutes.notifications:
+        return MaterialPageRoute(
+          builder: (context) => ChangeNotifierProvider(
+            create: (context) => NotificationPreferencesProvider(
+              context.read<NotificationApiService>(),
+            )..load(),
+            child: const NotificationPreferencesScreen(),
+          ),
           settings: settings,
         );
 

@@ -16,6 +16,11 @@ class SettingsScreen extends StatelessWidget {
         title: 'Modificar mi perfil',
         onTap: () => Navigator.of(context).pushNamed(AppRoutes.editProfile),
       ),
+      SettingsOption(
+        icon: Icons.notifications_outlined,
+        title: 'Notificaciones',
+        onTap: () => Navigator.of(context).pushNamed(AppRoutes.notifications),
+      ),
     ];
   }
 
