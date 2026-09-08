@@ -3,12 +3,13 @@ import 'dart:convert';
 import 'package:http/http.dart' as http;
 
 import '../config/api_config.dart';
+import 'api_exception.dart';
 import '../storage/session_storage_service.dart';
 
 class ApiClient {
-  final SessionStorageService _sessionStorage;
+  final SessionStorageService sessionStorage;
 
-  ApiClient(this._sessionStorage);
+  ApiClient(this.sessionStorage);
 
   static const _timeout = Duration(seconds: 20);
 
@@ -142,7 +143,7 @@ class ApiClient {
       return headers;
     }
 
-    final token = await _sessionStorage.getSessionToken();
+    final token = await sessionStorage.getSessionToken();
 
     if (token == null || token.isEmpty) {
       throw Exception('No existe una sesión válida.');
@@ -184,6 +185,9 @@ class ApiClient {
       return decodedBody;
     }
 
-    throw Exception(_getErrorMessage(decodedBody));
+    throw ApiException(
+      _getErrorMessage(decodedBody),
+      statusCode: response.statusCode,
+    );
   }
 }

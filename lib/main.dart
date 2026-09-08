@@ -13,6 +13,7 @@ import 'features/auth/providers/auth_provider.dart';
 import 'features/auth/services/auth_service.dart';
 import 'features/group/providers/group_provider.dart';
 import 'features/group/services/group_service.dart';
+import 'features/location/services/background_location_service.dart';
 import 'features/notification/services/notification_api_service.dart';
 import 'features/notification/services/push_notification_service.dart';
 import 'features/profile/providers/profile_provider.dart';
@@ -22,6 +23,7 @@ import 'features/point_of_interest/services/point_of_interest_service.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  BackgroundLocationService.initialize();
 
   await dotenv.load(fileName: '.env');
 
@@ -40,6 +42,9 @@ class MyApp extends StatelessWidget {
         ),
         provider.Provider<AppPreferencesService>(
           create: (_) => AppPreferencesService(),
+        ),
+        provider.Provider<BackgroundLocationService>(
+          create: (_) => BackgroundLocationService(),
         ),
         provider.Provider<ApiClient>(
           create: (context) => ApiClient(context.read<SessionStorageService>()),
@@ -61,6 +66,7 @@ class MyApp extends StatelessWidget {
             context.read<ApiClient>(),
             context.read<SessionStorageService>(),
             context.read<PushNotificationService>(),
+            context.read<BackgroundLocationService>(),
           ),
         ),
         provider.Provider<ProfileService>(

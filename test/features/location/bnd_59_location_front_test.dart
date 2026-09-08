@@ -18,9 +18,7 @@ class _FakeLocationProvider extends LocationProvider {
   LocationState build() => initialState;
 }
 
-LocationState _stateWithMembers(
-  Map<int, MemberLocationModel> members,
-) {
+LocationState _stateWithMembers(Map<int, MemberLocationModel> members) {
   return LocationState(
     isLoading: false,
     isTracking: false,
@@ -31,25 +29,18 @@ LocationState _stateWithMembers(
   );
 }
 
-Future<void> _pumpMap(
-  WidgetTester tester,
-  LocationState state,
-) async {
+Future<void> _pumpMap(WidgetTester tester, LocationState state) async {
   await tester.pumpWidget(
     ProviderScope(
       overrides: [
-        locationProvider.overrideWith(
-          () => _FakeLocationProvider(state),
-        ),
+        locationProvider.overrideWith(() => _FakeLocationProvider(state)),
       ],
       child: const MaterialApp(
         home: Scaffold(
           body: SizedBox(
             width: 400,
             height: 700,
-            child: LocationMap(
-              groupId: 20,
-            ),
+            child: LocationMap(groupId: 20),
           ),
         ),
       ),
@@ -59,12 +50,8 @@ Future<void> _pumpMap(
   await tester.pump();
 }
 
-Future<void> _disposeMap(
-  WidgetTester tester,
-) async {
-  await tester.pumpWidget(
-    const SizedBox.shrink(),
-  );
+Future<void> _disposeMap(WidgetTester tester) async {
+  await tester.pumpWidget(const SizedBox.shrink());
 
   await tester.pump();
 }
@@ -81,11 +68,7 @@ void main() {
         name: 'Ana',
         latitude: -34.6037,
         longitude: -58.3816,
-        lastSeenAt: now.subtract(
-          const Duration(
-            minutes: 1,
-          ),
-        ),
+        lastSeenAt: now.subtract(const Duration(minutes: 1)),
       );
 
       final expired = MemberLocationModel(
@@ -95,13 +78,7 @@ void main() {
         latitude: -34.61,
         longitude: -58.39,
         lastSeenAt: now.subtract(
-          Duration(
-            minutes:
-                LocationTrackingConfig
-                        .hideAfter
-                        .inMinutes +
-                    1,
-          ),
+          Duration(minutes: LocationTrackingConfig.hideAfter.inMinutes + 1),
         ),
       );
 
@@ -111,11 +88,7 @@ void main() {
         name: 'Luis',
         latitude: -34.615,
         longitude: -58.4,
-        lastSeenAt: now.subtract(
-          const Duration(
-            minutes: 2,
-          ),
-        ),
+        lastSeenAt: now.subtract(const Duration(minutes: 2)),
       );
 
       await _pumpMap(
@@ -127,93 +100,48 @@ void main() {
         }),
       );
 
-      final markerLayer =
-          tester.widget<MarkerLayer>(
-        find.byType(MarkerLayer),
-      );
+      final markerLayer = tester.widget<MarkerLayer>(find.byType(MarkerLayer));
 
       // Solo deben existir los dos miembros activos.
-      expect(
-        markerLayer.markers,
-        hasLength(2),
-      );
+      expect(markerLayer.markers, hasLength(2));
 
-      final firstMarker =
-          markerLayer.markers[0];
+      final firstMarker = markerLayer.markers[0];
 
-      final secondMarker =
-          markerLayer.markers[1];
+      final secondMarker = markerLayer.markers[1];
 
       // Verificamos la posición geográfica de Ana.
-      expect(
-        firstMarker.point.latitude,
-        activeA.latitude,
-      );
+      expect(firstMarker.point.latitude, activeA.latitude);
 
-      expect(
-        firstMarker.point.longitude,
-        activeA.longitude,
-      );
+      expect(firstMarker.point.longitude, activeA.longitude);
 
       // Verificamos la posición geográfica de Luis.
-      expect(
-        secondMarker.point.latitude,
-        activeB.latitude,
-      );
+      expect(secondMarker.point.latitude, activeB.latitude);
 
-      expect(
-        secondMarker.point.longitude,
-        activeB.longitude,
-      );
+      expect(secondMarker.point.longitude, activeB.longitude);
 
       // Inspeccionamos directamente el contenido
       // de los marcadores.
-      final firstColumn =
-          firstMarker.child as Column;
+      final firstColumn = firstMarker.child as Column;
 
-      final secondColumn =
-          secondMarker.child as Column;
+      final secondColumn = secondMarker.child as Column;
 
-      final firstIcon =
-          firstColumn.children[0]
-              as Icon;
+      final firstIcon = firstColumn.children[0] as Icon;
 
-      final secondIcon =
-          secondColumn.children[0]
-              as Icon;
+      final secondIcon = secondColumn.children[0] as Icon;
 
-      final firstName =
-          firstColumn.children[1]
-              as Text;
+      final firstName = firstColumn.children[1] as Text;
 
-      final secondName =
-          secondColumn.children[1]
-              as Text;
+      final secondName = secondColumn.children[1] as Text;
 
       // Los miembros visibles deben ser Ana y Luis.
-      expect(
-        firstName.data,
-        'Ana',
-      );
+      expect(firstName.data, 'Ana');
 
-      expect(
-        secondName.data,
-        'Luis',
-      );
+      expect(secondName.data, 'Luis');
 
       // Cada miembro debe tener un color distinto.
-      expect(
-        firstIcon.color,
-        isNot(
-          equals(
-            secondIcon.color,
-          ),
-        ),
-      );
+      expect(firstIcon.color, isNot(equals(secondIcon.color)));
 
-      await _disposeMap(
-        tester,
-      );
+      await _disposeMap(tester);
     },
   );
 
@@ -222,38 +150,18 @@ void main() {
     (tester) async {
       await _pumpMap(
         tester,
-        _stateWithMembers(
-          const <
-            int,
-            MemberLocationModel
-          >{},
-        ),
+        _stateWithMembers(const <int, MemberLocationModel>{}),
       );
 
       // El mapa debe seguir existiendo.
-      expect(
-        find.byType(
-          FlutterMap,
-        ),
-        findsOneWidget,
-      );
+      expect(find.byType(FlutterMap), findsOneWidget);
 
-      final markerLayer =
-          tester.widget<MarkerLayer>(
-        find.byType(
-          MarkerLayer,
-        ),
-      );
+      final markerLayer = tester.widget<MarkerLayer>(find.byType(MarkerLayer));
 
       // No debe haber marcadores de miembros.
-      expect(
-        markerLayer.markers,
-        isEmpty,
-      );
+      expect(markerLayer.markers, isEmpty);
 
-      await _disposeMap(
-        tester,
-      );
+      await _disposeMap(tester);
     },
   );
 }

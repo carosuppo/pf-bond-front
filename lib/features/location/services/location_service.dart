@@ -1,5 +1,3 @@
-import 'dart:io';
-
 import 'package:geolocator/geolocator.dart';
 
 import '../constants/location_tracking_config.dart';
@@ -50,22 +48,10 @@ class LocationService {
   }
 
   Stream<LocationModel> getLocationStream() {
-    final LocationSettings settings = Platform.isAndroid
-        ? AndroidSettings(
-            accuracy: LocationAccuracy.high,
-            distanceFilter: LocationTrackingConfig.distanceFilterMeters,
-            intervalDuration: LocationTrackingConfig.minimumPublishInterval,
-            foregroundNotificationConfig: const ForegroundNotificationConfig(
-              notificationTitle: 'Bond esta compartiendo tu ubicacion',
-              notificationText:
-                  'Tu ubicacion se comparte con los grupos habilitados.',
-              enableWakeLock: true,
-            ),
-          )
-        : const LocationSettings(
-            accuracy: LocationAccuracy.high,
-            distanceFilter: LocationTrackingConfig.distanceFilterMeters,
-          );
+    const settings = LocationSettings(
+      accuracy: LocationAccuracy.high,
+      distanceFilter: LocationTrackingConfig.distanceFilterMeters,
+    );
     return Geolocator.getPositionStream(
       locationSettings: settings,
     ).map(mapPosition);

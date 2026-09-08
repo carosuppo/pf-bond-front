@@ -6,12 +6,12 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/network/api_client.dart';
 import '../../../core/preferences/app_preferences_service.dart';
 import '../../../core/storage/session_storage_service.dart';
-import '../constants/location_tracking_config.dart';
 import '../models/location_model.dart';
 import '../models/location_permission_status.dart';
 import '../models/location_socket_event.dart';
 import '../models/location_state.dart';
 import '../services/location_backend_service.dart';
+import '../services/background_location_service.dart';
 import '../services/location_service.dart';
 import '../services/location_socket_service.dart';
 import '../utils/location_tracking_policy.dart';
@@ -37,6 +37,10 @@ final locationBackendServiceProvider = Provider<LocationBackendService>(
   (ref) => LocationBackendService(ref.read(apiClientProvider)),
 );
 
+final backgroundLocationServiceProvider = Provider<BackgroundLocationService>(
+  (ref) => BackgroundLocationService(),
+);
+
 final locationSocketServiceProvider = Provider<LocationSocketService>((ref) {
   final service = LocationSocketService(ref.read(sessionStorageProvider));
 
@@ -58,15 +62,9 @@ class LocationProvider extends Notifier<LocationState> {
 
   late final AppPreferencesService _preferencesService;
 
-  StreamSubscription<LocationModel>? _locationSubscription;
+  late final BackgroundLocationService _backgroundLocationService;
 
   StreamSubscription<LocationSocketEvent>? _socketSubscription;
-
-  Timer? _heartbeatTimer;
-
-  LocationModel? _lastPublishedLocation;
-
-  DateTime? _lastPublishedAt;
 
   late final AppLifecycleListener _lifecycleListener;
 
@@ -82,6 +80,9 @@ class LocationProvider extends Notifier<LocationState> {
 
     _preferencesService = ref.read(appPreferencesProvider);
 
+    _backgroundLocationService = ref.read(backgroundLocationServiceProvider);
+    _backgroundLocationService.addLocationListener(_onBackgroundLocation);
+
     // Cuando la app vuelve a primer plano, re-chequeamos los permisos:
     // si el usuario los habilitó en Ajustes, el tracking se reanuda solo.
     _lifecycleListener = AppLifecycleListener(
@@ -91,11 +92,8 @@ class LocationProvider extends Notifier<LocationState> {
     ref.onDispose(() {
       _lifecycleListener.dispose();
 
-      _locationSubscription?.cancel();
-
       _socketSubscription?.cancel();
-
-      _heartbeatTimer?.cancel();
+      _backgroundLocationService.removeLocationListener(_onBackgroundLocation);
     });
 
     return LocationState.initial();
@@ -295,95 +293,27 @@ class LocationProvider extends Notifier<LocationState> {
         return;
       }
 
-      if (state.isTracking) {
-        if (_heartbeatTimer?.isActive != true) {
-          _startHeartbeat();
-        }
-
-        return;
-      }
-
-      await _publish(await _locationService.getCurrentLocation(), force: true);
-
-      _locationSubscription = _locationService.getLocationStream().listen(
-        (location) => _publish(location),
-
-        onError: (Object error) =>
-            state = state.copyWith(errorMessage: _message(error)),
-      );
-
+      await _backgroundLocationService.ensureRunning();
       state = state.copyWith(isTracking: true, clearError: true);
-
-      _startHeartbeat();
+      try {
+        state = state.copyWith(
+          currentLocation: await _locationService.getCurrentLocation(),
+        );
+      } catch (_) {
+        // El TaskHandler enviará la próxima posición disponible a la UI.
+      }
     } finally {
       _syncing = false;
     }
   }
 
-  void _startHeartbeat() {
-    _heartbeatTimer?.cancel();
-
-    _heartbeatTimer = Timer.periodic(
-      LocationTrackingConfig.heartbeatInterval,
-
-      (_) => unawaited(_sendHeartbeat()),
-    );
-  }
-
-  Future<void> _sendHeartbeat() async {
-    if (!state.isTracking || !state.hasEffectiveSharing) {
-      return;
-    }
-
-    try {
-      await _backendService.sendHeartbeat();
-    } catch (_) {
-      // No mostramos un SnackBar cada minuto
-      // si el dispositivo pierde Internet.
-      // El siguiente heartbeat volverá a intentar.
-    }
-  }
-
   Future<void> _stopTracking() async {
-    _heartbeatTimer?.cancel();
-
-    _heartbeatTimer = null;
-
-    await _locationSubscription?.cancel();
-
-    _locationSubscription = null;
-
+    await _backgroundLocationService.stop();
     state = state.copyWith(isTracking: false);
   }
 
-  Future<void> _publish(LocationModel location, {bool force = false}) async {
+  void _onBackgroundLocation(LocationModel location) {
     state = state.copyWith(currentLocation: location);
-
-    final now = DateTime.now();
-
-    final enoughTime =
-        _lastPublishedAt == null ||
-        now.difference(_lastPublishedAt!) >=
-            LocationTrackingConfig.minimumPublishInterval;
-
-    final enoughDistance =
-        _lastPublishedLocation == null ||
-        _locationService.distanceBetween(_lastPublishedLocation!, location) >=
-            LocationTrackingConfig.minimumPublishDistanceMeters;
-
-    if (!force && (!enoughTime || !enoughDistance)) {
-      return;
-    }
-
-    try {
-      await _backendService.publishCurrentLocation(location);
-
-      _lastPublishedLocation = location;
-
-      _lastPublishedAt = now;
-    } catch (error) {
-      state = state.copyWith(errorMessage: _message(error));
-    }
   }
 
   void _handleSocketEvent(LocationSocketEvent event) {

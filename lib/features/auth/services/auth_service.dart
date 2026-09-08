@@ -5,16 +5,19 @@ import '../models/login_request.dart';
 import '../models/register_request.dart';
 import '../models/user_model.dart';
 import '../../notification/services/push_notification_service.dart';
+import '../../location/services/background_location_service.dart';
 
 class AuthService {
   final ApiClient _apiClient;
   final SessionStorageService _sessionStorage;
   final PushNotificationService _pushNotificationService;
+  final BackgroundLocationService _backgroundLocationService;
 
   AuthService(
     this._apiClient,
     this._sessionStorage,
     this._pushNotificationService,
+    this._backgroundLocationService,
   );
 
   Future<bool> register(RegisterRequest request) async {
@@ -65,6 +68,7 @@ class AuthService {
   }
 
   Future<void> logout() async {
+    await _backgroundLocationService.stop();
     await _pushNotificationService.unregisterCurrentDevice();
     await _apiClient.authenticatedPostNoContent('/user/logout');
     await _sessionStorage.clearSession();
