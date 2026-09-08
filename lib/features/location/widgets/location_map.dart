@@ -7,7 +7,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:latlong2/latlong.dart';
 
 import '../constants/default_location.dart';
-import '../../../core/theme/app_colors.dart';
+import '../../point_of_interest/models/point_of_interest_color.dart';
 import '../constants/location_tracking_config.dart';
 import '../models/member_location_model.dart';
 import '../providers/location_provider.dart';
@@ -19,6 +19,7 @@ class LocationMap extends ConsumerStatefulWidget {
   final List<PointOfInterest> points;
   final LatLng? previewPoint;
   final double? previewRadius;
+  final PointOfInterestColor previewColor;
   final ValueChanged<LatLng>? onTap;
   final MapController? controller;
   final double indicatorBottomFraction;
@@ -29,6 +30,7 @@ class LocationMap extends ConsumerStatefulWidget {
     this.points = const [],
     this.previewPoint,
     this.previewRadius,
+    this.previewColor = PointOfInterestColor.blue,
     this.onTap,
     this.controller,
     this.indicatorBottomFraction = 0,
@@ -132,8 +134,8 @@ class _LocationMapState extends ConsumerState<LocationMap> {
                 point: LatLng(point.latitude, point.longitude),
                 radius: point.radius,
                 useRadiusInMeter: true,
-                color: AppColors.primary.withAlpha(45),
-                borderColor: AppColors.primary,
+                color: point.color.visualColor.withAlpha(45),
+                borderColor: point.color.visualColor,
                 borderStrokeWidth: 2,
               ),
             if (widget.previewPoint != null && widget.previewRadius != null)
@@ -141,8 +143,8 @@ class _LocationMapState extends ConsumerState<LocationMap> {
                 point: widget.previewPoint!,
                 radius: widget.previewRadius!,
                 useRadiusInMeter: true,
-                color: Colors.orange.withAlpha(55),
-                borderColor: Colors.orange,
+                color: widget.previewColor.visualColor.withAlpha(55),
+                borderColor: widget.previewColor.visualColor,
                 borderStrokeWidth: 2,
               ),
           ],
@@ -150,13 +152,13 @@ class _LocationMapState extends ConsumerState<LocationMap> {
         MarkerLayer(
           markers: [
             if (ownLocation != null)
-              _marker(
+              _memberMarker(
                 point: LatLng(ownLocation.latitude, ownLocation.longitude),
                 name: 'Vos',
                 color: colors[-1] ?? Colors.blue,
               ),
             for (final member in members)
-              _marker(
+              _memberMarker(
                 point: LatLng(member.latitude, member.longitude),
                 name: member.name,
                 color: colors[member.memberId] ?? Colors.blue,
@@ -165,16 +167,16 @@ class _LocationMapState extends ConsumerState<LocationMap> {
                 now: now,
               ),
             for (final point in widget.points)
-              _marker(
+              _pointOfInterestMarker(
                 point: LatLng(point.latitude, point.longitude),
                 name: point.name,
-                color: AppColors.primary,
+                color: point.color.visualColor,
               ),
             if (widget.previewPoint != null)
-              _marker(
+              _pointOfInterestMarker(
                 point: widget.previewPoint!,
                 name: 'Vista previa',
-                color: Colors.orange,
+                color: widget.previewColor.visualColor,
               ),
           ],
         ),
@@ -194,6 +196,8 @@ class _LocationMapState extends ConsumerState<LocationMap> {
                 ),
             ],
             bottomFraction: widget.indicatorBottomFraction,
+            onLocationTap: (point) =>
+                _mapController.move(point, _mapController.camera.zoom),
           ),
         ),
       ],
@@ -232,7 +236,37 @@ class _LocationMapState extends ConsumerState<LocationMap> {
     return difference;
   }
 
-  Marker _marker({
+  Marker _pointOfInterestMarker({
+    required LatLng point,
+    required String name,
+    required Color color,
+  }) {
+    return Marker(
+      point: point,
+      rotate: true,
+      width: 150,
+      height: 66,
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(Icons.flag_rounded, size: 42, color: color),
+          Text(
+            name,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            textAlign: TextAlign.center,
+            style: const TextStyle(
+              color: Colors.black87,
+              fontSize: 13,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Marker _memberMarker({
     required LatLng point,
     required String name,
     required Color color,
@@ -306,10 +340,12 @@ class _OffscreenLocationIndicatorLayer extends StatelessWidget {
   const _OffscreenLocationIndicatorLayer({
     required this.locations,
     required this.bottomFraction,
+    required this.onLocationTap,
   });
 
   final List<_OffscreenLocation> locations;
   final double bottomFraction;
+  final ValueChanged<LatLng> onLocationTap;
 
   @override
   Widget build(BuildContext context) {
@@ -338,29 +374,30 @@ class _OffscreenLocationIndicatorLayer extends StatelessWidget {
           return const SizedBox.shrink();
         }
 
-        return IgnorePointer(
-          child: Stack(
-            children: [
-              for (final location in locations)
-                if (_indicatorPosition(
-                      camera: camera,
-                      viewport: viewport,
-                      safeBounds: safeBounds,
-                      point: location.point,
-                    )
-                    case final indicator?)
-                  Positioned(
-                    left: indicator.position.dx - _indicatorSize.width / 2,
-                    top: indicator.position.dy - _indicatorSize.height / 2,
-                    width: _indicatorSize.width,
-                    height: _indicatorSize.height,
+        return Stack(
+          children: [
+            for (final location in locations)
+              if (_indicatorPosition(
+                    camera: camera,
+                    viewport: viewport,
+                    safeBounds: safeBounds,
+                    point: location.point,
+                  )
+                  case final indicator?)
+                Positioned(
+                  left: indicator.position.dx - _indicatorSize.width / 2,
+                  top: indicator.position.dy - _indicatorSize.height / 2,
+                  width: _indicatorSize.width,
+                  height: _indicatorSize.height,
+                  child: GestureDetector(
+                    onTap: () => onLocationTap(location.point),
                     child: _OffscreenLocationIndicator(
                       color: location.displayColor,
                       angle: indicator.angle,
                     ),
                   ),
-            ],
-          ),
+                ),
+          ],
         );
       },
     );

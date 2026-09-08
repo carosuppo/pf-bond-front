@@ -22,7 +22,7 @@ class _GroupSelectorButtonState extends State<GroupSelectorButton> {
 
   @override
   void dispose() {
-    _removeOverlay();
+    _removeOverlay(rebuild: false);
     super.dispose();
   }
 
@@ -94,11 +94,11 @@ class _GroupSelectorButtonState extends State<GroupSelectorButton> {
     setState(() {});
   }
 
-  void _removeOverlay() {
+  void _removeOverlay({bool rebuild = true}) {
     _overlayEntry?.remove();
     _overlayEntry = null;
 
-    if (mounted) {
+    if (rebuild && mounted) {
       setState(() {});
     }
   }

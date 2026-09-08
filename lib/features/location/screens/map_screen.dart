@@ -12,6 +12,7 @@ import '../../group/providers/group_provider.dart';
 import '../../group/widgets/group_info_bottom_sheet.dart';
 import '../../group/widgets/group_selector_button.dart';
 import '../../point_of_interest/models/point_of_interest.dart';
+import '../../point_of_interest/models/point_of_interest_color.dart';
 import '../../point_of_interest/providers/point_of_interest_provider.dart';
 import '../../point_of_interest/services/point_of_interest_realtime_sync.dart';
 import '../../point_of_interest/widgets/point_of_interest_editor.dart';
@@ -33,6 +34,7 @@ class _MapScreenState extends ConsumerState<MapScreen> {
   static const _poiMaxChildSize = 0.58;
 
   late final GroupProvider _groupProvider;
+  late final LocationProvider _locationNotifier;
   late final DraggableScrollableController _sheetController;
   late final DraggableScrollableController _poiSheetController;
   StreamSubscription<LocationSocketEvent>? _groupEventSubscription;
@@ -50,12 +52,14 @@ class _MapScreenState extends ConsumerState<MapScreen> {
   bool _editing = false;
   LatLng? _draftLocation;
   double _draftRadius = 100;
+  PointOfInterestColor _draftColor = PointOfInterestColor.blue;
 
   @override
   void initState() {
     super.initState();
 
     _groupProvider = context.read<GroupProvider>();
+    _locationNotifier = ref.read(locationProvider.notifier);
     _groupProvider.addListener(_onGroupChanged);
 
     _sheetController = DraggableScrollableController()
@@ -284,6 +288,7 @@ class _MapScreenState extends ConsumerState<MapScreen> {
       _editingPoint = null;
       _draftLocation = null;
       _draftRadius = 100;
+      _draftColor = PointOfInterestColor.blue;
     });
 
     WidgetsBinding.instance.addPostFrameCallback((_) => _expandPoiSheet());
@@ -295,6 +300,7 @@ class _MapScreenState extends ConsumerState<MapScreen> {
       _editingPoint = point;
       _draftLocation = LatLng(point.latitude, point.longitude);
       _draftRadius = point.radius;
+      _draftColor = point.color;
     });
 
     _mapController.move(_draftLocation!, 16);
@@ -311,6 +317,7 @@ class _MapScreenState extends ConsumerState<MapScreen> {
       _editingPoint = null;
       _draftLocation = null;
       _draftRadius = 100;
+      _draftColor = PointOfInterestColor.blue;
     });
   }
 
@@ -420,7 +427,7 @@ class _MapScreenState extends ConsumerState<MapScreen> {
     _poiSheetController.dispose();
 
     if (_viewingGroupId != null) {
-      ref.read(locationProvider.notifier).stopViewingGroup();
+      unawaited(_locationNotifier.stopViewingGroup());
     }
 
     super.dispose();
@@ -449,6 +456,7 @@ class _MapScreenState extends ConsumerState<MapScreen> {
                     LocationMap(
                       groupId: groupProvider.activeGroup?.id,
                       points: pointProvider.points,
+                      previewColor: _draftColor,
                       previewPoint: _editing ? _draftLocation : null,
                       previewRadius: _editing && _draftLocation != null
                           ? _draftRadius
@@ -467,17 +475,10 @@ class _MapScreenState extends ConsumerState<MapScreen> {
                                 _draftLocation = point;
                               });
                             }
+                          : _sheetExpanded
+                          ? (_) => _collapseSheet()
                           : null,
                     ),
-                    if (groupProvider.groupDetails != null &&
-                        _sheetExpanded &&
-                        !_editing)
-                      Positioned.fill(
-                        child: GestureDetector(
-                          behavior: HitTestBehavior.opaque,
-                          onTap: _collapseSheet,
-                        ),
-                      ),
                   ],
                 ),
               ),
@@ -557,9 +558,11 @@ class _MapScreenState extends ConsumerState<MapScreen> {
                                                 ),
                                                 child: Row(
                                                   children: [
-                                                    const Icon(
-                                                      Icons.place,
-                                                      color: AppColors.primary,
+                                                    Icon(
+                                                      Icons.flag_rounded,
+                                                      color: point
+                                                          .color
+                                                          .visualColor,
                                                     ),
                                                     Text(point.name),
                                                     IconButton(
@@ -659,6 +662,8 @@ class _MapScreenState extends ConsumerState<MapScreen> {
 
                                   _mapController.move(point, 16);
                                 },
+                                onColorChanged: (color) =>
+                                    setState(() => _draftColor = color),
                                 onRadiusChanged: (radius) {
                                   setState(() {
                                     _draftRadius = radius;

@@ -78,8 +78,9 @@ class NotificationPreferencesProvider extends ChangeNotifier {
     String type,
     bool enabled,
   ) {
-    if (preferences?.enabled != true || !group.enabled)
+    if (preferences?.enabled != true || !group.enabled) {
       return Future.value(false);
+    }
     final previous = group.types[type] ?? true;
     return _save(
       () => group.types[type] = enabled,

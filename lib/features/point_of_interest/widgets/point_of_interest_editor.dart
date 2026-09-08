@@ -6,6 +6,7 @@ import '../../location/models/location_permission_status.dart';
 import '../../location/services/location_service.dart';
 import '../models/geocoding_result.dart';
 import '../models/point_of_interest.dart';
+import '../models/point_of_interest_color.dart';
 import '../models/point_of_interest_request.dart';
 import '../services/geocoding_service.dart';
 
@@ -15,6 +16,7 @@ class PointOfInterestEditor extends StatefulWidget {
   final LatLng? selectedLocation;
   final ValueChanged<LatLng> onLocationChanged;
   final ValueChanged<double> onRadiusChanged;
+  final ValueChanged<PointOfInterestColor> onColorChanged;
   final Future<bool> Function(CreatePointOfInterestRequest request)? onCreate;
   final Future<bool> Function(UpdatePointOfInterestRequest request)? onUpdate;
   final VoidCallback onClosed;
@@ -26,6 +28,7 @@ class PointOfInterestEditor extends StatefulWidget {
     required this.selectedLocation,
     required this.onLocationChanged,
     required this.onRadiusChanged,
+    required this.onColorChanged,
     this.onCreate,
     this.onUpdate,
     required this.onClosed,
@@ -48,6 +51,7 @@ class PointOfInterestEditorState extends State<PointOfInterestEditor> {
 
   List<GeocodingResult> _results = [];
 
+  late PointOfInterestColor _color;
   bool _searching = false;
   bool _submitting = false;
 
@@ -55,13 +59,15 @@ class PointOfInterestEditorState extends State<PointOfInterestEditor> {
     final initial = widget.initial;
 
     if (initial == null) {
-      return _nameController.text.isNotEmpty ||
+      return _color != PointOfInterestColor.blue ||
+          _nameController.text.isNotEmpty ||
           _descriptionController.text.isNotEmpty ||
           _radiusController.text != '100' ||
           widget.selectedLocation != null;
     }
 
-    return _nameController.text != initial.name ||
+    return _color != initial.color ||
+        _nameController.text != initial.name ||
         _descriptionController.text != (initial.description ?? '') ||
         double.tryParse(_radiusController.text) != initial.radius ||
         widget.selectedLocation?.latitude != initial.latitude ||
@@ -71,6 +77,7 @@ class PointOfInterestEditorState extends State<PointOfInterestEditor> {
   @override
   void initState() {
     super.initState();
+    _color = widget.initial?.color ?? PointOfInterestColor.blue;
 
     _nameController = TextEditingController(text: widget.initial?.name ?? '');
 
@@ -217,6 +224,7 @@ class PointOfInterestEditorState extends State<PointOfInterestEditor> {
       if (widget.initial == null) {
         success = await widget.onCreate!(
           CreatePointOfInterestRequest(
+            color: _color,
             name: _nameController.text,
             description: description,
             radius: radius,
@@ -227,6 +235,7 @@ class PointOfInterestEditorState extends State<PointOfInterestEditor> {
       } else {
         success = await widget.onUpdate!(
           UpdatePointOfInterestRequest(
+            color: _color,
             name: _nameController.text,
             description: description,
             radius: radius,
@@ -313,6 +322,40 @@ class PointOfInterestEditorState extends State<PointOfInterestEditor> {
                 widget.initial == null
                     ? 'Registrar punto de interés'
                     : 'Editar punto de interés',
+              ),
+              const SizedBox(height: 12),
+              const Align(
+                alignment: Alignment.centerLeft,
+                child: Text('Color'),
+              ),
+              Wrap(
+                spacing: 8,
+                runSpacing: 4,
+                children: [
+                  for (final color in PointOfInterestColor.values)
+                    ChoiceChip(
+                      label: Text(color.label),
+                      avatar: Container(
+                        width: 20,
+                        height: 20,
+                        decoration: BoxDecoration(
+                          color: color.visualColor,
+                          shape: BoxShape.circle,
+                          border: Border.all(
+                            color: Theme.of(context).colorScheme.outline,
+                          ),
+                        ),
+                      ),
+                      selected: _color == color,
+                      showCheckmark: true,
+                      onSelected: _submitting
+                          ? null
+                          : (_) {
+                              setState(() => _color = color);
+                              widget.onColorChanged(color);
+                            },
+                    ),
+                ],
               ),
               const SizedBox(height: 12),
               TextFormField(
