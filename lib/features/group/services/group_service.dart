@@ -3,10 +3,12 @@ import '../models/create_group_model.request.dart';
 import '../models/create_group_model.response.dart';
 import '../models/get_group_model.response.dart';
 import '../models/get_groups_model.response.dart';
+import '../models/get_member_model.response.dart';
 import '../models/group_model.response.dart';
 import '../models/join_group_model.request.dart';
 import '../models/join_group_model.response.dart';
 import '../models/update_group_model.request.dart';
+import '../models/update_member_role_model.request.dart';
 
 class GroupService {
   final ApiClient _apiClient;
@@ -43,6 +45,18 @@ class GroupService {
       request.toJson(),
     );
     return GroupResponseModel.fromJson(response);
+  }
+
+  Future<void> updateMemberRole({
+    required int memberId,
+    required RoleEnum role,
+  }) async {
+    final request = UpdateMemberRoleRequest(role: role);
+
+    await _apiClient.authenticatedPut(
+      '/member/$memberId/role',
+      request.toJson(),
+    );
   }
 
   Future<List<GetGroupsResponseModel>> getGroups() async {
