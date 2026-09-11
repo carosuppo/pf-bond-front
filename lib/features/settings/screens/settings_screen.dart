@@ -12,6 +12,11 @@ class SettingsScreen extends StatelessWidget {
   List<SettingsOption> _buildOptions(BuildContext context) {
     return [
       SettingsOption(
+        icon: Icons.account_circle_outlined,
+        title: 'Ver mi perfil',
+        onTap: () => Navigator.of(context).pushNamed(AppRoutes.profile),
+      ),
+      SettingsOption(
         icon: Icons.person_outline,
         title: 'Modificar mi perfil',
         onTap: () => Navigator.of(context).pushNamed(AppRoutes.editProfile),

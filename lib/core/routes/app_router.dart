@@ -14,6 +14,7 @@ import '../../features/group/screens/groups_screen.dart';
 import '../../features/group/screens/join_group_screen.dart';
 import '../../features/location/screens/map_screen.dart';
 import '../../features/profile/screens/edit_profile_screen.dart';
+import '../../features/profile/screens/profile_screen.dart';
 import '../../features/settings/screens/settings_screen.dart';
 import '../screens/splash_screen.dart';
 import 'app_routes.dart';
@@ -67,6 +68,12 @@ class AppRouter {
       case AppRoutes.settings:
         return MaterialPageRoute(
           builder: (_) => const SettingsScreen(),
+          settings: settings,
+        );
+
+      case AppRoutes.profile:
+        return MaterialPageRoute(
+          builder: (_) => const ProfileScreen(),
           settings: settings,
         );
 

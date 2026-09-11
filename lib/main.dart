@@ -72,14 +72,17 @@ class MyApp extends StatelessWidget {
         provider.Provider<ProfileService>(
           create: (context) => ProfileService(context.read<ApiClient>()),
         ),
+        provider.Provider<GroupService>(
+          create: (context) => GroupService(context.read<ApiClient>()),
+        ),
         provider.ChangeNotifierProvider<ProfileProvider>(
-          create: (context) => ProfileProvider(context.read<ProfileService>()),
+          create: (context) => ProfileProvider(
+            context.read<ProfileService>(),
+            context.read<GroupService>(),
+          ),
         ),
         provider.ChangeNotifierProvider<AuthProvider>(
           create: (context) => AuthProvider(context.read<AuthService>()),
-        ),
-        provider.Provider<GroupService>(
-          create: (context) => GroupService(context.read<ApiClient>()),
         ),
         provider.ChangeNotifierProvider<GroupProvider>(
           create: (context) => GroupProvider(
