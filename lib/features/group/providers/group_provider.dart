@@ -7,6 +7,7 @@ import '../models/create_group_model.request.dart';
 import '../models/create_group_model.response.dart';
 import '../models/get_group_model.response.dart';
 import '../models/get_groups_model.response.dart';
+import '../models/get_member_model.response.dart';
 import '../models/group_model.response.dart';
 import '../models/join_group_model.request.dart';
 import '../models/join_group_model.response.dart';
@@ -99,6 +100,38 @@ class GroupProvider extends ChangeNotifier {
     }
   }
 
+  Future<bool> updateMemberRole({
+    required int memberId,
+    required RoleEnum role,
+    required bool isCurrentUserAdmin,
+  }) async {
+    if (!isCurrentUserAdmin) {
+      errorMessage = 'Solo los administradores pueden modificar los roles.';
+      notifyListeners();
+
+      return false;
+    }
+
+    isLoading = true;
+    errorMessage = null;
+
+    notifyListeners();
+
+    try {
+      await _groupService.updateMemberRole(memberId: memberId, role: role);
+      _applyUpdatedMemberRole(memberId, role);
+
+      return true;
+    } catch (error) {
+      errorMessage = error.toString().replaceFirst('Exception: ', '');
+
+      return false;
+    } finally {
+      isLoading = false;
+      notifyListeners();
+    }
+  }
+
   Future<bool> updateGroup({
     required int groupId,
     required String name,
@@ -167,6 +200,36 @@ class GroupProvider extends ChangeNotifier {
     if (activeGroup != null && activeGroup!.id == updated.id) {
       activeGroup = GetGroupsResponseModel(id: updated.id, name: updated.name);
     }
+  }
+
+  void _applyUpdatedMemberRole(int memberId, RoleEnum role) {
+    final currentGroup = groupDetails;
+
+    if (currentGroup == null) {
+      return;
+    }
+
+    final members = currentGroup.members.map((member) {
+      if (member.id != memberId) {
+        return member;
+      }
+
+      return GetMemberResponseModel(
+        id: member.id,
+        idUser: member.idUser,
+        name: member.name,
+        role: role,
+      );
+    }).toList();
+
+    groupDetails = GetGroupResponseModel(
+      id: currentGroup.id,
+      name: currentGroup.name,
+      description: currentGroup.description,
+      shareLocationMandatorily: currentGroup.shareLocationMandatorily,
+      invitationCode: currentGroup.invitationCode,
+      members: members,
+    );
   }
 
   Future<bool> getGroups() async {
