@@ -1,12 +1,17 @@
+import 'dart:async';
+
 import 'package:bond_front/core/theme/app_colors.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:provider/provider.dart';
 
 import '../../../core/widgets/app_bottom_nav_bar.dart';
+import '../../group/models/get_member_info_model.response.dart';
 import '../../group/providers/group_provider.dart';
+import '../../group/services/group_service.dart';
 import '../../group/widgets/group_info_bottom_sheet.dart';
 import '../../group/widgets/group_selector_button.dart';
+import '../../group/widgets/member_info_bottom_sheet.dart';
 import '../providers/location_provider.dart';
 import '../widgets/location_map.dart';
 
@@ -27,7 +32,10 @@ class _MapScreenState extends ConsumerState<MapScreen> {
   ScrollController? _sheetScrollController;
 
   int? _viewingGroupId;
-  bool _sheetExpanded = false;
+  int? _selectedMemberId;
+  int _memberInfoRequestId = 0;
+  bool _memberInfoLoading = false;
+  GetMemberInfoResponseModel? _memberInfo;
 
   @override
   void initState() {
@@ -36,31 +44,9 @@ class _MapScreenState extends ConsumerState<MapScreen> {
     _groupProvider = context.read<GroupProvider>();
     _groupProvider.addListener(_onGroupChanged);
 
-    _sheetController = DraggableScrollableController()
-      ..addListener(_onSheetSizeChanged);
+    _sheetController = DraggableScrollableController();
 
-    WidgetsBinding.instance.addPostFrameCallback(
-      (_) => _syncViewingGroup(),
-    );
-  }
-
-  void _onSheetSizeChanged() {
-    final expanded =
-        _sheetController.size >= _maxChildSize - 0.001;
-
-    if (expanded == _sheetExpanded) {
-      return;
-    }
-
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!mounted) {
-        return;
-      }
-
-      setState(() {
-        _sheetExpanded = expanded;
-      });
-    });
+    WidgetsBinding.instance.addPostFrameCallback((_) => _syncViewingGroup());
   }
 
   void _collapseSheet() {
@@ -93,6 +79,85 @@ class _MapScreenState extends ConsumerState<MapScreen> {
       duration: const Duration(milliseconds: 250),
       curve: Curves.easeOut,
     );
+  }
+
+  void _handleMapTap() {
+    _clearMemberInfo();
+    _collapseSheet();
+  }
+
+  void _handleMemberTap(int memberId) {
+    if (!mounted) {
+      return;
+    }
+
+    final requestId = ++_memberInfoRequestId;
+
+    setState(() {
+      _selectedMemberId = memberId;
+      _memberInfo = null;
+      _memberInfoLoading = true;
+    });
+
+    _expandSheet();
+    unawaited(_loadMemberInfo(memberId, requestId));
+  }
+
+  Future<void> _loadMemberInfo(int memberId, int requestId) async {
+    try {
+      final memberInfo = await context.read<GroupService>().getMemberInfo(
+        memberId: memberId,
+      );
+
+      if (!mounted ||
+          requestId != _memberInfoRequestId ||
+          _selectedMemberId != memberId) {
+        return;
+      }
+
+      setState(() {
+        _memberInfo = memberInfo;
+        _memberInfoLoading = false;
+      });
+    } catch (error) {
+      if (!mounted ||
+          requestId != _memberInfoRequestId ||
+          _selectedMemberId != memberId) {
+        return;
+      }
+
+      _clearMemberInfo();
+      _collapseSheet();
+
+      final message = error.toString().replaceFirst('Exception: ', '');
+      ScaffoldMessenger.of(context)
+        ..hideCurrentSnackBar()
+        ..showSnackBar(
+          SnackBar(
+            content: Text(
+              message.isEmpty
+                  ? 'No se pudo consultar la información del miembro.'
+                  : message,
+            ),
+          ),
+        );
+    }
+  }
+
+  void _clearMemberInfo() {
+    _memberInfoRequestId++;
+
+    if (_selectedMemberId == null &&
+        _memberInfo == null &&
+        !_memberInfoLoading) {
+      return;
+    }
+
+    setState(() {
+      _selectedMemberId = null;
+      _memberInfo = null;
+      _memberInfoLoading = false;
+    });
   }
 
   void _handleSheetDragUpdate(DragUpdateDetails details) {
@@ -150,7 +215,15 @@ class _MapScreenState extends ConsumerState<MapScreen> {
     }
   }
 
-  void _onGroupChanged() => _syncViewingGroup();
+  void _onGroupChanged() {
+    final activeGroupId = _groupProvider.activeGroup?.id;
+
+    if (activeGroupId != _viewingGroupId) {
+      _clearMemberInfo();
+    }
+
+    _syncViewingGroup();
+  }
 
   void _syncViewingGroup() {
     if (!mounted) {
@@ -200,18 +273,9 @@ class _MapScreenState extends ConsumerState<MapScreen> {
                 children: [
                   LocationMap(
                     groupId: groupProvider.activeGroup?.id,
+                    onMapTap: _handleMapTap,
+                    onMemberTap: _handleMemberTap,
                   ),
-
-                  // Si el panel está completamente desplegado,
-                  // tocar el mapa lo vuelve a contraer.
-                  if (groupProvider.groupDetails != null &&
-                      _sheetExpanded)
-                    Positioned.fill(
-                      child: GestureDetector(
-                        behavior: HitTestBehavior.opaque,
-                        onTap: _collapseSheet,
-                      ),
-                    ),
                 ],
               ),
             ),
@@ -231,10 +295,7 @@ class _MapScreenState extends ConsumerState<MapScreen> {
                   minChildSize: _minChildSize,
                   maxChildSize: _maxChildSize,
                   snap: true,
-                  snapSizes: const [
-                    _minChildSize,
-                    _maxChildSize,
-                  ],
+                  snapSizes: const [_minChildSize, _maxChildSize],
                   builder: (context, scrollController) {
                     _sheetScrollController = scrollController;
 
@@ -253,10 +314,8 @@ class _MapScreenState extends ConsumerState<MapScreen> {
                           // acompañe al dedo durante todo el gesto.
                           GestureDetector(
                             behavior: HitTestBehavior.opaque,
-                            onVerticalDragUpdate:
-                                _handleSheetDragUpdate,
-                            onVerticalDragEnd:
-                                _handleSheetDragEnd,
+                            onVerticalDragUpdate: _handleSheetDragUpdate,
+                            onVerticalDragEnd: _handleSheetDragEnd,
                             child: Padding(
                               padding: const EdgeInsets.only(
                                 top: 10,
@@ -268,8 +327,7 @@ class _MapScreenState extends ConsumerState<MapScreen> {
                                   height: 4,
                                   decoration: BoxDecoration(
                                     color: AppColors.mutedText,
-                                    borderRadius:
-                                        BorderRadius.circular(2),
+                                    borderRadius: BorderRadius.circular(2),
                                   ),
                                 ),
                               ),
@@ -277,10 +335,19 @@ class _MapScreenState extends ConsumerState<MapScreen> {
                           ),
 
                           Expanded(
-                            child: GroupInfoBottomSheet(
-                              group: groupProvider.groupDetails!,
-                              scrollController: scrollController,
-                            ),
+                            child: _memberInfoLoading
+                                ? MemberInfoLoading(
+                                    scrollController: scrollController,
+                                  )
+                                : _memberInfo != null
+                                ? MemberInfoBottomSheet(
+                                    memberInfo: _memberInfo!,
+                                    scrollController: scrollController,
+                                  )
+                                : GroupInfoBottomSheet(
+                                    group: groupProvider.groupDetails!,
+                                    scrollController: scrollController,
+                                  ),
                           ),
                         ],
                       ),
@@ -297,10 +364,7 @@ class _MapScreenState extends ConsumerState<MapScreen> {
         child: AppBottomNavBar(
           selectedDestination: AppBottomDestination.map,
           onDestinationSelected: (destination) =>
-              navigateToAppDestination(
-                context,
-                destination,
-              ),
+              navigateToAppDestination(context, destination),
         ),
       ),
     );

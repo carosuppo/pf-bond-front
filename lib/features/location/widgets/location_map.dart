@@ -13,8 +13,15 @@ import '../utils/marker_colors.dart';
 
 class LocationMap extends ConsumerStatefulWidget {
   final int? groupId;
+  final VoidCallback? onMapTap;
+  final void Function(int memberId)? onMemberTap;
 
-  const LocationMap({super.key, required this.groupId});
+  const LocationMap({
+    super.key,
+    required this.groupId,
+    this.onMapTap,
+    this.onMemberTap,
+  });
 
   @override
   ConsumerState<LocationMap> createState() => _LocationMapState();
@@ -103,6 +110,8 @@ class _LocationMapState extends ConsumerState<LocationMap> {
             : LatLng(ownLocation.latitude, ownLocation.longitude),
 
         initialZoom: defaultZoom,
+
+        onTap: (_, _) => widget.onMapTap?.call(),
       ),
 
       children: [
@@ -136,6 +145,10 @@ class _LocationMapState extends ConsumerState<LocationMap> {
                 lastSeenAt: member.lastSeenAt,
 
                 now: now,
+
+                onTap: widget.onMemberTap == null
+                    ? null
+                    : () => widget.onMemberTap!(member.memberId),
               ),
           ],
         ),
@@ -182,8 +195,53 @@ class _LocationMapState extends ConsumerState<LocationMap> {
     bool isStale = false,
     DateTime? lastSeenAt,
     DateTime? now,
+    VoidCallback? onTap,
   }) {
     final markerColor = isStale ? color.withAlpha(110) : color;
+    final markerContent = Column(
+      mainAxisSize: MainAxisSize.min,
+
+      children: [
+        Icon(Icons.location_pin, size: 42, color: markerColor),
+
+        Text(
+          name,
+
+          maxLines: 1,
+
+          overflow: TextOverflow.ellipsis,
+
+          textAlign: TextAlign.center,
+
+          style: TextStyle(
+            color: isStale ? Colors.black54 : Colors.black87,
+
+            fontSize: 13,
+
+            fontWeight: FontWeight.w600,
+          ),
+        ),
+
+        if (isStale && lastSeenAt != null && now != null)
+          Text(
+            _formatLastSeen(lastSeenAt, now),
+
+            maxLines: 1,
+
+            overflow: TextOverflow.ellipsis,
+
+            textAlign: TextAlign.center,
+
+            style: const TextStyle(
+              color: Colors.black54,
+
+              fontSize: 10,
+
+              fontWeight: FontWeight.w500,
+            ),
+          ),
+      ],
+    );
 
     return Marker(
       point: point,
@@ -192,50 +250,13 @@ class _LocationMapState extends ConsumerState<LocationMap> {
 
       height: isStale ? 84 : 66,
 
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-
-        children: [
-          Icon(Icons.location_pin, size: 42, color: markerColor),
-
-          Text(
-            name,
-
-            maxLines: 1,
-
-            overflow: TextOverflow.ellipsis,
-
-            textAlign: TextAlign.center,
-
-            style: TextStyle(
-              color: isStale ? Colors.black54 : Colors.black87,
-
-              fontSize: 13,
-
-              fontWeight: FontWeight.w600,
+      child: onTap == null
+          ? markerContent
+          : GestureDetector(
+              behavior: HitTestBehavior.opaque,
+              onTap: onTap,
+              child: markerContent,
             ),
-          ),
-
-          if (isStale && lastSeenAt != null && now != null)
-            Text(
-              _formatLastSeen(lastSeenAt, now),
-
-              maxLines: 1,
-
-              overflow: TextOverflow.ellipsis,
-
-              textAlign: TextAlign.center,
-
-              style: const TextStyle(
-                color: Colors.black54,
-
-                fontSize: 10,
-
-                fontWeight: FontWeight.w500,
-              ),
-            ),
-        ],
-      ),
     );
   }
 
