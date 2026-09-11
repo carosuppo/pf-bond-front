@@ -9,8 +9,11 @@ import 'core/routes/app_router.dart';
 import 'core/routes/app_routes.dart';
 import 'core/storage/session_storage_service.dart';
 import 'core/theme/app_colors.dart';
+import 'core/timezone/app_timezone.dart';
 import 'features/auth/providers/auth_provider.dart';
 import 'features/auth/services/auth_service.dart';
+import 'features/event/providers/event_provider.dart';
+import 'features/event/services/event_service.dart';
 import 'features/group/providers/group_provider.dart';
 import 'features/group/services/group_service.dart';
 import 'features/location/services/background_location_service.dart';
@@ -26,6 +29,8 @@ Future<void> main() async {
   BackgroundLocationService.initialize();
 
   await dotenv.load(fileName: '.env');
+
+  AppTimezone.initialize();
 
   runApp(const ProviderScope(child: MyApp()));
 }
@@ -97,6 +102,12 @@ class MyApp extends StatelessWidget {
         provider.ChangeNotifierProvider<PointOfInterestProvider>(
           create: (context) =>
               PointOfInterestProvider(context.read<PointOfInterestService>()),
+        ),
+        provider.Provider<EventService>(
+          create: (context) => EventService(context.read<ApiClient>()),
+        ),
+        provider.ChangeNotifierProvider<EventProvider>(
+          create: (context) => EventProvider(context.read<EventService>()),
         ),
       ],
       child: MaterialApp(

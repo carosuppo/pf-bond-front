@@ -14,4 +14,6 @@ class AppRoutes {
   static const String joinGroup = '/groups/join-group';
   static const String createGroup = '/groups/create-group';
   static const String updateGroup = '/groups/update-group';
+  static const String events = '/events';
+  static const String createEvent = '/events/create-event';
 }

@@ -3,11 +3,12 @@ import 'package:flutter/material.dart';
 import '../routes/app_routes.dart';
 import '../theme/app_colors.dart';
 
-enum AppBottomDestination { map, settings }
+enum AppBottomDestination { map, events, settings }
 
 extension AppBottomDestinationRoute on AppBottomDestination {
   String get route => switch (this) {
     AppBottomDestination.map => AppRoutes.map,
+    AppBottomDestination.events => AppRoutes.events,
     AppBottomDestination.settings => AppRoutes.settings,
   };
 }
@@ -46,6 +47,12 @@ class AppBottomNavBar extends StatelessWidget {
       icon: Icons.location_on_outlined,
       selectedIcon: Icons.location_on,
       tooltip: 'Ubicación',
+    ),
+    _BottomNavItem(
+      destination: AppBottomDestination.events,
+      icon: Icons.event_outlined,
+      selectedIcon: Icons.event_rounded,
+      tooltip: 'Eventos',
     ),
     _BottomNavItem(
       destination: AppBottomDestination.settings,
