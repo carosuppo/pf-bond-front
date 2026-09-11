@@ -14,8 +14,12 @@ class SettingsScreen extends StatelessWidget {
       SettingsOption(
         icon: Icons.person_outline,
         title: 'Modificar mi perfil',
-        onTap: () =>
-            Navigator.of(context).pushNamed(AppRoutes.editProfile),
+        onTap: () => Navigator.of(context).pushNamed(AppRoutes.editProfile),
+      ),
+      SettingsOption(
+        icon: Icons.notifications_outlined,
+        title: 'Notificaciones',
+        onTap: () => Navigator.of(context).pushNamed(AppRoutes.notifications),
       ),
     ];
   }
@@ -32,10 +36,8 @@ class SettingsScreen extends StatelessWidget {
 
       body: ListView.separated(
         itemCount: options.length,
-        separatorBuilder: (_, _) => const Divider(
-          height: 1,
-          color: AppColors.divider,
-        ),
+        separatorBuilder: (_, _) =>
+            const Divider(height: 1, color: AppColors.divider),
         itemBuilder: (context, index) =>
             SettingsOptionTile(option: options[index]),
       ),
@@ -45,10 +47,7 @@ class SettingsScreen extends StatelessWidget {
         child: AppBottomNavBar(
           selectedDestination: AppBottomDestination.settings,
           onDestinationSelected: (destination) =>
-              navigateToAppDestination(
-                context,
-                destination,
-              ),
+              navigateToAppDestination(context, destination),
         ),
       ),
     );

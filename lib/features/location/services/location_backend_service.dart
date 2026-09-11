@@ -7,83 +7,44 @@ import '../models/member_location_model.dart';
 class LocationBackendService {
   final ApiClient _apiClient;
 
-  LocationBackendService(
-    this._apiClient,
-  );
+  LocationBackendService(this._apiClient);
 
-  Future<List<LocationSharingModel>>
-  getSharing() async {
-    final response =
-        await _apiClient.authenticatedGetList(
-      '/location/sharing',
-    );
+  Future<List<LocationSharingModel>> getSharing() async {
+    final response = await _apiClient.authenticatedGetList('/location/sharing');
 
-    return response
-        .map(
-          LocationSharingModel.fromJson,
-        )
-        .toList(
-          growable: false,
-        );
+    return response.map(LocationSharingModel.fromJson).toList(growable: false);
   }
 
-  Future<LocationSharingModel>
-  updateGroupSharing(
+  Future<LocationSharingModel> updateGroupSharing(
     int groupId,
     bool enabled,
   ) async {
-    final response =
-        await _apiClient.authenticatedPut(
+    final response = await _apiClient.authenticatedPut(
       '/location/group/$groupId/sharing',
-      <String, dynamic>{
-        'enabled': enabled,
-      },
+      <String, dynamic>{'enabled': enabled},
     );
 
-    return LocationSharingModel.fromJson(
-      response,
-    );
+    return LocationSharingModel.fromJson(response);
   }
 
-  Future<List<MemberLocationModel>>
-  getGroupMembers(
-    int groupId,
-  ) async {
-    final response =
-        await _apiClient.authenticatedGetList(
+  Future<List<MemberLocationModel>> getGroupMembers(int groupId) async {
+    final response = await _apiClient.authenticatedGetList(
       '/location/group/$groupId/members',
     );
 
-    return response
-        .map(
-          MemberLocationModel.fromJson,
-        )
-        .toList(
-          growable: false,
-        );
+    return response.map(MemberLocationModel.fromJson).toList(growable: false);
   }
 
-  Future<void> publishCurrentLocation(
-    LocationModel location,
-  ) async {
-    await _apiClient.authenticatedPut(
-      '/location/current',
-      <String, dynamic>{
-        'latitude':
-            location.latitude,
+  Future<void> publishCurrentLocation(LocationModel location) async {
+    await _apiClient.authenticatedPut('/location/current', <String, dynamic>{
+      'latitude': location.latitude,
 
-        'longitude':
-            location.longitude,
+      'longitude': location.longitude,
 
-        'accuracy':
-            location.accuracy,
+      'accuracy': location.accuracy,
 
-        'capturedAt':
-            location.timestamp
-                .toUtc()
-                .toIso8601String(),
-      },
-    );
+      'capturedAt': location.timestamp.toUtc().toIso8601String(),
+    });
   }
 
   Future<void> sendHeartbeat() async {

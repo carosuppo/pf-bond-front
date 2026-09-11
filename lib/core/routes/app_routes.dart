@@ -1,4 +1,5 @@
 class AppRoutes {
+  static const notifications = '/notifications';
   const AppRoutes._();
 
   static const String splash = '/';

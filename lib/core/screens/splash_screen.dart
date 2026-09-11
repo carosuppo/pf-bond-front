@@ -56,6 +56,10 @@ class _SplashScreenState extends ConsumerState<SplashScreen>
   Future<void> _restoreSessionAndNavigate() async {
     await Future.delayed(const Duration(milliseconds: 1500));
 
+    if (!mounted) {
+      return;
+    }
+
     final authProvider = context.read<AuthProvider>();
     final hasSession = await authProvider.restoreSession();
 
@@ -68,10 +72,13 @@ class _SplashScreenState extends ConsumerState<SplashScreen>
       return;
     }
 
+    final groupProvider = context.read<GroupProvider>();
+    final locationNotifier = ref.read(locationProvider.notifier);
+
     await const PostAuthNavigator().navigate(
       context: context,
-      groupProvider: context.read<GroupProvider>(),
-      locationNotifier: ref.read(locationProvider.notifier),
+      groupProvider: groupProvider,
+      locationNotifier: locationNotifier,
     );
   }
 

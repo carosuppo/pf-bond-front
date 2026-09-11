@@ -10,6 +10,9 @@ import 'package:bond_front/features/group/models/get_member_model.response.dart'
 import 'package:bond_front/features/group/providers/group_provider.dart';
 import 'package:bond_front/features/group/services/group_service.dart';
 import 'package:bond_front/features/group/widgets/group_info_bottom_sheet.dart';
+import 'package:bond_front/features/location/services/background_location_service.dart';
+import 'package:bond_front/features/notification/services/notification_api_service.dart';
+import 'package:bond_front/features/notification/services/push_notification_service.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:provider/provider.dart';
@@ -94,7 +97,19 @@ const _groupWithOnlyAdmin = GetGroupResponseModel(
 
 AuthProvider _authProvider() {
   final storage = SessionStorageService();
-  final authProvider = AuthProvider(AuthService(ApiClient(storage), storage));
+  final apiClient = ApiClient(storage);
+  final pushNotificationService = PushNotificationService(
+    NotificationApiService(apiClient),
+    AppPreferencesService(),
+  );
+  final authProvider = AuthProvider(
+    AuthService(
+      apiClient,
+      storage,
+      pushNotificationService,
+      BackgroundLocationService(),
+    ),
+  );
   authProvider.authResponse = AuthResponse(
     sessionToken: 'token',
     expiresAt: DateTime.now().add(const Duration(hours: 1)),

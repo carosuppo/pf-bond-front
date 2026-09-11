@@ -5,6 +5,8 @@ class AppPreferencesService {
 
   static const String _locationPermissionStatusKey =
       'location_permission_status';
+  static const String _notificationPermissionRequestedKey =
+      'notification_permission_requested';
 
   final FlutterSecureStorage _storage;
 
@@ -35,5 +37,17 @@ class AppPreferencesService {
 
   Future<String?> getLocationPermissionStatus() async {
     return _storage.read(key: _locationPermissionStatusKey);
+  }
+
+  Future<bool> wasNotificationPermissionRequested() async {
+    return await _storage.read(key: _notificationPermissionRequestedKey) ==
+        'true';
+  }
+
+  Future<void> markNotificationPermissionRequested() async {
+    await _storage.write(
+      key: _notificationPermissionRequestedKey,
+      value: 'true',
+    );
   }
 }
