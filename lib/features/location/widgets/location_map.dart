@@ -5,6 +5,7 @@ import 'package:flutter_map/flutter_map.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:latlong2/latlong.dart';
 
+import '../../../core/theme/app_colors.dart';
 import '../constants/default_location.dart';
 import '../constants/location_tracking_config.dart';
 import '../models/member_location_model.dart';
@@ -13,17 +14,31 @@ import '../utils/marker_colors.dart';
 
 class LocationMap extends ConsumerStatefulWidget {
   final int? groupId;
+  final LatLng? previewPoint;
+  final ValueChanged<LatLng>? onTap;
+  final MapController? controller;
+  final bool showMembers;
 
-  const LocationMap({super.key, required this.groupId});
+  const LocationMap({
+    super.key,
+    required this.groupId,
+    this.previewPoint,
+    this.onTap,
+    this.controller,
+    this.showMembers = true,
+  });
 
   @override
   ConsumerState<LocationMap> createState() => _LocationMapState();
 }
 
 class _LocationMapState extends ConsumerState<LocationMap> {
-  final MapController _mapController = MapController();
+  late final MapController _mapController =
+      widget.controller ?? MapController();
 
+  bool _mapReady = false;
   bool _hasCenteredOnUser = false;
+  LatLng? _ownLocationToCenter;
 
   Timer? _freshnessTimer;
 
@@ -50,59 +65,113 @@ class _LocationMapState extends ConsumerState<LocationMap> {
   }
 
   @override
+  void didUpdateWidget(covariant LocationMap oldWidget) {
+    super.didUpdateWidget(oldWidget);
+
+    final oldPreviewPoint = oldWidget.previewPoint;
+    final newPreviewPoint = widget.previewPoint;
+
+    if (!_samePoint(oldPreviewPoint, newPreviewPoint) &&
+        newPreviewPoint != null) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted && _mapReady) {
+          _mapController.move(newPreviewPoint, defaultZoom);
+        }
+      });
+    }
+  }
+
+  void _handleMapReady() {
+    _mapReady = true;
+
+    final previewPoint = widget.previewPoint;
+    if (previewPoint != null) {
+      _mapController.move(previewPoint, defaultZoom);
+      return;
+    }
+
+    final ownLocation = _ownLocationToCenter;
+    if (!_hasCenteredOnUser && ownLocation != null) {
+      _mapController.move(ownLocation, defaultZoom);
+      _hasCenteredOnUser = true;
+    }
+  }
+
+  bool _samePoint(LatLng? first, LatLng? second) {
+    return first?.latitude == second?.latitude &&
+        first?.longitude == second?.longitude;
+  }
+
+  @override
   Widget build(BuildContext context) {
     final state = ref.watch(locationProvider);
 
     final now = DateTime.now();
 
-    final ownSharing = widget.groupId == null
-        ? false
-        : state.sharingForGroup(widget.groupId!)?.effectiveLocationSharing ??
-              false;
+    final ownSharing =
+        widget.showMembers &&
+        widget.groupId != null &&
+        state.sharingForGroup(widget.groupId!)?.effectiveLocationSharing ==
+            true;
 
     final ownLocation = ownSharing ? state.currentLocation : null;
 
     final allMembers = state.visibleMembers.values.toList();
 
-    final members =
-        allMembers.where((member) => _shouldShowMember(member, now)).toList()
-          ..sort((a, b) => a.memberId.compareTo(b.memberId));
+    final members = widget.showMembers
+        ? allMembers.where((member) => _shouldShowMember(member, now)).toList()
+        : <MemberLocationModel>[];
+
+    if (widget.showMembers) {
+      members.sort((a, b) => a.memberId.compareTo(b.memberId));
+    }
 
     // Usamos todos los IDs conocidos para
     // evitar cambiar colores solamente
     // porque uno quedó temporalmente oculto.
-    final markerIds = <int>[
-      if (ownLocation != null) -1,
-
-      ...allMembers.map((member) => member.memberId),
-    ];
+    final markerIds = widget.showMembers
+        ? <int>[
+            if (ownLocation != null) -1,
+            ...allMembers.map((member) => member.memberId),
+          ]
+        : <int>[];
 
     final colors = buildDistinctMarkerColors(markerIds);
 
     if (!_hasCenteredOnUser && ownLocation != null) {
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (!mounted || _hasCenteredOnUser) {
-          return;
-        }
+      _ownLocationToCenter = LatLng(
+        ownLocation.latitude,
+        ownLocation.longitude,
+      );
 
-        _mapController.move(
-          LatLng(ownLocation.latitude, ownLocation.longitude),
-          defaultZoom,
-        );
+      if (_mapReady) {
+        final point = _ownLocationToCenter!;
 
-        _hasCenteredOnUser = true;
-      });
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (!mounted || _hasCenteredOnUser) {
+            return;
+          }
+
+          _mapController.move(point, defaultZoom);
+          _hasCenteredOnUser = true;
+        });
+      }
     }
+
+    final initialCenter =
+        widget.previewPoint ??
+        (ownLocation == null
+            ? defaultLocation
+            : LatLng(ownLocation.latitude, ownLocation.longitude));
 
     return FlutterMap(
       mapController: _mapController,
 
       options: MapOptions(
-        initialCenter: ownLocation == null
-            ? defaultLocation
-            : LatLng(ownLocation.latitude, ownLocation.longitude),
-
+        initialCenter: initialCenter,
         initialZoom: defaultZoom,
+        onMapReady: _handleMapReady,
+        onTap: widget.onTap == null ? null : (_, point) => widget.onTap!(point),
       ),
 
       children: [
@@ -137,6 +206,8 @@ class _LocationMapState extends ConsumerState<LocationMap> {
 
                 now: now,
               ),
+            if (widget.previewPoint != null)
+              _eventLocationMarker(widget.previewPoint!),
           ],
         ),
       ],
@@ -255,5 +326,23 @@ class _LocationMapState extends ConsumerState<LocationMap> {
     }
 
     return 'Actualizado hace ${age.inDays} d';
+  }
+
+  Marker _eventLocationMarker(LatLng point) {
+    return Marker(
+      point: point,
+      width: 150,
+      height: 66,
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          const Icon(
+            Icons.location_pin,
+            size: 42,
+            color: AppColors.error,
+          ),
+        ],
+      ),
+    );
   }
 }

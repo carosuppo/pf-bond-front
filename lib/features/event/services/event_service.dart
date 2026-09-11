@@ -6,9 +6,12 @@ class EventService {
 
   EventService(this._apiClient);
 
-  Future<List<EventResponseModel>> getEvents({required int groupId}) async {
+  Future<List<EventResponseModel>> getEvents({
+    required int groupId,
+    required int year,
+  }) async {
     final response = await _apiClient.authenticatedGetList(
-      '/group/$groupId/event',
+      '/group/$groupId/event?year=$year',
     );
     return response.map(EventResponseModel.fromJson).toList(growable: false);
   }
@@ -20,6 +23,20 @@ class EventService {
     final response = await _apiClient.authenticatedGet(
       '/group/$groupId/event/$eventId',
     );
+    return EventResponseModel.fromJson(response);
+  }
+
+  Future<EventResponseModel> setEventLocation({
+    required int groupId,
+    required int eventId,
+    required double latitude,
+    required double longitude,
+  }) async {
+    final response = await _apiClient.authenticatedPatch(
+      '/group/$groupId/event/$eventId/location',
+      {'latitude': latitude, 'longitude': longitude},
+    );
+
     return EventResponseModel.fromJson(response);
   }
 }

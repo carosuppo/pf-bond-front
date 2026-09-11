@@ -165,8 +165,11 @@ class _EventsContentState extends State<EventsContent> {
                       ),
                     _EventCard(
                       event: todayEvents[i],
-                      onTap: () =>
-                          showEventDetailsModal(context, todayEvents[i]),
+                      onTap: () {
+                        final groupId = groupProvider.activeGroup!.id;
+
+                        showEventDetailsModal(context, todayEvents[i], groupId);
+                      },
                     ),
                   ],
                 ],

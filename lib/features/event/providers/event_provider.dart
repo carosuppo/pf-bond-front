@@ -30,7 +30,8 @@ class EventProvider extends ChangeNotifier {
     notifyListeners();
 
     try {
-      events = await _eventService.getEvents(groupId: groupId);
+      final now = AppTimezone.now();
+      events = await _eventService.getEvents(groupId: groupId, year: now.year);
     } catch (error) {
       errorMessage = error.toString().replaceFirst('Exception: ', '');
     } finally {
@@ -47,5 +48,35 @@ class EventProvider extends ChangeNotifier {
     final endDay = DateTime(end.year, end.month, end.day);
 
     return !today.isBefore(startDay) && !today.isAfter(endDay);
+  }
+
+  Future<EventResponseModel?> setEventLocation({
+    required int groupId,
+    required int eventId,
+    required double latitude,
+    required double longitude,
+  }) async {
+    try {
+      final updatedEvent = await _eventService.setEventLocation(
+        groupId: groupId,
+        eventId: eventId,
+        latitude: latitude,
+        longitude: longitude,
+      );
+
+      final index = events.indexWhere((event) => event.id == eventId);
+
+      if (index != -1) {
+        events[index] = updatedEvent;
+      }
+
+      notifyListeners();
+
+      return updatedEvent;
+    } catch (error) {
+      errorMessage = error.toString().replaceFirst('Exception: ', '');
+      notifyListeners();
+      return null;
+    }
   }
 }

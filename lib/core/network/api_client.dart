@@ -52,10 +52,12 @@ class ApiClient {
   ) async {
     final uri = Uri.parse('${ApiConfig.baseUrl}$path');
 
-    final response = await http.patch(
-      uri,
-      headers: await _buildHeaders(authenticated: true),
-      body: jsonEncode(body),
+    final response = await _send(
+      () async => http.patch(
+        uri,
+        headers: await _buildHeaders(authenticated: true),
+        body: jsonEncode(body),
+      ),
     );
 
     return _handleResponse(response);
