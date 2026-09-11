@@ -9,6 +9,7 @@ import '../../auth/providers/auth_provider.dart';
 import '../formatters/invitation_code_formatter.dart';
 import '../models/get_group_model.response.dart';
 import '../models/get_member_model.response.dart';
+import '../providers/group_provider.dart';
 
 class GroupInfoBottomSheet extends StatelessWidget {
   final GetGroupResponseModel group;
@@ -23,11 +24,18 @@ class GroupInfoBottomSheet extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final authProvider = context.watch<AuthProvider>();
-    final isCurrentUserAdmin = group.members.any(
+    final groupProvider = context.watch<GroupProvider>();
+    final displayedGroup = groupProvider.groupDetails?.id == group.id
+        ? groupProvider.groupDetails!
+        : group;
+    final isCurrentUserAdmin = displayedGroup.members.any(
       (member) =>
           member.idUser == authProvider.authResponse?.user.id &&
           member.role == RoleEnum.admin,
     );
+    final adminCount = displayedGroup.members
+        .where((member) => member.role == RoleEnum.admin)
+        .length;
 
     return SafeArea(
       child: SingleChildScrollView(
@@ -39,7 +47,7 @@ class GroupInfoBottomSheet extends StatelessWidget {
             const SizedBox(height: 24),
             Center(
               child: Text(
-                group.name,
+                displayedGroup.name,
                 textAlign: TextAlign.center,
                 style: const TextStyle(
                   color: AppColors.text,
@@ -48,11 +56,11 @@ class GroupInfoBottomSheet extends StatelessWidget {
                 ),
               ),
             ),
-            if (group.description != null &&
-                group.description!.trim().isNotEmpty) ...[
+            if (displayedGroup.description != null &&
+                displayedGroup.description!.trim().isNotEmpty) ...[
               const SizedBox(height: 8),
               Text(
-                group.description!,
+                displayedGroup.description!,
                 style: const TextStyle(
                   color: AppColors.mutedText,
                   fontSize: 15,
@@ -79,7 +87,7 @@ class GroupInfoBottomSheet extends StatelessWidget {
                     children: [
                       Expanded(
                         child: Text(
-                          formatInvitationCode(group.invitationCode),
+                          formatInvitationCode(displayedGroup.invitationCode),
                           style: const TextStyle(
                             color: AppColors.text,
                             fontSize: 20,
@@ -92,7 +100,7 @@ class GroupInfoBottomSheet extends StatelessWidget {
                       IconButton(
                         onPressed: () async {
                           await Clipboard.setData(
-                            ClipboardData(text: group.invitationCode),
+                            ClipboardData(text: displayedGroup.invitationCode),
                           );
 
                           if (!context.mounted) {
@@ -147,7 +155,7 @@ class GroupInfoBottomSheet extends StatelessWidget {
                         ),
                         const SizedBox(height: 3),
                         Text(
-                          group.shareLocationMandatorily
+                          displayedGroup.shareLocationMandatorily
                               ? 'Obligatoria'
                               : 'No obligatoria',
                           style: const TextStyle(
@@ -172,7 +180,10 @@ class GroupInfoBottomSheet extends StatelessWidget {
                     Navigator.pushNamed(
                       context,
                       AppRoutes.updateGroup,
-                      arguments: {'group': group, 'isCurrentUserAdmin': true},
+                      arguments: {
+                        'group': displayedGroup,
+                        'isCurrentUserAdmin': true,
+                      },
                     );
                   },
                 ),
@@ -207,7 +218,7 @@ class GroupInfoBottomSheet extends StatelessWidget {
                     borderRadius: BorderRadius.circular(10),
                   ),
                   child: Text(
-                    '${group.members.length}',
+                    '${displayedGroup.members.length}',
                     style: const TextStyle(
                       color: AppColors.mutedText,
                       fontSize: 12,
@@ -223,9 +234,17 @@ class GroupInfoBottomSheet extends StatelessWidget {
               padding: EdgeInsets.zero,
               child: Column(
                 children: [
-                  for (int i = 0; i < group.members.length; i++) ...[
-                    _MemberListItem(member: group.members[i]),
-                    if (i < group.members.length - 1)
+                  for (int i = 0; i < displayedGroup.members.length; i++) ...[
+                    _MemberListItem(
+                      member: displayedGroup.members[i],
+                      isCurrentUser:
+                          displayedGroup.members[i].idUser ==
+                          authProvider.authResponse?.user.id,
+                      isCurrentUserAdmin: isCurrentUserAdmin,
+                      isOnlyAdmin: adminCount == 1,
+                      isLoading: groupProvider.isLoading,
+                    ),
+                    if (i < displayedGroup.members.length - 1)
                       const Divider(height: 1, color: AppColors.divider),
                   ],
                 ],
@@ -264,8 +283,18 @@ class _GroupSectionCard extends StatelessWidget {
 
 class _MemberListItem extends StatelessWidget {
   final GetMemberResponseModel member;
+  final bool isCurrentUser;
+  final bool isCurrentUserAdmin;
+  final bool isOnlyAdmin;
+  final bool isLoading;
 
-  const _MemberListItem({required this.member});
+  const _MemberListItem({
+    required this.member,
+    required this.isCurrentUser,
+    required this.isCurrentUserAdmin,
+    required this.isOnlyAdmin,
+    required this.isLoading,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -302,30 +331,155 @@ class _MemberListItem extends StatelessWidget {
               ),
             ),
           ),
-          _RoleBadge(
-            label: _roleLabel(member.role),
-            isAdmin: member.role == RoleEnum.admin,
+          _MemberRoleSelector(
+            member: member,
+            isCurrentUser: isCurrentUser,
+            isCurrentUserAdmin: isCurrentUserAdmin,
+            isOnlyAdmin: isOnlyAdmin,
+            isLoading: isLoading,
           ),
         ],
       ),
     );
   }
+}
 
-  String _roleLabel(RoleEnum role) {
-    switch (role) {
-      case RoleEnum.admin:
-        return 'Administrador';
-      case RoleEnum.member:
-        return 'Miembro';
+class _MemberRoleSelector extends StatelessWidget {
+  final GetMemberResponseModel member;
+  final bool isCurrentUser;
+  final bool isCurrentUserAdmin;
+  final bool isOnlyAdmin;
+  final bool isLoading;
+
+  const _MemberRoleSelector({
+    required this.member,
+    required this.isCurrentUser,
+    required this.isCurrentUserAdmin,
+    required this.isOnlyAdmin,
+    required this.isLoading,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final badge = _RoleBadge(
+      label: _roleLabel(member.role),
+      isAdmin: member.role == RoleEnum.admin,
+      showDropdownIcon: isCurrentUserAdmin && !isLoading,
+    );
+
+    if (!isCurrentUserAdmin || isLoading) {
+      return badge;
     }
+
+    final canRevokeOnlyAdmin =
+        isCurrentUser && isOnlyAdmin && member.role == RoleEnum.admin;
+    final roles = <RoleEnum>[
+      member.role,
+      ...RoleEnum.values.where((role) => role != member.role),
+    ];
+
+    return PopupMenuButton<RoleEnum>(
+      padding: EdgeInsets.zero,
+      constraints: const BoxConstraints(minWidth: 120, maxWidth: 150),
+      tooltip: 'Modificar rol de ${member.name}',
+      position: PopupMenuPosition.under,
+      onSelected: (role) {
+        if (role != member.role) {
+          _confirmRoleChange(context, role);
+        }
+      },
+      itemBuilder: (context) {
+        return roles.map((role) {
+          final isCurrentRole = role == member.role;
+          final isDisabled =
+              isCurrentRole || (canRevokeOnlyAdmin && role == RoleEnum.member);
+
+          return PopupMenuItem<RoleEnum>(
+            value: role,
+            enabled: !isDisabled,
+            child: Text(
+              _roleLabel(role),
+              style: TextStyle(
+                color: isCurrentRole
+                    ? AppColors.mutedText.withValues(alpha: 0.55)
+                    : AppColors.mutedText,
+              ),
+            ),
+          );
+        }).toList();
+      },
+      child: badge,
+    );
+  }
+
+  Future<void> _confirmRoleChange(BuildContext context, RoleEnum role) async {
+    final isAssigningAdmin = role == RoleEnum.admin;
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Confirmar cambio de rol'),
+        content: Text(
+          isAssigningAdmin
+              ? '¿Querés asignar el rol de Administrador a ${member.name}?'
+              : '¿Querés revocar el rol de Administrador de ${member.name}?',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(false),
+            child: const Text('Cancelar'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(dialogContext).pop(true),
+            child: const Text('Confirmar'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed != true || !context.mounted) {
+      return;
+    }
+
+    final groupProvider = context.read<GroupProvider>();
+    final success = await groupProvider.updateMemberRole(
+      memberId: member.id,
+      role: role,
+      isCurrentUserAdmin: isCurrentUserAdmin,
+    );
+
+    if (!context.mounted) {
+      return;
+    }
+
+    final message = success
+        ? 'Rol de ${member.name} actualizado correctamente.'
+        : groupProvider.errorMessage ?? 'No se pudo modificar el rol.';
+
+    ScaffoldMessenger.of(context)
+      ..hideCurrentSnackBar()
+      ..showSnackBar(SnackBar(content: Text(message)));
+  }
+}
+
+String _roleLabel(RoleEnum role) {
+  switch (role) {
+    case RoleEnum.admin:
+      return 'Administrador';
+    case RoleEnum.member:
+      return 'Miembro';
   }
 }
 
 class _RoleBadge extends StatelessWidget {
   final String label;
   final bool isAdmin;
+  final bool showDropdownIcon;
 
-  const _RoleBadge({required this.label, required this.isAdmin});
+  const _RoleBadge({
+    required this.label,
+    required this.isAdmin,
+    this.showDropdownIcon = false,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -334,14 +488,28 @@ class _RoleBadge extends StatelessWidget {
       decoration: BoxDecoration(
         color: AppColors.fieldColor,
         borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: AppColors.border),
       ),
-      child: Text(
-        label,
-        style: TextStyle(
-          color: isAdmin ? AppColors.primary : AppColors.mutedText,
-          fontSize: 11,
-          fontWeight: FontWeight.w600,
-        ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text(
+            label,
+            style: TextStyle(
+              color: isAdmin ? AppColors.primary : AppColors.mutedText,
+              fontSize: 11,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+          if (showDropdownIcon) ...[
+            const SizedBox(width: 3),
+            Icon(
+              Icons.keyboard_arrow_down_rounded,
+              color: isAdmin ? AppColors.primary : AppColors.mutedText,
+              size: 14,
+            ),
+          ],
+        ],
       ),
     );
   }
