@@ -22,7 +22,6 @@ class EventsScreen extends StatelessWidget {
         child: Stack(
           children: [
             const Positioned.fill(top: 64, child: EventsContent()),
-
             const Positioned(
               top: 12,
               left: 0,

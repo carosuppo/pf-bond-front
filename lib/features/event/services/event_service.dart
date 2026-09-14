@@ -1,24 +1,33 @@
 import '../../../core/network/api_client.dart';
 import '../models/create_event_model.request.dart';
-import '../models/create_event_model.response.dart';
+import '../models/event_model.response.dart';
 
 class EventService {
   final ApiClient _apiClient;
 
   EventService(this._apiClient);
 
-  Future<List<CreateEventResponseModel>> getEvents({
+  Future<List<EventResponseModel>> getEvents({
     required int groupId,
+    required int year,
   }) async {
     final response = await _apiClient.authenticatedGetList(
-      '/group/$groupId/event',
+      '/group/$groupId/event?year=$year',
     );
-    return response
-        .map(CreateEventResponseModel.fromJson)
-        .toList(growable: false);
+    return response.map(EventResponseModel.fromJson).toList(growable: false);
   }
 
-  Future<CreateEventResponseModel> createEvent({
+  Future<EventResponseModel> getEventById({
+    required int groupId,
+    required int eventId,
+  }) async {
+    final response = await _apiClient.authenticatedGet(
+      '/group/$groupId/event/$eventId',
+    );
+    return EventResponseModel.fromJson(response);
+  }
+
+  Future<EventResponseModel> createEvent({
     required int groupId,
     required CreateEventRequestModel request,
   }) async {
@@ -26,6 +35,20 @@ class EventService {
       '/group/$groupId/event',
       request.toJson(),
     );
-    return CreateEventResponseModel.fromJson(response);
+    return EventResponseModel.fromJson(response);
+  }
+
+  Future<EventResponseModel> setEventLocation({
+    required int groupId,
+    required int eventId,
+    required double latitude,
+    required double longitude,
+  }) async {
+    final response = await _apiClient.authenticatedPatch(
+      '/group/$groupId/event/$eventId/location',
+      {'latitude': latitude, 'longitude': longitude},
+    );
+
+    return EventResponseModel.fromJson(response);
   }
 }
