@@ -10,6 +10,7 @@ import '../../group/providers/group_provider.dart';
 import '../../location/providers/location_provider.dart';
 import '../providers/auth_provider.dart';
 import '../widgets/auth_text_field.dart';
+import '../widgets/password_text_field.dart';
 
 class LoginScreen extends ConsumerStatefulWidget {
   const LoginScreen({super.key});
@@ -136,10 +137,9 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
 
                       const SizedBox(height: 14),
 
-                      AuthTextField(
+                      PasswordTextField(
                         controller: _passwordController,
                         label: 'Contraseña',
-                        obscureText: true,
                         validator: _validatePassword,
                       ),
 
