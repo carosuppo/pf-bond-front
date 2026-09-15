@@ -40,8 +40,36 @@ class _ProfileScreenState extends State<ProfileScreen> {
     final profileProvider = context.watch<ProfileProvider>();
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Mi perfil')),
-      body: SafeArea(child: _buildBody(profileProvider)),
+      backgroundColor: AppColors.background,
+      body: SafeArea(
+        child: Column(
+          children: [
+            Padding(
+              padding: const EdgeInsets.fromLTRB(8, 8, 16, 8),
+              child: Row(
+                children: [
+                  IconButton(
+                    onPressed: () => Navigator.of(context).maybePop(),
+                    tooltip: 'Volver',
+                    icon: const Icon(Icons.arrow_back_rounded),
+                  ),
+                  const Expanded(
+                    child: Text(
+                      'Mi perfil',
+                      style: TextStyle(
+                        color: AppColors.text,
+                        fontSize: 22,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            Expanded(child: _buildBody(profileProvider)),
+          ],
+        ),
+      ),
     );
   }
 

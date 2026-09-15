@@ -70,7 +70,7 @@ class AppBottomNavBar extends StatelessWidget {
     return Container(
       width: double.infinity,
       decoration: BoxDecoration(
-        color: AppColors.bottomBarBackground,
+        color: AppColors.background,
         border: Border(
           top: BorderSide(
             color: Colors.white.withValues(alpha: 0.25),

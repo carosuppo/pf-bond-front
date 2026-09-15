@@ -33,9 +33,12 @@ class EventsScreen extends StatelessWidget {
       ),
       floatingActionButton: FloatingActionButton(
         backgroundColor: AppColors.primary,
-        shape: const CircleBorder(),
+        foregroundColor: AppColors.onPrimary,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        elevation: 6,
+        highlightElevation: 12,
         onPressed: () => _goToCreateEvent(context),
-        child: const Icon(Icons.add_rounded, color: Colors.white),
+        child: const Icon(Icons.add_rounded),
       ),
       bottomNavigationBar: SafeArea(
         top: false,

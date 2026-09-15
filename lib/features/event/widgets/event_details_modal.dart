@@ -86,159 +86,178 @@ class EventDetailsModal extends StatelessWidget {
     return ScaffoldMessenger(
       child: Scaffold(
         backgroundColor: Colors.transparent,
-        body: Dialog(
-          backgroundColor: AppColors.cardColor,
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(24),
-          ),
-          insetPadding: const EdgeInsets.symmetric(horizontal: 24),
-          child: SingleChildScrollView(
-            padding: const EdgeInsets.fromLTRB(24, 16, 24, 24),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  crossAxisAlignment: CrossAxisAlignment.center,
-                  children: [
-                    Expanded(
-                      child: Text(
-                        currentEvent.name,
-                        style: const TextStyle(
-                          color: AppColors.text,
-                          fontSize: 22,
-                          fontWeight: FontWeight.w700,
-                        ),
-                      ),
-                    ),
-                    IconButton(
-                      onPressed: () => Navigator.of(context).pop(),
-                      tooltip: 'Cerrar',
-                      icon: const Icon(
-                        Icons.close_rounded,
-                        color: AppColors.mutedText,
-                        size: 26,
-                      ),
-                    ),
-                  ],
+        body: Stack(
+          children: [
+            Positioned.fill(
+              child: GestureDetector(
+                behavior: HitTestBehavior.opaque,
+                onTap: () => Navigator.of(context).pop(),
+                child: const SizedBox.expand(),
+              ),
+            ),
+            Center(
+              child: Dialog(
+                backgroundColor: AppColors.cardColor,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(24),
                 ),
-
-                const SizedBox(height: 16),
-
-                _InfoRow(
-                  icon: Icons.event_rounded,
-                  text: EventDateFormatter.dayMonthYear(currentEvent.startAt),
-                ),
-
-                const SizedBox(height: 10),
-
-                _InfoRow(
-                  icon: Icons.schedule_rounded,
-                  text:
-                      'Inicio: ${EventDateFormatter.time(currentEvent.startAt)}',
-                ),
-
-                if (hasEnd) ...[
-                  const SizedBox(height: 10),
-                  _InfoRow(
-                    icon: Icons.schedule_rounded,
-                    text: sameDay
-                        ? 'Finaliza: ${EventDateFormatter.time(currentEvent.endAt!)}'
-                        : 'Finaliza: ${EventDateFormatter.dayMonth(currentEvent.endAt!)} '
-                              '${EventDateFormatter.time(currentEvent.endAt!)}',
-                  ),
-                ],
-
-                if (currentEvent.description != null &&
-                    currentEvent.description!.isNotEmpty) ...[
-                  const SizedBox(height: 20),
-                  const _SectionTitle('Descripción'),
-                  const SizedBox(height: 8),
-                  Text(
-                    currentEvent.description!,
-                    style: const TextStyle(
-                      color: AppColors.mutedText,
-                      fontSize: 14,
-                      height: 1.4,
-                    ),
-                  ),
-                ],
-
-                if (memberNames.isNotEmpty) ...[
-                  const SizedBox(height: 20),
-                  const _SectionTitle('Miembros'),
-                  const SizedBox(height: 10),
-                  Wrap(
-                    spacing: 8,
-                    runSpacing: 8,
+                insetPadding: const EdgeInsets.symmetric(horizontal: 24),
+                child: SingleChildScrollView(
+                  padding: const EdgeInsets.fromLTRB(24, 16, 24, 24),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      for (final name in memberNames) _MemberChip(name: name),
-                    ],
-                  ),
-                ],
-
-                const SizedBox(height: 20),
-
-                const _SectionTitle('Ubicación'),
-
-                const SizedBox(height: 10),
-
-                if (currentEvent.location == null)
-                  const Text(
-                    'Este evento no tiene una ubicaci\u00f3n asociada.',
-                    style: TextStyle(color: AppColors.mutedText, fontSize: 14),
-                  )
-                else
-                  _EventLocationDetails(
-                    point: LatLng(
-                      currentEvent.location!.latitude,
-                      currentEvent.location!.longitude,
-                    ),
-                  ),
-
-                const SizedBox(height: 12),
-
-                SizedBox(
-                  width: double.infinity,
-                  child: OutlinedButton.icon(
-                    onPressed: () async {
-                      final navigator = Navigator.of(context);
-                      final messenger = ScaffoldMessenger.of(context);
-                      final updatedEvent = await navigator
-                          .push<EventResponseModel>(
-                            MaterialPageRoute<EventResponseModel>(
-                              builder: (_) => EventLocationEditor(
-                                event: currentEvent,
-                                groupId: groupId,
+                      Row(
+                        crossAxisAlignment: CrossAxisAlignment.center,
+                        children: [
+                          Expanded(
+                            child: Text(
+                              currentEvent.name,
+                              style: const TextStyle(
+                                color: AppColors.text,
+                                fontSize: 22,
+                                fontWeight: FontWeight.w700,
                               ),
                             ),
-                          );
+                          ),
+                          IconButton(
+                            onPressed: () => Navigator.of(context).pop(),
+                            tooltip: 'Cerrar',
+                            icon: const Icon(
+                              Icons.close_rounded,
+                              color: AppColors.mutedText,
+                              size: 26,
+                            ),
+                          ),
+                        ],
+                      ),
 
-                      if (!messenger.mounted || updatedEvent == null) {
-                        return;
-                      }
+                      const SizedBox(height: 16),
 
-                      messenger.showSnackBar(
-                        const SnackBar(
-                          content: Text('Ubicación del evento guardada.'),
+                      _InfoRow(
+                        icon: Icons.event_rounded,
+                        text: EventDateFormatter.dayMonthYear(
+                          currentEvent.startAt,
                         ),
-                      );
-                    },
-                    icon: Icon(
-                      currentEvent.location == null
-                          ? Icons.add_location_alt_rounded
-                          : Icons.edit_location_alt_rounded,
-                    ),
-                    label: Text(
-                      currentEvent.location == null
-                          ? 'Agregar ubicación'
-                          : 'Modificar ubicación',
-                    ),
+                      ),
+
+                      const SizedBox(height: 10),
+
+                      _InfoRow(
+                        icon: Icons.schedule_rounded,
+                        text:
+                            'Inicio: ${EventDateFormatter.time(currentEvent.startAt)}',
+                      ),
+
+                      if (hasEnd) ...[
+                        const SizedBox(height: 10),
+                        _InfoRow(
+                          icon: Icons.schedule_rounded,
+                          text: sameDay
+                              ? 'Finaliza: ${EventDateFormatter.time(currentEvent.endAt!)}'
+                              : 'Finaliza: ${EventDateFormatter.dayMonth(currentEvent.endAt!)} '
+                                    '${EventDateFormatter.time(currentEvent.endAt!)}',
+                        ),
+                      ],
+
+                      if (currentEvent.description != null &&
+                          currentEvent.description!.isNotEmpty) ...[
+                        const SizedBox(height: 20),
+                        const _SectionTitle('Descripción'),
+                        const SizedBox(height: 8),
+                        Text(
+                          currentEvent.description!,
+                          style: const TextStyle(
+                            color: AppColors.mutedText,
+                            fontSize: 14,
+                            height: 1.4,
+                          ),
+                        ),
+                      ],
+
+                      if (memberNames.isNotEmpty) ...[
+                        const SizedBox(height: 20),
+                        const _SectionTitle('Miembros'),
+                        const SizedBox(height: 10),
+                        Wrap(
+                          spacing: 8,
+                          runSpacing: 8,
+                          children: [
+                            for (final name in memberNames)
+                              _MemberChip(name: name),
+                          ],
+                        ),
+                      ],
+
+                      const SizedBox(height: 20),
+
+                      const _SectionTitle('Ubicación'),
+
+                      const SizedBox(height: 10),
+
+                      if (currentEvent.location == null)
+                        const Text(
+                          'Este evento no tiene una ubicaci\u00f3n asociada.',
+                          style: TextStyle(
+                            color: AppColors.mutedText,
+                            fontSize: 14,
+                          ),
+                        )
+                      else
+                        _EventLocationDetails(
+                          point: LatLng(
+                            currentEvent.location!.latitude,
+                            currentEvent.location!.longitude,
+                          ),
+                        ),
+
+                      const SizedBox(height: 12),
+
+                      SizedBox(
+                        width: double.infinity,
+                        child: OutlinedButton.icon(
+                          onPressed: () async {
+                            final navigator = Navigator.of(context);
+                            final messenger = ScaffoldMessenger.of(context);
+                            final updatedEvent = await navigator
+                                .push<EventResponseModel>(
+                                  MaterialPageRoute<EventResponseModel>(
+                                    builder: (_) => EventLocationEditor(
+                                      event: currentEvent,
+                                      groupId: groupId,
+                                    ),
+                                  ),
+                                );
+
+                            if (!messenger.mounted || updatedEvent == null) {
+                              return;
+                            }
+
+                            messenger.showSnackBar(
+                              const SnackBar(
+                                content: Text('Ubicación del evento guardada.'),
+                              ),
+                            );
+                          },
+                          icon: Icon(
+                            currentEvent.location == null
+                                ? Icons.add_location_alt_rounded
+                                : Icons.edit_location_alt_rounded,
+                          ),
+                          label: Text(
+                            currentEvent.location == null
+                                ? 'Agregar ubicación'
+                                : 'Modificar ubicación',
+                          ),
+                        ),
+                      ),
+                    ],
                   ),
                 ),
-              ],
+              ),
             ),
-          ),
+          ],
         ),
       ),
     );

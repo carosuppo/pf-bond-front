@@ -93,6 +93,34 @@ class _EventsContentState extends State<EventsContent> {
     }
   }
 
+  Future<void> _refreshEvents() async {
+    final groupId = _groupProvider.activeGroup?.id;
+
+    if (groupId != null && !_eventProvider.isEventsLoading) {
+      await _eventProvider.loadEvents(groupId: groupId);
+    }
+  }
+
+  Widget _buildRefreshable(Widget child) {
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        return RefreshIndicator(
+          onRefresh: _refreshEvents,
+          color: AppColors.primary,
+          backgroundColor: AppColors.cardColor,
+          notificationPredicate: (notification) => notification.depth <= 1,
+          child: SingleChildScrollView(
+            physics: const AlwaysScrollableScrollPhysics(),
+            child: ConstrainedBox(
+              constraints: BoxConstraints(minHeight: constraints.maxHeight),
+              child: child,
+            ),
+          ),
+        );
+      },
+    );
+  }
+
   @override
   void dispose() {
     _groupProvider.removeListener(_onGroupChanged);
@@ -105,18 +133,20 @@ class _EventsContentState extends State<EventsContent> {
     final eventProvider = context.watch<EventProvider>();
 
     if (groupProvider.activeGroup == null) {
-      return const Center(child: _NoGroupState());
+      return _buildRefreshable(const Center(child: _NoGroupState()));
     }
 
     if (eventProvider.isEventsLoading) {
-      return const Center(child: _LoadingState());
+      return _buildRefreshable(const Center(child: _LoadingState()));
     }
 
     if (eventProvider.errorMessage != null) {
-      return Center(
-        child: _ErrorState(
-          message: eventProvider.errorMessage!,
-          onRetry: _retry,
+      return _buildRefreshable(
+        Center(
+          child: _ErrorState(
+            message: eventProvider.errorMessage!,
+            onRetry: _retry,
+          ),
         ),
       );
     }
@@ -124,7 +154,7 @@ class _EventsContentState extends State<EventsContent> {
     final todayEvents = eventProvider.todayEvents;
 
     if (todayEvents.isEmpty) {
-      return const Center(child: _EmptyState());
+      return _buildRefreshable(const Center(child: _EmptyState()));
     }
 
     final rowHeight = _rowHeight;
@@ -139,15 +169,15 @@ class _EventsContentState extends State<EventsContent> {
               (_maxVisibleEvents - 1) * _dividerHeight
         : null;
 
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        const Padding(
-          padding: EdgeInsets.fromLTRB(24, 16, 24, 0),
-          child: _TodayHeader(),
-        ),
-        Expanded(
-          child: SingleChildScrollView(
+    return _buildRefreshable(
+      Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Padding(
+            padding: EdgeInsets.fromLTRB(24, 16, 24, 0),
+            child: _TodayHeader(),
+          ),
+          Padding(
             padding: const EdgeInsets.fromLTRB(24, 12, 24, 16),
             child: Container(
               decoration: BoxDecoration(
@@ -182,17 +212,17 @@ class _EventsContentState extends State<EventsContent> {
               ),
             ),
           ),
-        ),
-        if (rowHeight == null)
-          Offstage(
-            offstage: true,
-            child: _EventCard(
-              key: _measureKey,
-              event: todayEvents.first,
-              onTap: () {},
+          if (rowHeight == null)
+            Offstage(
+              offstage: true,
+              child: _EventCard(
+                key: _measureKey,
+                event: todayEvents.first,
+                onTap: () {},
+              ),
             ),
-          ),
-      ],
+        ],
+      ),
     );
   }
 }
@@ -248,7 +278,7 @@ class _EventCard extends StatelessWidget {
                 ),
                 child: const Icon(
                   Icons.event_rounded,
-                  color: AppColors.background,
+                  color: AppColors.primary,
                   size: 24,
                 ),
               ),

@@ -417,16 +417,13 @@ class _LocationMapState extends ConsumerState<LocationMap> {
   Marker _eventLocationMarker(LatLng point) {
     return Marker(
       point: point,
+      rotate: true,
       width: 150,
       height: 66,
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          const Icon(
-            Icons.location_pin,
-            size: 42,
-            color: AppColors.error,
-          ),
+          const Icon(Icons.location_pin, size: 42, color: AppColors.error),
         ],
       ),
     );

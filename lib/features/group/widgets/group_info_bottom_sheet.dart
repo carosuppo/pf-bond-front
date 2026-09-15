@@ -214,7 +214,7 @@ class GroupInfoBottomSheet extends StatelessWidget {
                     vertical: 3,
                   ),
                   decoration: BoxDecoration(
-                    color: AppColors.fieldColor,
+                    color: AppColors.cardColor,
                     borderRadius: BorderRadius.circular(10),
                   ),
                   child: Text(
@@ -245,7 +245,7 @@ class GroupInfoBottomSheet extends StatelessWidget {
                       isLoading: groupProvider.isLoading,
                     ),
                     if (i < displayedGroup.members.length - 1)
-                      const Divider(height: 1, color: AppColors.divider),
+                      const Divider(height: 1, color: AppColors.fieldColor),
                   ],
                 ],
               ),
