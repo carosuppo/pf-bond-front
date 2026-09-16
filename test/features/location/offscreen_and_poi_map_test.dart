@@ -30,6 +30,7 @@ Future<void> pumpMap(
   List<PointOfInterest> points = const [],
   LatLng? previewPoint,
   PointOfInterestColor previewColor = PointOfInterestColor.blue,
+  bool showOffscreenPoints = false,
 }) async {
   await tester.pumpWidget(
     ProviderScope(
@@ -48,6 +49,7 @@ Future<void> pumpMap(
               controller: controller,
               onTap: onTap,
               points: points,
+              showOffscreenPoints: showOffscreenPoints,
               previewPoint: previewPoint,
               previewRadius: 100,
               previewColor: previewColor,
@@ -251,6 +253,43 @@ void main() {
       );
       await tester.pump();
       expect(find.byIcon(Icons.navigation), findsOneWidget); // Only the person.
+      await disposeMap(tester, controller);
+    },
+  );
+  testWidgets(
+    'offscreen POI indicator uses a flag and follows the list state',
+    (tester) async {
+      final controller = MapController();
+      final point = PointOfInterest(
+        id: 1,
+        name: 'Colegio',
+        radius: 100,
+        latitude: defaultLocation.latitude,
+        longitude: defaultLocation.longitude + 1,
+        groupId: 20,
+        createdAt: DateTime(2026),
+        color: PointOfInterestColor.red,
+      );
+
+      await pumpMap(
+        tester,
+        controller,
+        points: [point],
+        showOffscreenPoints: true,
+      );
+      controller.move(defaultLocation, 15);
+      await tester.pump();
+
+      final offscreenFlag = find.byWidgetPredicate(
+        (widget) =>
+            widget is Icon &&
+            widget.icon == Icons.flag_rounded &&
+            widget.color == Colors.white,
+      );
+      expect(offscreenFlag, findsOneWidget);
+
+      await pumpMap(tester, controller, points: [point]);
+      expect(offscreenFlag, findsNothing);
       await disposeMap(tester, controller);
     },
   );

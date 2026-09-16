@@ -27,6 +27,7 @@ class LocationMap extends ConsumerStatefulWidget {
   final ValueChanged<LatLng>? onTap;
   final MapController? controller;
   final double indicatorBottomFraction;
+  final bool showOffscreenPoints;
 
   const LocationMap({
     super.key,
@@ -41,6 +42,7 @@ class LocationMap extends ConsumerStatefulWidget {
     this.onTap,
     this.controller,
     this.indicatorBottomFraction = 0,
+    this.showOffscreenPoints = false,
   });
 
   @override
@@ -272,6 +274,13 @@ class _LocationMapState extends ConsumerState<LocationMap> {
                   color: colors[member.memberId] ?? Colors.blue,
                   stale: _isStale(member, now),
                 ),
+              if (widget.showOffscreenPoints)
+                for (final point in widget.points)
+                  _OffscreenLocation(
+                    point: LatLng(point.latitude, point.longitude),
+                    color: point.color.visualColor,
+                    icon: Icons.flag_rounded,
+                  ),
             ],
             bottomFraction: widget.indicatorBottomFraction,
             onLocationTap: (point) =>
@@ -510,6 +519,7 @@ class _OffscreenLocationIndicatorLayer extends StatelessWidget {
                     child: _OffscreenLocationIndicator(
                       color: location.displayColor,
                       angle: indicator.angle,
+                      icon: location.icon,
                     ),
                   ),
                 ),
@@ -569,10 +579,15 @@ class _OffscreenLocationIndicatorLayer extends StatelessWidget {
 }
 
 class _OffscreenLocationIndicator extends StatelessWidget {
-  const _OffscreenLocationIndicator({required this.color, required this.angle});
+  const _OffscreenLocationIndicator({
+    required this.color,
+    required this.angle,
+    required this.icon,
+  });
 
   final Color color;
   final double angle;
+  final IconData icon;
 
   @override
   Widget build(BuildContext context) {
@@ -589,7 +604,7 @@ class _OffscreenLocationIndicator extends StatelessWidget {
       child: Center(
         child: Transform.rotate(
           angle: angle,
-          child: const Icon(Icons.navigation, size: 20, color: Colors.white),
+          child: Icon(icon, size: 20, color: Colors.white),
         ),
       ),
     );
@@ -600,11 +615,13 @@ class _OffscreenLocation {
   const _OffscreenLocation({
     required this.point,
     required this.color,
+    this.icon = Icons.navigation,
     this.stale = false,
   });
 
   final LatLng point;
   final Color color;
+  final IconData icon;
   final bool stale;
 
   Color get displayColor {

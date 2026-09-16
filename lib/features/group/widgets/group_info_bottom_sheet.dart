@@ -14,11 +14,13 @@ import '../providers/group_provider.dart';
 class GroupInfoBottomSheet extends StatelessWidget {
   final GetGroupResponseModel group;
   final ScrollController scrollController;
+  final Widget? bottomContent;
 
   const GroupInfoBottomSheet({
     super.key,
     required this.group,
     required this.scrollController,
+    this.bottomContent,
   });
 
   @override
@@ -250,6 +252,10 @@ class GroupInfoBottomSheet extends StatelessWidget {
                 ],
               ),
             ),
+            if (bottomContent != null) ...[
+              const SizedBox(height: 24),
+              bottomContent!,
+            ],
           ],
         ),
       ),

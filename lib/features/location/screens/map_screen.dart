@@ -47,6 +47,7 @@ class _MapScreenState extends ConsumerState<MapScreen> {
 
   int? _viewingGroupId;
   bool _sheetExpanded = false;
+  bool _pointsExpanded = false;
   int? _selectedMemberId;
   int _memberInfoRequestId = 0;
   bool _memberInfoLoading = false;
@@ -386,19 +387,6 @@ class _MapScreenState extends ConsumerState<MapScreen> {
     WidgetsBinding.instance.addPostFrameCallback((_) => _expandPoiSheet());
   }
 
-  void _startEdit(PointOfInterest point) {
-    setState(() {
-      _editing = true;
-      _editingPoint = point;
-      _draftLocation = LatLng(point.latitude, point.longitude);
-      _draftRadius = point.radius;
-      _draftColor = point.color;
-    });
-
-    _mapController.move(_draftLocation!, 16);
-    WidgetsBinding.instance.addPostFrameCallback((_) => _expandPoiSheet());
-  }
-
   void _closeEditor() {
     if (!mounted) {
       return;
@@ -417,55 +405,6 @@ class _MapScreenState extends ConsumerState<MapScreen> {
     _mapController.move(LatLng(point.latitude, point.longitude), 16);
 
     _collapseSheet();
-  }
-
-  Future<void> _showPointInfo(PointOfInterest point) async {
-    await showModalBottomSheet<void>(
-      context: context,
-      builder: (sheetContext) => SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.all(20),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                point.name,
-                style: Theme.of(sheetContext).textTheme.titleLarge,
-              ),
-              const SizedBox(height: 8),
-              Text(
-                point.description?.isNotEmpty == true
-                    ? point.description!
-                    : 'Sin descripción',
-              ),
-              Text('Radio: ${point.radius.toStringAsFixed(0)} m'),
-              const SizedBox(height: 12),
-              Row(
-                children: [
-                  TextButton.icon(
-                    onPressed: () {
-                      Navigator.pop(sheetContext);
-                      _startEdit(point);
-                    },
-                    icon: const Icon(Icons.edit),
-                    label: const Text('Editar'),
-                  ),
-                  TextButton.icon(
-                    onPressed: () async {
-                      Navigator.pop(sheetContext);
-                      await _confirmDelete(point);
-                    },
-                    icon: const Icon(Icons.delete_outline),
-                    label: const Text('Eliminar punto de interés'),
-                  ),
-                ],
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
   }
 
   Future<void> _confirmDelete(PointOfInterest point) async {
@@ -553,6 +492,7 @@ class _MapScreenState extends ConsumerState<MapScreen> {
                       previewRadius: _editing && _draftLocation != null
                           ? _draftRadius
                           : null,
+                      showOffscreenPoints: _pointsExpanded,
                       indicatorBottomFraction: _editing
                           ? _poiMaxChildSize
                           : groupProvider.groupDetails == null
@@ -623,75 +563,31 @@ class _MapScreenState extends ConsumerState<MapScreen> {
                               ),
                             ),
                             Expanded(
-                              child: Column(
-                                children: [
-                                  if (pointProvider.loading)
-                                    const LinearProgressIndicator()
-                                  else if (pointProvider.points.isNotEmpty)
-                                    SizedBox(
-                                      height: 76,
-                                      child: ListView.builder(
-                                        scrollDirection: Axis.horizontal,
-                                        padding: const EdgeInsets.symmetric(
-                                          horizontal: 12,
-                                        ),
-                                        itemCount: pointProvider.points.length,
-                                        itemBuilder: (context, index) {
-                                          final point =
-                                              pointProvider.points[index];
-
-                                          return Card(
-                                            child: InkWell(
-                                              onTap: () => _selectPoint(point),
-                                              onLongPress: () =>
-                                                  _showPointInfo(point),
-                                              child: Padding(
-                                                padding: const EdgeInsets.all(
-                                                  10,
-                                                ),
-                                                child: Row(
-                                                  children: [
-                                                    Icon(
-                                                      Icons.flag_rounded,
-                                                      color: point
-                                                          .color
-                                                          .visualColor,
-                                                    ),
-                                                    Text(point.name),
-                                                    IconButton(
-                                                      tooltip:
-                                                          'Ver información',
-                                                      onPressed: () =>
-                                                          _showPointInfo(point),
-                                                      icon: const Icon(
-                                                        Icons.info_outline,
-                                                      ),
-                                                    ),
-                                                  ],
-                                                ),
-                                              ),
-                                            ),
-                                          );
-                                        },
-                                      ),
-                                    ),
-                                  Expanded(
-                                    child: _memberInfoLoading
-                                        ? MemberInfoLoading(
-                                            scrollController: scrollController,
-                                          )
-                                        : _memberInfo != null
-                                        ? MemberInfoBottomSheet(
-                                            memberInfo: _memberInfo!,
-                                            scrollController: scrollController,
-                                          )
-                                        : GroupInfoBottomSheet(
-                                            group: groupProvider.groupDetails!,
-                                            scrollController: scrollController,
+                              child: _memberInfoLoading
+                                  ? MemberInfoLoading(
+                                      scrollController: scrollController,
+                                      bottomContent:
+                                          _buildPointOfInterestContent(
+                                            pointProvider,
                                           ),
-                                  ),
-                                ],
-                              ),
+                                    )
+                                  : _memberInfo != null
+                                  ? MemberInfoBottomSheet(
+                                      memberInfo: _memberInfo!,
+                                      scrollController: scrollController,
+                                      bottomContent:
+                                          _buildPointOfInterestContent(
+                                            pointProvider,
+                                          ),
+                                    )
+                                  : GroupInfoBottomSheet(
+                                      group: groupProvider.groupDetails!,
+                                      scrollController: scrollController,
+                                      bottomContent:
+                                          _buildPointOfInterestContent(
+                                            pointProvider,
+                                          ),
+                                    ),
                             ),
                           ],
                         ),
@@ -845,4 +741,170 @@ class _MapScreenState extends ConsumerState<MapScreen> {
       ),
     );
   }
+
+  Widget _buildPointOfInterestContent(PointOfInterestProvider pointProvider) {
+    return ListTileTheme.merge(
+      minLeadingWidth: 22,
+      horizontalTitleGap: 8,
+      child: ExpansionTile(
+        initiallyExpanded: _pointsExpanded,
+        onExpansionChanged: (expanded) {
+          if (_pointsExpanded == expanded) {
+            return;
+          }
+
+          setState(() {
+            _pointsExpanded = expanded;
+          });
+        },
+        tilePadding: EdgeInsets.zero,
+        childrenPadding: EdgeInsets.zero,
+        shape: const Border(),
+        collapsedShape: const Border(),
+        leading: const Icon(
+          Icons.flag_rounded,
+          color: AppColors.primary,
+          size: 22,
+        ),
+        title: Row(
+          children: [
+            const Text(
+              'Puntos de interés',
+              style: TextStyle(
+                color: AppColors.text,
+                fontSize: 19,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+            const SizedBox(width: 8),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+              decoration: BoxDecoration(
+                color: AppColors.cardColor,
+                borderRadius: BorderRadius.circular(10),
+              ),
+              child: Text(
+                '${pointProvider.points.length}',
+                style: const TextStyle(
+                  color: AppColors.mutedText,
+                  fontSize: 12,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ),
+          ],
+        ),
+        children: [
+          if (pointProvider.loading) const LinearProgressIndicator(),
+          if (!pointProvider.loading && pointProvider.points.isNotEmpty)
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                for (
+                  int index = 0;
+                  index < pointProvider.points.length;
+                  index++
+                ) ...[
+                  FractionallySizedBox(
+                    widthFactor: 0.6,
+                    alignment: Alignment.center,
+                    child: _PointOfInterestListItem(
+                      point: pointProvider.points[index],
+                      onTap: _selectPoint,
+                      onDelete: (point) {
+                        unawaited(_confirmDelete(point));
+                      },
+                    ),
+                  ),
+                  if (index < pointProvider.points.length - 1)
+                    const SizedBox(height: 8),
+                ],
+              ],
+            ),
+        ],
+      ),
+    );
+  }
+}
+
+class _PointOfInterestListItem extends StatelessWidget {
+  final PointOfInterest point;
+  final ValueChanged<PointOfInterest> onTap;
+  final ValueChanged<PointOfInterest> onDelete;
+
+  const _PointOfInterestListItem({
+    required this.point,
+    required this.onTap,
+    required this.onDelete,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final description = point.description?.trim();
+
+    return Card(
+      margin: EdgeInsets.zero,
+      child: InkWell(
+        onTap: () => onTap(point),
+        child: Padding(
+          padding: const EdgeInsets.all(12),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Row(
+                children: [
+                  const SizedBox(width: 48),
+                  Expanded(
+                    child: Text(
+                      point.name,
+                      textAlign: TextAlign.center,
+                      style: const TextStyle(
+                        color: AppColors.text,
+                        fontSize: 16,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ),
+                  Transform.translate(
+                    offset: const Offset(6, -6),
+                    child: IconButton(
+                      tooltip: 'Eliminar punto de interés',
+                      color: AppColors.primary,
+                      onPressed: () => onDelete(point),
+                      icon: const Icon(Icons.delete_outline),
+                    ),
+                  ),
+                ],
+              ),
+              Text(
+                description == null || description.isEmpty
+                    ? 'Sin descripción'
+                    : description,
+                textAlign: TextAlign.center,
+                style: const TextStyle(
+                  color: AppColors.mutedText,
+                  fontSize: 14,
+                ),
+              ),
+              const SizedBox(height: 4),
+              Text(
+                'Radio: ${_formatPointRadius(point.radius)} m',
+                textAlign: TextAlign.center,
+                style: const TextStyle(
+                  color: AppColors.mutedText,
+                  fontSize: 14,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+String _formatPointRadius(double radius) {
+  return radius == radius.roundToDouble()
+      ? radius.toInt().toString()
+      : radius.toString();
 }
