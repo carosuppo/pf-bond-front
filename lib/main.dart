@@ -19,10 +19,10 @@ import 'features/group/services/group_service.dart';
 import 'features/location/services/background_location_service.dart';
 import 'features/notification/services/notification_api_service.dart';
 import 'features/notification/services/push_notification_service.dart';
-import 'features/profile/providers/profile_provider.dart';
-import 'features/profile/services/profile_service.dart';
 import 'features/point_of_interest/providers/point_of_interest_provider.dart';
 import 'features/point_of_interest/services/point_of_interest_service.dart';
+import 'features/profile/providers/profile_provider.dart';
+import 'features/profile/services/profile_service.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();

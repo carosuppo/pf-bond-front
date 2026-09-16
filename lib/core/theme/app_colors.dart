@@ -28,7 +28,5 @@ class AppColors {
 
   static const error = Colors.redAccent;
 
-  static const bottomBarBackground = surface;
-
   static const bottomBarIconInactive = Color(0xFFBDBDBD);
 }

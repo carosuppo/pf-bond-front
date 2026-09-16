@@ -15,6 +15,7 @@ class GlobalTextField extends StatelessWidget {
   final List<TextInputFormatter>? inputFormatters;
   final TextStyle? style;
   final TextAlign textAlign;
+  final ValueChanged<String>? onSubmitted;
 
   const GlobalTextField({
     super.key,
@@ -29,6 +30,7 @@ class GlobalTextField extends StatelessWidget {
     this.inputFormatters,
     this.style,
     this.textAlign = TextAlign.start,
+    this.onSubmitted,
   });
 
   @override
@@ -69,6 +71,7 @@ class GlobalTextField extends StatelessWidget {
       obscureText: obscureText,
       keyboardType: keyboardType,
       validator: validator,
+      onFieldSubmitted: onSubmitted,
     );
   }
 }

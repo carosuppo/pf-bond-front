@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:latlong2/latlong.dart';
 
 import '../../../core/theme/app_colors.dart';
+import '../../../core/widgets/discard_changes_dialog.dart';
 import '../../location/models/location_permission_status.dart';
 import '../../location/services/location_service.dart';
 import '../models/geocoding_result.dart';
@@ -57,13 +58,15 @@ class PointOfInterestEditorState extends State<PointOfInterestEditor> {
 
   bool get _dirty {
     final initial = widget.initial;
+    final hasAddressInput = _addressController.text.trim().isNotEmpty;
 
     if (initial == null) {
       return _color != PointOfInterestColor.blue ||
           _nameController.text.isNotEmpty ||
           _descriptionController.text.isNotEmpty ||
           _radiusController.text != '100' ||
-          widget.selectedLocation != null;
+          widget.selectedLocation != null ||
+          hasAddressInput;
     }
 
     return _color != initial.color ||
@@ -71,7 +74,8 @@ class PointOfInterestEditorState extends State<PointOfInterestEditor> {
         _descriptionController.text != (initial.description ?? '') ||
         double.tryParse(_radiusController.text) != initial.radius ||
         widget.selectedLocation?.latitude != initial.latitude ||
-        widget.selectedLocation?.longitude != initial.longitude;
+        widget.selectedLocation?.longitude != initial.longitude ||
+        hasAddressInput;
   }
 
   @override
@@ -109,23 +113,8 @@ class PointOfInterestEditorState extends State<PointOfInterestEditor> {
   }
 
   Future<void> requestClose() async {
-    if (_dirty && widget.initial != null) {
-      final discard = await showDialog<bool>(
-        context: context,
-        builder: (dialogContext) => AlertDialog(
-          title: const Text('¿Descartar cambios?'),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(dialogContext, false),
-              child: const Text('Seguir editando'),
-            ),
-            TextButton(
-              onPressed: () => Navigator.pop(dialogContext, true),
-              child: const Text('Descartar cambios'),
-            ),
-          ],
-        ),
-      );
+    if (_dirty) {
+      final discard = await showDiscardChangesDialog(context);
 
       if (!mounted || discard != true) {
         return;

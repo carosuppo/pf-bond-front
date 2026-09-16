@@ -3,8 +3,8 @@ import 'dart:convert';
 import 'package:http/http.dart' as http;
 
 import '../config/api_config.dart';
-import 'api_exception.dart';
 import '../storage/session_storage_service.dart';
+import 'api_exception.dart';
 
 class ApiClient {
   final SessionStorageService sessionStorage;

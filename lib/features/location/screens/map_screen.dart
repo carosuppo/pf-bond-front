@@ -19,8 +19,8 @@ import '../../point_of_interest/models/point_of_interest_color.dart';
 import '../../point_of_interest/providers/point_of_interest_provider.dart';
 import '../../point_of_interest/services/point_of_interest_realtime_sync.dart';
 import '../../point_of_interest/widgets/point_of_interest_editor.dart';
-import '../providers/location_provider.dart';
 import '../models/location_socket_event.dart';
+import '../providers/location_provider.dart';
 import '../widgets/location_map.dart';
 
 class MapScreen extends ConsumerStatefulWidget {
@@ -593,6 +593,7 @@ class _MapScreenState extends ConsumerState<MapScreen> {
                       _sheetScrollController = scrollController;
 
                       return Material(
+                        color: AppColors.background,
                         elevation: 8,
                         borderRadius: const BorderRadius.vertical(
                           top: Radius.circular(20),
@@ -829,9 +830,16 @@ class _MapScreenState extends ConsumerState<MapScreen> {
         ),
         floatingActionButton: groupProvider.activeGroup != null && !_editing
             ? FloatingActionButton(
+                backgroundColor: AppColors.primary,
+                foregroundColor: AppColors.onPrimary,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(16),
+                ),
+                elevation: 6,
+                highlightElevation: 12,
                 onPressed: _startCreate,
                 tooltip: 'Agregar punto de interés',
-                child: const Icon(Icons.add_location_alt),
+                child: const Icon(Icons.add_location_alt_rounded),
               )
             : null,
       ),

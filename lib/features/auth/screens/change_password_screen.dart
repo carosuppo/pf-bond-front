@@ -159,41 +159,72 @@ class _ChangePasswordScreenState extends State<ChangePasswordScreen> {
         _handlePopAttempt(didPop);
       },
       child: Scaffold(
-        appBar: AppBar(title: const Text('Modificar mi contraseña')),
+        backgroundColor: AppColors.background,
         body: SafeArea(
-          child: SingleChildScrollView(
-            padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 28),
-            child: Form(
-              key: _formKey,
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  PasswordTextField(
-                    controller: _currentPasswordController,
-                    label: 'Contraseña actual',
-                    validator: _validateCurrentPassword,
-                  ),
-                  const SizedBox(height: 14),
-                  PasswordTextField(
-                    controller: _newPasswordController,
-                    label: 'Nueva contraseña',
-                    validator: _validateNewPassword,
-                  ),
-                  const SizedBox(height: 14),
-                  PasswordTextField(
-                    controller: _confirmPasswordController,
-                    label: 'Confirmar nueva contraseña',
-                    validator: _validateConfirmPassword,
-                  ),
-                  const SizedBox(height: 22),
-                  AuthSubmitButton(
-                    text: 'Guardar cambios',
-                    isLoading: authProvider.isChangingPassword,
-                    onPressed: _submit,
-                  ),
-                ],
+          child: Column(
+            children: [
+              Padding(
+                padding: const EdgeInsets.fromLTRB(8, 8, 16, 8),
+                child: Row(
+                  children: [
+                    IconButton(
+                      onPressed: () => Navigator.of(context).maybePop(),
+                      tooltip: 'Volver',
+                      icon: const Icon(Icons.arrow_back_rounded),
+                    ),
+                    const Expanded(
+                      child: Text(
+                        'Modificar mi contraseña',
+                        style: TextStyle(
+                          color: AppColors.text,
+                          fontSize: 22,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
               ),
-            ),
+              Expanded(
+                child: SingleChildScrollView(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 24,
+                    vertical: 28,
+                  ),
+                  child: Form(
+                    key: _formKey,
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        PasswordTextField(
+                          controller: _currentPasswordController,
+                          label: 'Contraseña actual',
+                          validator: _validateCurrentPassword,
+                        ),
+                        const SizedBox(height: 14),
+                        PasswordTextField(
+                          controller: _newPasswordController,
+                          label: 'Nueva contraseña',
+                          validator: _validateNewPassword,
+                        ),
+                        const SizedBox(height: 14),
+                        PasswordTextField(
+                          controller: _confirmPasswordController,
+                          label: 'Confirmar nueva contraseña',
+                          validator: _validateConfirmPassword,
+                        ),
+                        const SizedBox(height: 22),
+                        AuthSubmitButton(
+                          text: 'Guardar cambios',
+                          isLoading: authProvider.isChangingPassword,
+                          onPressed: _submit,
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+            ],
           ),
         ),
       ),

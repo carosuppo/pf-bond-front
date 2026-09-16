@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+
+import '../../../core/theme/app_colors.dart';
 import '../models/notification_preferences.dart';
 import '../providers/notification_preferences_provider.dart';
 
@@ -10,86 +12,118 @@ class NotificationPreferencesScreen extends StatelessWidget {
     final state = context.watch<NotificationPreferencesProvider>();
     final data = state.preferences;
     return Scaffold(
-      appBar: AppBar(title: const Text('Notificaciones')),
-      body: state.isLoading
-          ? const Center(child: CircularProgressIndicator())
-          : data == null
-          ? Center(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
+      backgroundColor: AppColors.background,
+      body: SafeArea(
+        child: Column(
+          children: [
+            Padding(
+              padding: const EdgeInsets.fromLTRB(8, 8, 16, 8),
+              child: Row(
                 children: [
-                  Text(
-                    state.errorMessage ??
-                        'No se pudieron cargar las preferencias.',
+                  IconButton(
+                    onPressed: () => Navigator.of(context).maybePop(),
+                    tooltip: 'Volver',
+                    icon: const Icon(Icons.arrow_back_rounded),
                   ),
-                  TextButton(
-                    onPressed: state.load,
-                    child: const Text('Reintentar'),
-                  ),
-                ],
-              ),
-            )
-          : RefreshIndicator(
-              onRefresh: state.load,
-              child: ListView(
-                physics: const AlwaysScrollableScrollPhysics(),
-                children: [
-                  if (state.isSaving) const LinearProgressIndicator(),
-                  if (state.errorMessage != null)
-                    Padding(
-                      padding: const EdgeInsets.all(16),
-                      child: Text(
-                        state.errorMessage!,
-                        style: TextStyle(
-                          color: Theme.of(context).colorScheme.error,
-                        ),
+                  const Expanded(
+                    child: Text(
+                      'Notificaciones',
+                      style: TextStyle(
+                        color: AppColors.text,
+                        fontSize: 22,
+                        fontWeight: FontWeight.w700,
                       ),
                     ),
-                  SwitchListTile(
-                    title: const Text('Notificaciones de Bond'),
-                    subtitle: const Text(
-                      'Permite recibir notificaciones de tus grupos.',
-                    ),
-                    value: data.enabled,
-                    onChanged: state.isSaving ? null : state.setGlobal,
                   ),
-                  const Padding(
-                    padding: EdgeInsets.all(16),
-                    child: Text('Notificaciones por grupo'),
-                  ),
-                  if (data.groups.isEmpty)
-                    const ListTile(
-                      title: Text('No perteneces a ningún grupo activo.'),
-                    ),
-                  for (final group in data.groups)
-                    ListTile(
-                      title: Text(group.groupName),
-                      subtitle: Text(
-                        !group.enabled
-                            ? 'Silenciadas'
-                            : group.types.values.every((value) => value)
-                            ? 'Todas habilitadas'
-                            : 'Personalizadas',
-                      ),
-                      trailing: const Icon(Icons.chevron_right),
-                      enabled: data.enabled && !state.isSaving,
-                      onTap: () async {
-                        await Navigator.of(context).push(
-                          MaterialPageRoute<void>(
-                            builder: (_) => ChangeNotifierProvider.value(
-                              value: state,
-                              child: GroupNotificationPreferencesScreen(
-                                groupId: group.groupId,
-                              ),
-                            ),
-                          ),
-                        );
-                        if (context.mounted) await state.load();
-                      },
-                    ),
                 ],
               ),
             ),
+            Expanded(
+              child: state.isLoading
+                  ? const Center(child: CircularProgressIndicator())
+                  : data == null
+                  ? Center(
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Text(
+                            state.errorMessage ??
+                                'No se pudieron cargar las preferencias.',
+                          ),
+                          TextButton(
+                            onPressed: state.load,
+                            child: const Text('Reintentar'),
+                          ),
+                        ],
+                      ),
+                    )
+                  : RefreshIndicator(
+                      onRefresh: state.load,
+                      child: ListView(
+                        physics: const AlwaysScrollableScrollPhysics(),
+                        children: [
+                          if (state.isSaving) const LinearProgressIndicator(),
+                          if (state.errorMessage != null)
+                            Padding(
+                              padding: const EdgeInsets.all(16),
+                              child: Text(
+                                state.errorMessage!,
+                                style: TextStyle(
+                                  color: Theme.of(context).colorScheme.error,
+                                ),
+                              ),
+                            ),
+                          SwitchListTile(
+                            title: const Text('Notificaciones de Bond'),
+                            subtitle: const Text(
+                              'Permite recibir notificaciones de tus grupos.',
+                            ),
+                            value: data.enabled,
+                            onChanged: state.isSaving ? null : state.setGlobal,
+                          ),
+                          const Padding(
+                            padding: EdgeInsets.all(16),
+                            child: Text('Notificaciones por grupo'),
+                          ),
+                          if (data.groups.isEmpty)
+                            const ListTile(
+                              title: Text(
+                                'No perteneces a ningún grupo activo.',
+                              ),
+                            ),
+                          for (final group in data.groups)
+                            ListTile(
+                              title: Text(group.groupName),
+                              subtitle: Text(
+                                !group.enabled
+                                    ? 'Silenciadas'
+                                    : group.types.values.every((value) => value)
+                                    ? 'Todas habilitadas'
+                                    : 'Personalizadas',
+                              ),
+                              trailing: const Icon(Icons.chevron_right),
+                              enabled: data.enabled && !state.isSaving,
+                              onTap: () async {
+                                await Navigator.of(context).push(
+                                  MaterialPageRoute<void>(
+                                    builder: (_) => ChangeNotifierProvider.value(
+                                      value: state,
+                                      child: GroupNotificationPreferencesScreen(
+                                        groupId: group.groupId,
+                                      ),
+                                    ),
+                                  ),
+                                );
+                                if (context.mounted) await state.load();
+                              },
+                            ),
+                        ],
+                      ),
+                    ),
+            ),
+          ],
+        ),
+      ),
     );
   }
 }

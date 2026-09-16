@@ -39,17 +39,38 @@ class SettingsScreen extends StatelessWidget {
     final options = _buildOptions(context);
 
     return Scaffold(
-      appBar: AppBar(
-        automaticallyImplyLeading: false,
-        title: const Text('Configuración'),
-      ),
-
-      body: ListView.separated(
-        itemCount: options.length,
-        separatorBuilder: (_, _) =>
-            const Divider(height: 1, color: AppColors.divider),
-        itemBuilder: (context, index) =>
-            SettingsOptionTile(option: options[index]),
+      backgroundColor: AppColors.background,
+      body: SafeArea(
+        child: Column(
+          children: [
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: const Text(
+                      'Configuración',
+                      style: TextStyle(
+                        color: AppColors.text,
+                        fontSize: 22,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            Expanded(
+              child: ListView.separated(
+                itemCount: options.length,
+                separatorBuilder: (_, _) =>
+                    const Divider(height: 1, color: AppColors.divider),
+                itemBuilder: (context, index) =>
+                    SettingsOptionTile(option: options[index]),
+              ),
+            ),
+          ],
+        ),
       ),
 
       bottomNavigationBar: SafeArea(

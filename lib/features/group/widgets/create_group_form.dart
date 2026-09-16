@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/widgets/buttons/app_primary_button.dart';
 import '../../../core/widgets/buttons/app_secondary_button.dart';
+import '../../../core/widgets/discard_changes_dialog.dart';
 import '../../../core/widgets/global_text_field.dart';
 import '../providers/group_provider.dart';
 import 'invitation_code_modal.dart';
@@ -94,6 +95,31 @@ class _CreateGroupFormState extends State<CreateGroupForm> {
     }
   }
 
+  bool get _hasChanges {
+    return _nameController.text.trim().isNotEmpty ||
+        _descriptionController.text.trim().isNotEmpty ||
+        _shareLocationMandatorily;
+  }
+
+  Future<void> _handleBack() async {
+    if (!_hasChanges) {
+      if (!mounted) {
+        return;
+      }
+
+      Navigator.of(context).pop();
+      return;
+    }
+
+    final shouldDiscard = await showDiscardChangesDialog(context);
+
+    if (!mounted || !shouldDiscard) {
+      return;
+    }
+
+    Navigator.of(context).pop();
+  }
+
   @override
   Widget build(BuildContext context) {
     final isLoading = context.watch<GroupProvider>().isLoading;
@@ -103,92 +129,100 @@ class _CreateGroupFormState extends State<CreateGroupForm> {
     final maxContentWidth = screenWidth > 600 ? 480.0 : double.infinity;
     final horizontalPadding = screenWidth > 600 ? 32.0 : 24.0;
 
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        return SingleChildScrollView(
-          padding: EdgeInsets.symmetric(horizontal: horizontalPadding),
-          child: ConstrainedBox(
-            constraints: BoxConstraints(maxWidth: maxContentWidth),
-            child: Center(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  const SizedBox(height: 20),
+    return PopScope(
+      canPop: false,
+      onPopInvokedWithResult: (didPop, result) async {
+        if (didPop) {
+          return;
+        }
 
-                  Text(
-                    'Crear grupo',
-                    textAlign: TextAlign.center,
-                    style: theme.textTheme.headlineMedium?.copyWith(
-                      color: AppColors.text,
-                      fontWeight: FontWeight.bold,
+        await _handleBack();
+      },
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          return SingleChildScrollView(
+            padding: EdgeInsets.symmetric(horizontal: horizontalPadding),
+            child: ConstrainedBox(
+              constraints: BoxConstraints(maxWidth: maxContentWidth),
+              child: Center(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    const SizedBox(height: 20),
+
+                    Text(
+                      'Crear grupo',
+                      textAlign: TextAlign.center,
+                      style: theme.textTheme.headlineMedium?.copyWith(
+                        color: AppColors.text,
+                        fontWeight: FontWeight.bold,
+                      ),
                     ),
-                  ),
 
-                  const SizedBox(height: 24),
+                    const SizedBox(height: 24),
 
-                  GlobalTextField(
-                    controller: _nameController,
-                    label: 'Nombre del grupo',
-                  ),
-
-                  const SizedBox(height: 16),
-
-                  GlobalTextField(
-                    controller: _descriptionController,
-                    label: 'Descripción (opcional)',
-                  ),
-
-                  const SizedBox(height: 16),
-
-                  Container(
-                    decoration: BoxDecoration(
-                      color: AppColors.fieldColor,
-                      borderRadius: BorderRadius.circular(14),
+                    GlobalTextField(
+                      controller: _nameController,
+                      label: 'Nombre del grupo',
                     ),
-                    child: SwitchListTile(
-                      shape: RoundedRectangleBorder(
+
+                    const SizedBox(height: 16),
+
+                    GlobalTextField(
+                      controller: _descriptionController,
+                      label: 'Descripción (opcional)',
+                    ),
+
+                    const SizedBox(height: 16),
+
+                    Container(
+                      decoration: BoxDecoration(
+                        color: AppColors.fieldColor,
                         borderRadius: BorderRadius.circular(14),
                       ),
-                      title: const Text(
-                        'Compartir ubicación obligatoriamente',
-                        style: TextStyle(color: AppColors.text),
+                      child: SwitchListTile(
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(14),
+                        ),
+                        title: const Text(
+                          'Compartir ubicación obligatoriamente',
+                          style: TextStyle(color: AppColors.text),
+                        ),
+                        activeThumbColor: AppColors.primary,
+                        value: _shareLocationMandatorily,
+                        onChanged: isLoading
+                            ? null
+                            : (value) {
+                                setState(() {
+                                  _shareLocationMandatorily = value;
+                                });
+                              },
                       ),
-                      activeThumbColor: AppColors.primary,
-                      value: _shareLocationMandatorily,
-                      onChanged: isLoading
-                          ? null
-                          : (value) {
-                              setState(() {
-                                _shareLocationMandatorily = value;
-                              });
-                            },
                     ),
-                  ),
 
-                  const SizedBox(height: 24),
+                    const SizedBox(height: 24),
 
-                  AppPrimaryButton(
-                    text: 'Crear grupo',
-                    loading: isLoading,
-                    onPressed: _createGroup,
-                  ),
+                    AppPrimaryButton(
+                      text: 'Crear grupo',
+                      loading: isLoading,
+                      onPressed: _createGroup,
+                    ),
 
-                  const SizedBox(height: 12),
+                    const SizedBox(height: 12),
 
-                  AppSecondaryButton(
-                    text: 'Cancelar',
-                    onPressed: () {
-                      Navigator.of(context).pop();
-                    },
-                  ),
+                    AppSecondaryButton(
+                      text: 'Cancelar',
+                      onPressed: isLoading ? null : _handleBack,
+                    ),
 
-                  const SizedBox(height: 16),
-                ],
+                    const SizedBox(height: 16),
+                  ],
+                ),
               ),
             ),
-          ),
-        );
-      },
+          );
+        },
+      ),
     );
   }
 }

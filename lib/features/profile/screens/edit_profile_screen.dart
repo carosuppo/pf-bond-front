@@ -216,8 +216,36 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
         _handlePopAttempt(didPop);
       },
       child: Scaffold(
-        appBar: AppBar(title: const Text('Modificar mi perfil')),
-        body: SafeArea(child: _buildBody(profileProvider, authProvider)),
+        backgroundColor: AppColors.background,
+        body: SafeArea(
+          child: Column(
+            children: [
+              Padding(
+                padding: const EdgeInsets.fromLTRB(8, 8, 16, 8),
+                child: Row(
+                  children: [
+                    IconButton(
+                      onPressed: () => Navigator.of(context).maybePop(),
+                      tooltip: 'Volver',
+                      icon: const Icon(Icons.arrow_back_rounded),
+                    ),
+                    const Expanded(
+                      child: Text(
+                        'Modificar mi perfil',
+                        style: TextStyle(
+                          color: AppColors.text,
+                          fontSize: 22,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              Expanded(child: _buildBody(profileProvider, authProvider)),
+            ],
+          ),
+        ),
       ),
     );
   }
