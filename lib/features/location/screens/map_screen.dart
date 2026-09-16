@@ -4,6 +4,7 @@ import 'package:bond_front/core/theme/app_colors.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter/services.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:provider/provider.dart';
 
@@ -468,6 +469,7 @@ class _MapScreenState extends ConsumerState<MapScreen> {
   Widget build(BuildContext context) {
     final groupProvider = context.watch<GroupProvider>();
     final pointProvider = context.watch<PointOfInterestProvider>();
+    final topPadding = MediaQuery.paddingOf(context).top;
 
     return PopScope(
       canPop: !_editing,
@@ -478,44 +480,52 @@ class _MapScreenState extends ConsumerState<MapScreen> {
       },
       child: Scaffold(
         body: SafeArea(
+          top: false,
           bottom: false,
           child: Stack(
             children: [
               Positioned.fill(
-                child: Stack(
-                  children: [
-                    LocationMap(
-                      groupId: groupProvider.activeGroup?.id,
-                      points: pointProvider.points,
-                      previewColor: _draftColor,
-                      previewPoint: _editing ? _draftLocation : null,
-                      previewRadius: _editing && _draftLocation != null
-                          ? _draftRadius
-                          : null,
-                      showOffscreenPoints: _pointsExpanded,
-                      indicatorBottomFraction: _editing
-                          ? _poiMaxChildSize
-                          : groupProvider.groupDetails == null
-                          ? 0
-                          : _sheetExpanded
-                          ? _maxChildSize
-                          : _minChildSize,
-                      controller: _mapController,
-                      onMapTap: _editing ? null : _handleMapTap,
-                      onMemberTap: _editing ? null : _handleMemberTap,
-                      onTap: _editing
-                          ? (point) {
-                              setState(() {
-                                _draftLocation = point;
-                              });
-                            }
-                          : null,
-                    ),
-                  ],
+                child: AnnotatedRegion<SystemUiOverlayStyle>(
+                  value: const SystemUiOverlayStyle(
+                    statusBarColor: Colors.transparent,
+                    statusBarIconBrightness: Brightness.dark,
+                    statusBarBrightness: Brightness.light,
+                  ),
+                  child: Stack(
+                    children: [
+                      LocationMap(
+                        groupId: groupProvider.activeGroup?.id,
+                        points: pointProvider.points,
+                        previewColor: _draftColor,
+                        previewPoint: _editing ? _draftLocation : null,
+                        previewRadius: _editing && _draftLocation != null
+                            ? _draftRadius
+                            : null,
+                        showOffscreenPoints: _pointsExpanded,
+                        indicatorBottomFraction: _editing
+                            ? _poiMaxChildSize
+                            : groupProvider.groupDetails == null
+                            ? 0
+                            : _sheetExpanded
+                            ? _maxChildSize
+                            : _minChildSize,
+                        controller: _mapController,
+                        onMapTap: _editing ? null : _handleMapTap,
+                        onMemberTap: _editing ? null : _handleMemberTap,
+                        onTap: _editing
+                            ? (point) {
+                                setState(() {
+                                  _draftLocation = point;
+                                });
+                              }
+                            : null,
+                      ),
+                    ],
+                  ),
                 ),
               ),
               Positioned(
-                top: 12,
+                top: topPadding + 12,
                 left: 0,
                 right: 0,
                 child: const GroupSelectorButton(),

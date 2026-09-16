@@ -1,10 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
-import '../../../core/routes/app_routes.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/validators/form_validators.dart';
-import '../../auth/providers/auth_provider.dart';
 import '../../auth/widgets/auth_submit_button.dart';
 import '../../auth/widgets/auth_text_field.dart';
 import '../providers/profile_provider.dart';
@@ -124,56 +122,6 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
     }
   }
 
-  Future<void> _logout() async {
-    final shouldLogout = await showDialog<bool>(
-      context: context,
-      builder: (dialogContext) => AlertDialog(
-        title: const Text('Cerrar sesión'),
-        content: const Text('¿Estás seguro de que querés cerrar sesión?'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(dialogContext).pop(false),
-            child: const Text('Cancelar'),
-          ),
-          TextButton(
-            onPressed: () => Navigator.of(dialogContext).pop(true),
-            child: const Text(
-              'Cerrar sesión',
-              style: TextStyle(color: AppColors.error),
-            ),
-          ),
-        ],
-      ),
-    );
-
-    if (shouldLogout != true || !mounted) {
-      return;
-    }
-
-    final authProvider = context.read<AuthProvider>();
-    final success = await authProvider.logout();
-
-    if (!mounted) {
-      return;
-    }
-
-    if (success) {
-      Navigator.of(
-        context,
-      ).pushNamedAndRemoveUntil(AppRoutes.login, (route) => false);
-
-      return;
-    }
-
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(
-          authProvider.errorMessage ?? 'No se pudo cerrar la sesión.',
-        ),
-      ),
-    );
-  }
-
   Future<void> _handlePopAttempt(bool didPop) async {
     if (didPop) {
       return;
@@ -208,7 +156,6 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
   @override
   Widget build(BuildContext context) {
     final profileProvider = context.watch<ProfileProvider>();
-    final authProvider = context.watch<AuthProvider>();
 
     return PopScope(
       canPop: _allowPopAfterSave || !_isDirty,
@@ -242,7 +189,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
                   ],
                 ),
               ),
-              Expanded(child: _buildBody(profileProvider, authProvider)),
+              Expanded(child: _buildBody(profileProvider)),
             ],
           ),
         ),
@@ -250,10 +197,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
     );
   }
 
-  Widget _buildBody(
-    ProfileProvider profileProvider,
-    AuthProvider authProvider,
-  ) {
+  Widget _buildBody(ProfileProvider profileProvider) {
     if (!_hasLoaded) {
       return const Center(child: CircularProgressIndicator());
     }
@@ -305,21 +249,6 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
               text: 'Guardar cambios',
               isLoading: profileProvider.isSaving,
               onPressed: _submit,
-            ),
-            const SizedBox(height: 32),
-            const Divider(),
-            const SizedBox(height: 16),
-            OutlinedButton.icon(
-              onPressed: authProvider.isLoading ? null : _logout,
-              icon: const Icon(Icons.logout),
-              label: Text(
-                authProvider.isLoading ? 'Cerrando sesión...' : 'Cerrar sesión',
-              ),
-              style: OutlinedButton.styleFrom(
-                foregroundColor: AppColors.error,
-                side: const BorderSide(color: AppColors.error),
-                padding: const EdgeInsets.symmetric(vertical: 14),
-              ),
             ),
           ],
         ),
