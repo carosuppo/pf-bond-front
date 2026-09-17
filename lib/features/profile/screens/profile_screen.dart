@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../../../core/theme/app_colors.dart';
+import '../../../core/widgets/app_screen_header.dart';
 import '../providers/profile_provider.dart';
 
 class ProfileScreen extends StatefulWidget {
@@ -44,27 +45,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
       body: SafeArea(
         child: Column(
           children: [
-            Padding(
-              padding: const EdgeInsets.fromLTRB(8, 8, 16, 8),
-              child: Row(
-                children: [
-                  IconButton(
-                    onPressed: () => Navigator.of(context).maybePop(),
-                    tooltip: 'Volver',
-                    icon: const Icon(Icons.arrow_back_rounded),
-                  ),
-                  const Expanded(
-                    child: Text(
-                      'Mi perfil',
-                      style: TextStyle(
-                        color: AppColors.text,
-                        fontSize: 22,
-                        fontWeight: FontWeight.w700,
-                      ),
-                    ),
-                  ),
-                ],
-              ),
+            AppScreenHeader(
+              title: 'Mi perfil',
+              onBack: () => Navigator.of(context).maybePop(),
             ),
             Expanded(child: _buildBody(profileProvider)),
           ],
@@ -225,7 +208,7 @@ class _GroupTile extends StatelessWidget {
             width: 44,
             height: 44,
             decoration: const BoxDecoration(
-              color: AppColors.fieldColor,
+              color: AppColors.surface,
               shape: BoxShape.circle,
             ),
             child: const Icon(

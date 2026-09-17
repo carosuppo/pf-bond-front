@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 
 import '../../../core/theme/app_colors.dart';
 import '../../../core/validators/form_validators.dart';
+import '../../../core/widgets/app_screen_header.dart';
 import '../providers/auth_provider.dart';
 import '../widgets/auth_submit_button.dart';
 import '../widgets/auth_text_field.dart';
@@ -163,27 +164,9 @@ class _ChangePasswordScreenState extends State<ChangePasswordScreen> {
         body: SafeArea(
           child: Column(
             children: [
-              Padding(
-                padding: const EdgeInsets.fromLTRB(8, 8, 16, 8),
-                child: Row(
-                  children: [
-                    IconButton(
-                      onPressed: () => Navigator.of(context).maybePop(),
-                      tooltip: 'Volver',
-                      icon: const Icon(Icons.arrow_back_rounded),
-                    ),
-                    const Expanded(
-                      child: Text(
-                        'Modificar mi contraseña',
-                        style: TextStyle(
-                          color: AppColors.text,
-                          fontSize: 22,
-                          fontWeight: FontWeight.w700,
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
+              AppScreenHeader(
+                title: 'Modificar mi contraseña',
+                onBack: () => Navigator.of(context).maybePop(),
               ),
               Expanded(
                 child: SingleChildScrollView(

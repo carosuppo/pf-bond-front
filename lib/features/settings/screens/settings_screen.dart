@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../../../core/routes/app_routes.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/widgets/app_bottom_nav_bar.dart';
+import '../../../core/widgets/app_screen_header.dart';
 import '../models/settings_option.dart';
 import '../widgets/settings_option_tile.dart';
 
@@ -43,23 +44,7 @@ class SettingsScreen extends StatelessWidget {
       body: SafeArea(
         child: Column(
           children: [
-            Padding(
-              padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
-              child: Row(
-                children: [
-                  Expanded(
-                    child: const Text(
-                      'Configuración',
-                      style: TextStyle(
-                        color: AppColors.text,
-                        fontSize: 22,
-                        fontWeight: FontWeight.w700,
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ),
+            const AppScreenHeader(title: 'Configuración'),
             Expanded(
               child: ListView.separated(
                 itemCount: options.length,
