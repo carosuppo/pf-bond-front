@@ -13,6 +13,7 @@ class AuthProvider extends ChangeNotifier {
 
   bool isLoading = false;
   bool isChangingPassword = false;
+  bool isDeletingAccount = false;
   String? errorMessage;
   AuthResponse? authResponse;
 
@@ -128,6 +129,25 @@ class AuthProvider extends ChangeNotifier {
       return false;
     } finally {
       isChangingPassword = false;
+      notifyListeners();
+    }
+  }
+
+  Future<bool> deleteAccount() async {
+    if (isDeletingAccount) return false;
+    isDeletingAccount = true;
+    errorMessage = null;
+    notifyListeners();
+
+    try {
+      await _authService.deleteAccount();
+      authResponse = null;
+      return true;
+    } catch (error) {
+      errorMessage = error.toString().replaceFirst('Exception: ', '');
+      return false;
+    } finally {
+      isDeletingAccount = false;
       notifyListeners();
     }
   }

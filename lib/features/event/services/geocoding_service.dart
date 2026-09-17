@@ -93,13 +93,17 @@ class GeocodingService {
     final province = _firstNonEmpty([address['state']]);
     final country = _firstNonEmpty([address['country']]);
 
-    final streetAndNumber = [street, houseNumber]
-        .where((part) => part.isNotEmpty)
-        .join(' ');
+    final streetAndNumber = [
+      street,
+      houseNumber,
+    ].where((part) => part.isNotEmpty).join(' ');
 
-    return [streetAndNumber, city, province, country]
-        .where((part) => part.isNotEmpty)
-        .join(', ');
+    return [
+      streetAndNumber,
+      city,
+      province,
+      country,
+    ].where((part) => part.isNotEmpty).join(', ');
   }
 
   String _firstNonEmpty(List<dynamic> values) {

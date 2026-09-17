@@ -12,8 +12,16 @@ class SettingsOptionTile extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return ListTile(
-      leading: Icon(option.icon, color: AppColors.mutedText),
-      title: Text(option.title, style: const TextStyle(color: AppColors.text)),
+      leading: Icon(
+        option.icon,
+        color: option.isDestructive ? AppColors.error : AppColors.mutedText,
+      ),
+      title: Text(
+        option.title,
+        style: TextStyle(
+          color: option.isDestructive ? AppColors.error : AppColors.text,
+        ),
+      ),
       trailing: option.onTap == null
           ? null
           : const Icon(Icons.chevron_right, color: AppColors.mutedText),

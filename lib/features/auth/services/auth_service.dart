@@ -1,3 +1,5 @@
+import 'package:flutter/foundation.dart';
+
 import '../../../core/network/api_client.dart';
 import '../../../core/storage/session_storage_service.dart';
 import '../models/auth_response.dart';
@@ -74,6 +76,20 @@ class AuthService {
     await _apiClient.authenticatedPostNoContent('/user/logout');
     await _sessionStorage.clearSession();
     _pushNotificationService.onLoggedOut();
+  }
+
+  Future<void> deleteAccount() async {
+    await _apiClient.authenticatedDelete('/user/me');
+    try {
+      await _backgroundLocationService.stop();
+    } catch (error) {
+      debugPrint(
+        'No se pudo detener la ubicaciÃ³n al eliminar la cuenta: $error',
+      );
+    } finally {
+      await _sessionStorage.clearSession();
+      _pushNotificationService.onLoggedOut();
+    }
   }
 
   Future<void> changePassword(ChangePasswordRequest request) async {
