@@ -4,6 +4,7 @@ import 'package:bond_front/core/preferences/app_preferences_service.dart';
 import 'package:bond_front/core/storage/session_storage_service.dart';
 import 'package:bond_front/features/auth/providers/auth_provider.dart';
 import 'package:bond_front/features/auth/services/auth_service.dart';
+import 'package:bond_front/features/auth/services/session_state_cleanup.dart';
 import 'package:bond_front/features/group/models/get_group_model.response.dart';
 import 'package:bond_front/features/group/models/get_groups_model.response.dart';
 import 'package:bond_front/features/group/providers/group_provider.dart';
@@ -25,6 +26,11 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:provider/provider.dart' as provider;
+
+class _NoopSessionStateCleanup implements SessionStateCleanup {
+  @override
+  Future<void> clear() async {}
+}
 
 class MemoryApi extends ApiClient {
   MemoryApi() : super(SessionStorageService());
@@ -121,6 +127,7 @@ void main() {
         push,
         BackgroundLocationService(),
       ),
+      _NoopSessionStateCleanup(),
     );
     final socket = TestSocket();
     await tester.pumpWidget(

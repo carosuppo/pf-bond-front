@@ -12,6 +12,7 @@ import 'core/theme/app_colors.dart';
 import 'core/timezone/app_timezone.dart';
 import 'features/auth/providers/auth_provider.dart';
 import 'features/auth/services/auth_service.dart';
+import 'features/auth/services/session_state_cleanup.dart';
 import 'features/event/providers/event_provider.dart';
 import 'features/event/services/event_service.dart';
 import 'features/group/providers/group_provider.dart';
@@ -86,9 +87,6 @@ class MyApp extends StatelessWidget {
             context.read<GroupService>(),
           ),
         ),
-        provider.ChangeNotifierProvider<AuthProvider>(
-          create: (context) => AuthProvider(context.read<AuthService>()),
-        ),
         provider.ChangeNotifierProvider<GroupProvider>(
           create: (context) => GroupProvider(
             context.read<GroupService>(),
@@ -108,6 +106,28 @@ class MyApp extends StatelessWidget {
         ),
         provider.ChangeNotifierProvider<EventProvider>(
           create: (context) => EventProvider(context.read<EventService>()),
+        ),
+        provider.Provider<SessionStateCleanup>(
+          create: (context) => LocalSessionStateCleanup(
+            storage: context.read<SessionStorageService>(),
+            push: context.read<PushNotificationService>(),
+            preferences: context.read<AppPreferencesService>(),
+            group: context.read<GroupProvider>(),
+            profile: context.read<ProfileProvider>(),
+            points: context.read<PointOfInterestProvider>(),
+            events: context.read<EventProvider>(),
+            locationContainer: ProviderScope.containerOf(
+              context,
+              listen: false,
+            ),
+            backgroundLocation: context.read<BackgroundLocationService>(),
+          ),
+        ),
+        provider.ChangeNotifierProvider<AuthProvider>(
+          create: (context) => AuthProvider(
+            context.read<AuthService>(),
+            context.read<SessionStateCleanup>(),
+          ),
         ),
       ],
       child: MaterialApp(
