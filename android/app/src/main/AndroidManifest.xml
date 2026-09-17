@@ -13,6 +13,9 @@
         <meta-data
             android:name="com.google.firebase.messaging.default_notification_channel_id"
             android:value="bond_default" />
+        <meta-data
+            android:name="com.google.firebase.messaging.default_notification_icon"
+            android:resource="@drawable/ic_notification" />
         <!-- Name required by flutter_foreground_task. Keeping stopWithTask false
              makes the location service survive removal from Android recents. -->
         <service

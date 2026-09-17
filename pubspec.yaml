@@ -109,16 +109,18 @@ flutter:
 flutter_launcher_icons:
   android: true
   ios: false
-  image_path: "assets/logo_bond.png"
+  image_path: "assets/logo_bond_icon.png"
+  adaptive_icon_background: "#0C1014"
+  adaptive_icon_foreground: "assets/logo_bond_foreground.png"
 
 flutter_native_splash:
-  color: "#1F1F1F"
-  image: assets/logo_bond.png
+  color: "#0C1014"
+  image: assets/logo_bond_splash.png
   android: true
   ios: false
   android_gravity: center
   fullscreen: false
   android_12:
-    image: assets/logo_bond_achicado.png
-    icon_background_color: "#1F1F1F"
-    color: "#1F1F1F"
+    image: assets/logo_bond_splash.png
+    icon_background_color: "#0C1014"
+    color: "#0C1014"
