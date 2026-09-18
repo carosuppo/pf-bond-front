@@ -8,7 +8,7 @@ import 'package:flutter/services.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:provider/provider.dart';
 
-import '../../../core/widgets/app_bottom_nav_bar.dart';
+import '../../auth/providers/auth_provider.dart';
 import '../../group/models/get_member_info_model.response.dart';
 import '../../group/providers/group_provider.dart';
 import '../../group/services/group_service.dart';
@@ -388,6 +388,18 @@ class _MapScreenState extends ConsumerState<MapScreen> {
     WidgetsBinding.instance.addPostFrameCallback((_) => _expandPoiSheet());
   }
 
+  void _startEdit(PointOfInterest point) {
+    setState(() {
+      _editing = true;
+      _editingPoint = point;
+      _draftLocation = LatLng(point.latitude, point.longitude);
+      _draftRadius = point.radius;
+      _draftColor = point.color;
+    });
+
+    WidgetsBinding.instance.addPostFrameCallback((_) => _expandPoiSheet());
+  }
+
   void _closeEditor() {
     if (!mounted) {
       return;
@@ -469,6 +481,7 @@ class _MapScreenState extends ConsumerState<MapScreen> {
   Widget build(BuildContext context) {
     final groupProvider = context.watch<GroupProvider>();
     final pointProvider = context.watch<PointOfInterestProvider>();
+    final authProvider = context.watch<AuthProvider>();
     final topPadding = MediaQuery.paddingOf(context).top;
 
     return PopScope(
@@ -495,6 +508,9 @@ class _MapScreenState extends ConsumerState<MapScreen> {
                     children: [
                       LocationMap(
                         groupId: groupProvider.activeGroup?.id,
+                        ownProfilePhoto:
+                            authProvider.authResponse?.user.profilePhoto,
+                        ownProfileName: authProvider.authResponse?.user.name,
                         points: pointProvider.points,
                         previewColor: _draftColor,
                         previewPoint: _editing ? _draftLocation : null,
@@ -726,14 +742,6 @@ class _MapScreenState extends ConsumerState<MapScreen> {
             ],
           ),
         ),
-        bottomNavigationBar: SafeArea(
-          top: false,
-          child: AppBottomNavBar(
-            selectedDestination: AppBottomDestination.map,
-            onDestinationSelected: (destination) =>
-                navigateToAppDestination(context, destination),
-          ),
-        ),
         floatingActionButton: groupProvider.activeGroup != null && !_editing
             ? FloatingActionButton(
                 backgroundColor: AppColors.primary,
@@ -821,6 +829,7 @@ class _MapScreenState extends ConsumerState<MapScreen> {
                     child: _PointOfInterestListItem(
                       point: pointProvider.points[index],
                       onTap: _selectPoint,
+                      onEdit: _startEdit,
                       onDelete: (point) {
                         unawaited(_confirmDelete(point));
                       },
@@ -840,11 +849,13 @@ class _MapScreenState extends ConsumerState<MapScreen> {
 class _PointOfInterestListItem extends StatelessWidget {
   final PointOfInterest point;
   final ValueChanged<PointOfInterest> onTap;
+  final ValueChanged<PointOfInterest> onEdit;
   final ValueChanged<PointOfInterest> onDelete;
 
   const _PointOfInterestListItem({
     required this.point,
     required this.onTap,
+    required this.onEdit,
     required this.onDelete,
   });
 
@@ -863,7 +874,15 @@ class _PointOfInterestListItem extends StatelessWidget {
             children: [
               Row(
                 children: [
-                  const SizedBox(width: 48),
+                  Transform.translate(
+                    offset: const Offset(-6, -6),
+                    child: IconButton(
+                      tooltip: 'Editar punto de interés',
+                      color: AppColors.primary,
+                      onPressed: () => onEdit(point),
+                      icon: const Icon(Icons.edit_outlined),
+                    ),
+                  ),
                   Expanded(
                     child: Text(
                       point.name,

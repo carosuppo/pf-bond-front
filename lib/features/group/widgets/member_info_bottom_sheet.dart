@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../../core/theme/app_colors.dart';
+import '../../../core/widgets/user_avatar.dart';
 import '../models/get_member_info_model.response.dart';
 
 class MemberInfoBottomSheet extends StatelessWidget {
@@ -26,14 +27,24 @@ class MemberInfoBottomSheet extends StatelessWidget {
           children: [
             const SizedBox(height: 24),
             Center(
-              child: Text(
-                memberInfo.name,
-                textAlign: TextAlign.center,
-                style: const TextStyle(
-                  color: AppColors.text,
-                  fontSize: 24,
-                  fontWeight: FontWeight.w600,
-                ),
+              child: Column(
+                children: [
+                  UserAvatar(
+                    name: memberInfo.name,
+                    photoUrl: memberInfo.profilePhoto,
+                    radius: 42,
+                  ),
+                  const SizedBox(height: 12),
+                  Text(
+                    memberInfo.name,
+                    textAlign: TextAlign.center,
+                    style: const TextStyle(
+                      color: AppColors.text,
+                      fontSize: 24,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ],
               ),
             ),
             const SizedBox(height: 24),

@@ -23,6 +23,7 @@ import 'features/notification/services/push_notification_service.dart';
 import 'features/point_of_interest/providers/point_of_interest_provider.dart';
 import 'features/point_of_interest/services/point_of_interest_service.dart';
 import 'features/profile/providers/profile_provider.dart';
+import 'features/profile/services/profile_photo_picker_service.dart';
 import 'features/profile/services/profile_service.dart';
 
 Future<void> main() async {
@@ -78,13 +79,16 @@ class MyApp extends StatelessWidget {
         provider.Provider<ProfileService>(
           create: (context) => ProfileService(context.read<ApiClient>()),
         ),
+        provider.Provider<ProfilePhotoPickerService>(
+          create: (_) => ProfilePhotoPickerService(),
+        ),
         provider.Provider<GroupService>(
           create: (context) => GroupService(context.read<ApiClient>()),
         ),
         provider.ChangeNotifierProvider<ProfileProvider>(
           create: (context) => ProfileProvider(
             context.read<ProfileService>(),
-            context.read<GroupService>(),
+            context.read<ProfilePhotoPickerService>(),
           ),
         ),
         provider.ChangeNotifierProvider<AuthProvider>(

@@ -81,6 +81,25 @@ class ApiClient {
     return _handleResponse(response);
   }
 
+  Future<Map<String, dynamic>> authenticatedMultipartPatch(
+    String path, {
+    required http.MultipartFile file,
+  }) async {
+    final request = http.MultipartRequest(
+      'PATCH',
+      Uri.parse('${ApiConfig.baseUrl}$path'),
+    );
+    final headers = await _buildHeaders(authenticated: true);
+
+    request.headers['Authorization'] = headers['Authorization']!;
+    request.files.add(file);
+
+    final streamedResponse = await request.send().timeout(_timeout);
+    final response = await http.Response.fromStream(streamedResponse);
+
+    return _handleResponse(response);
+  }
+
   Future<Map<String, dynamic>> authenticatedGet(String path) async {
     final uri = Uri.parse('${ApiConfig.baseUrl}$path');
 

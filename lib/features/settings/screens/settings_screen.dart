@@ -3,13 +3,54 @@ import 'package:provider/provider.dart';
 
 import '../../../core/routes/app_routes.dart';
 import '../../../core/theme/app_colors.dart';
-import '../../../core/widgets/app_bottom_nav_bar.dart';
+import '../../../core/widgets/user_avatar.dart';
+import '../../auth/models/user_model.dart';
 import '../../auth/providers/auth_provider.dart';
+import '../../profile/providers/profile_provider.dart';
+import '../../profile/widgets/profile_photo_editor.dart';
 import '../models/settings_option.dart';
 import '../widgets/settings_option_tile.dart';
 
 class SettingsScreen extends StatelessWidget {
   const SettingsScreen({super.key});
+
+  Future<void> _showPhotoEditor(BuildContext context) async {
+    final updated = await showModalBottomSheet<bool>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: AppColors.cardColor,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      builder: (_) => const _ProfilePhotoEditorModal(),
+    );
+
+    if (updated == true && context.mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Foto de perfil actualizada.')),
+      );
+    }
+  }
+
+  Future<void> _showProfilePhoto(BuildContext context) async {
+    final user = context.read<AuthProvider>().authResponse?.user;
+
+    if (user == null) {
+      return;
+    }
+
+    await showDialog<void>(
+      context: context,
+      barrierColor: Colors.black.withValues(alpha: 0.9),
+      builder: (dialogContext) => _ProfilePhotoViewer(
+        user: user,
+        onEdit: () {
+          Navigator.of(dialogContext).pop();
+          _showPhotoEditor(context);
+        },
+      ),
+    );
+  }
 
   Future<void> _logout(BuildContext context) async {
     final shouldLogout = await showDialog<bool>(
@@ -66,11 +107,6 @@ class SettingsScreen extends StatelessWidget {
 
     return [
       SettingsOption(
-        icon: Icons.account_circle_outlined,
-        title: 'Ver mi perfil',
-        onTap: () => Navigator.of(context).pushNamed(AppRoutes.profile),
-      ),
-      SettingsOption(
         icon: Icons.person_outline,
         title: 'Modificar mi perfil',
         onTap: () => Navigator.of(context).pushNamed(AppRoutes.editProfile),
@@ -96,6 +132,7 @@ class SettingsScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final authProvider = context.watch<AuthProvider>();
     final options = _buildOptions(context);
 
     return Scaffold(
@@ -120,6 +157,12 @@ class SettingsScreen extends StatelessWidget {
                 ],
               ),
             ),
+            _ProfileSummary(
+              user: authProvider.authResponse?.user,
+              onViewPhoto: () => _showProfilePhoto(context),
+              onEditPhoto: () => _showPhotoEditor(context),
+            ),
+            const SizedBox(height: 20),
             Expanded(
               child: ListView.separated(
                 itemCount: options.length,
@@ -132,13 +175,226 @@ class SettingsScreen extends StatelessWidget {
           ],
         ),
       ),
+    );
+  }
+}
 
-      bottomNavigationBar: SafeArea(
-        top: false,
-        child: AppBottomNavBar(
-          selectedDestination: AppBottomDestination.settings,
-          onDestinationSelected: (destination) =>
-              navigateToAppDestination(context, destination),
+class _ProfileSummary extends StatelessWidget {
+  const _ProfileSummary({
+    required this.user,
+    required this.onViewPhoto,
+    required this.onEditPhoto,
+  });
+
+  final UserModel? user;
+  final VoidCallback onViewPhoto;
+  final VoidCallback onEditPhoto;
+
+  @override
+  Widget build(BuildContext context) {
+    final name = user?.name ?? 'Usuario';
+
+    return Column(
+      children: [
+        SizedBox(
+          width: 116,
+          height: 116,
+          child: Stack(
+            clipBehavior: Clip.none,
+            children: [
+              Center(
+                child: GestureDetector(
+                  onTap: onViewPhoto,
+                  child: UserAvatar(
+                    name: name,
+                    photoUrl: user?.profilePhoto,
+                    radius: 52,
+                    borderColor: Colors.white,
+                    borderWidth: 1,
+                  ),
+                ),
+              ),
+              Positioned(
+                bottom: 2,
+                right: 2,
+                child: Tooltip(
+                  message: 'Editar foto de perfil',
+                  child: Material(
+                    color: Colors.white,
+                    shape: const CircleBorder(),
+                    child: InkWell(
+                      onTap: onEditPhoto,
+                      customBorder: const CircleBorder(),
+                      child: const SizedBox(
+                        width: 26,
+                        height: 26,
+                        child: Icon(Icons.add, color: Colors.black, size: 18),
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 12),
+        Text(
+          name,
+          textAlign: TextAlign.center,
+          style: const TextStyle(
+            color: AppColors.text,
+            fontSize: 20,
+            fontWeight: FontWeight.w700,
+          ),
+        ),
+        const SizedBox(height: 4),
+        Text(
+          user?.email ?? '',
+          textAlign: TextAlign.center,
+          style: const TextStyle(color: AppColors.mutedText, fontSize: 14),
+        ),
+      ],
+    );
+  }
+}
+
+class _ProfilePhotoViewer extends StatelessWidget {
+  const _ProfilePhotoViewer({required this.user, required this.onEdit});
+
+  final UserModel user;
+  final VoidCallback onEdit;
+
+  @override
+  Widget build(BuildContext context) {
+    return Dialog.fullscreen(
+      backgroundColor: Colors.black,
+      child: SafeArea(
+        child: Stack(
+          children: [
+            Center(
+              child: UserAvatar(
+                name: user.name,
+                photoUrl: user.profilePhoto,
+                radius: 140,
+              ),
+            ),
+            Positioned(
+              top: 4,
+              right: 4,
+              child: Row(
+                children: [
+                  IconButton(
+                    onPressed: onEdit,
+                    tooltip: 'Editar foto de perfil',
+                    color: Colors.white,
+                    icon: const Icon(Icons.edit_outlined),
+                  ),
+                  IconButton(
+                    onPressed: () => Navigator.of(context).pop(),
+                    tooltip: 'Cerrar',
+                    color: Colors.white,
+                    icon: const Icon(Icons.close),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _ProfilePhotoEditorModal extends StatefulWidget {
+  const _ProfilePhotoEditorModal();
+
+  @override
+  State<_ProfilePhotoEditorModal> createState() =>
+      _ProfilePhotoEditorModalState();
+}
+
+class _ProfilePhotoEditorModalState extends State<_ProfilePhotoEditorModal> {
+  Future<void> _pickFromGallery() async {
+    final profileProvider = context.read<ProfileProvider>();
+    final success = await profileProvider.pickProfilePhotoFromGallery();
+
+    if (!mounted || success || profileProvider.errorMessage == null) {
+      return;
+    }
+
+    _showMessage(profileProvider.errorMessage!);
+  }
+
+  Future<void> _pickFromCamera() async {
+    final profileProvider = context.read<ProfileProvider>();
+    final success = await profileProvider.pickProfilePhotoFromCamera();
+
+    if (!mounted || success || profileProvider.errorMessage == null) {
+      return;
+    }
+
+    _showMessage(profileProvider.errorMessage!);
+  }
+
+  Future<void> _savePhoto() async {
+    final profileProvider = context.read<ProfileProvider>();
+    final success = await profileProvider.saveProfilePhoto();
+
+    if (!mounted) {
+      return;
+    }
+
+    if (!success) {
+      _showMessage(
+        profileProvider.errorMessage ?? 'No se pudo actualizar la foto.',
+      );
+      return;
+    }
+
+    final updatedUser = profileProvider.user;
+    if (updatedUser != null) {
+      context.read<AuthProvider>().updateUser(updatedUser);
+    }
+
+    Navigator.of(context).pop(true);
+  }
+
+  void _showMessage(String message) {
+    ScaffoldMessenger.of(context)
+      ..hideCurrentSnackBar()
+      ..showSnackBar(SnackBar(content: Text(message)));
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final profileProvider = context.watch<ProfileProvider>();
+    final user = context.watch<AuthProvider>().authResponse?.user;
+
+    return SafeArea(
+      child: SingleChildScrollView(
+        padding: const EdgeInsets.fromLTRB(24, 20, 24, 24),
+        child: Column(
+          children: [
+            const Text(
+              'Editar foto de perfil',
+              style: TextStyle(
+                color: AppColors.text,
+                fontSize: 20,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+            const SizedBox(height: 20),
+            ProfilePhotoEditor(
+              name: user?.name ?? 'Usuario',
+              currentPhotoUrl: user?.profilePhoto,
+              selectedPhoto: profileProvider.selectedPhoto,
+              isSaving: profileProvider.isSavingPhoto,
+              onGallery: _pickFromGallery,
+              onCamera: _pickFromCamera,
+              onConfirm: _savePhoto,
+              onCancel: profileProvider.clearSelectedPhoto,
+            ),
+          ],
         ),
       ),
     );

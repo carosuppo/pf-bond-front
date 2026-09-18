@@ -218,6 +218,7 @@ class GroupProvider extends ChangeNotifier {
         id: member.id,
         idUser: member.idUser,
         name: member.name,
+        profilePhoto: member.profilePhoto,
         role: role,
       );
     }).toList();

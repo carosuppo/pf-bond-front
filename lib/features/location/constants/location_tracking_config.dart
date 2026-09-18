@@ -11,9 +11,7 @@ class LocationTrackingConfig {
 
   static const Duration heartbeatInterval = Duration(minutes: 1);
 
-  static const Duration staleAfter = Duration(minutes: 3);
-
-  static const Duration hideAfter = Duration(minutes: 10);
+  static const Duration staleAfter = Duration(minutes: 15);
 
   static const Duration freshnessRefreshInterval = Duration(seconds: 30);
 }

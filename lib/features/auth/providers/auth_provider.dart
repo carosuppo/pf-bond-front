@@ -4,6 +4,7 @@ import '../models/auth_response.dart';
 import '../models/change_password_request.dart';
 import '../models/login_request.dart';
 import '../models/register_request.dart';
+import '../models/user_model.dart';
 import '../services/auth_service.dart';
 
 class AuthProvider extends ChangeNotifier {
@@ -130,5 +131,20 @@ class AuthProvider extends ChangeNotifier {
       isChangingPassword = false;
       notifyListeners();
     }
+  }
+
+  void updateUser(UserModel user) {
+    final currentResponse = authResponse;
+
+    if (currentResponse == null) {
+      return;
+    }
+
+    authResponse = AuthResponse(
+      sessionToken: currentResponse.sessionToken,
+      expiresAt: currentResponse.expiresAt,
+      user: user,
+    );
+    notifyListeners();
   }
 }

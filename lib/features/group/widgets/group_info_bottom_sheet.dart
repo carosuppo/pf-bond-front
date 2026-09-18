@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 
 import '../../../core/routes/app_routes.dart';
 import '../../../core/theme/app_colors.dart';
+import '../../../core/widgets/user_avatar.dart';
 import '../../../core/widgets/buttons/app_primary_button.dart';
 import '../../auth/providers/auth_provider.dart';
 import '../formatters/invitation_code_formatter.dart';
@@ -308,23 +309,10 @@ class _MemberListItem extends StatelessWidget {
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
       child: Row(
         children: [
-          Container(
-            width: 40,
-            height: 40,
-            decoration: BoxDecoration(
-              color: AppColors.fieldColor,
-              shape: BoxShape.circle,
-            ),
-            child: Center(
-              child: Text(
-                member.name.isNotEmpty ? member.name[0].toUpperCase() : '?',
-                style: const TextStyle(
-                  color: AppColors.primary,
-                  fontSize: 16,
-                  fontWeight: FontWeight.w600,
-                ),
-              ),
-            ),
+          UserAvatar(
+            name: member.name,
+            photoUrl: member.profilePhoto,
+            radius: 20,
           ),
           const SizedBox(width: 12),
           Expanded(
