@@ -5,6 +5,7 @@ import 'package:bond_front/features/auth/models/auth_response.dart';
 import 'package:bond_front/features/auth/models/user_model.dart';
 import 'package:bond_front/features/auth/providers/auth_provider.dart';
 import 'package:bond_front/features/auth/services/auth_service.dart';
+import 'package:bond_front/features/auth/services/session_state_cleanup.dart';
 import 'package:bond_front/features/group/models/get_group_model.response.dart';
 import 'package:bond_front/features/group/models/get_member_model.response.dart';
 import 'package:bond_front/features/group/providers/group_provider.dart';
@@ -16,6 +17,11 @@ import 'package:bond_front/features/notification/services/push_notification_serv
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:provider/provider.dart';
+
+class _NoopSessionStateCleanup implements SessionStateCleanup {
+  @override
+  Future<void> clear() async {}
+}
 
 class _FakeGroupService extends GroupService {
   _FakeGroupService() : super(ApiClient(SessionStorageService()));
@@ -109,6 +115,7 @@ AuthProvider _authProvider() {
       pushNotificationService,
       BackgroundLocationService(),
     ),
+    _NoopSessionStateCleanup(),
   );
   authProvider.authResponse = AuthResponse(
     sessionToken: 'token',

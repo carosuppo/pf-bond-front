@@ -22,6 +22,9 @@ class GroupProvider extends ChangeNotifier {
 
   bool isLoading = false;
   bool _isInitialized = false;
+  int _sessionVersion = 0;
+  Future<void> _pendingPreferenceWrite = Future<void>.value();
+  bool get isInitialized => _isInitialized;
   String? errorMessage;
   CreateGroupResponseModel? group;
   GroupResponseModel? updatedGroup;
@@ -30,19 +33,50 @@ class GroupProvider extends ChangeNotifier {
   List<GetGroupsResponseModel> groups = [];
   JoinGroupResponseModel? joinResponse;
 
+  Future<void> resetSessionState() async {
+    _sessionVersion++;
+    isLoading = false;
+    _isInitialized = false;
+    errorMessage = null;
+    group = null;
+    updatedGroup = null;
+    activeGroup = null;
+    groupDetails = null;
+    groups = [];
+    joinResponse = null;
+    notifyListeners();
+    await _pendingPreferenceWrite;
+  }
+
+  Future<void> _saveActiveGroupId(int groupId) {
+    final operation = _pendingPreferenceWrite.then(
+      (_) => _preferencesService.saveActiveGroupId(groupId),
+    );
+    _pendingPreferenceWrite = operation.catchError((Object error) {
+      debugPrint('No se pudo guardar el grupo activo: $error');
+    });
+    return operation;
+  }
+
   Future<void> loadGroups() async {
+    final sessionVersion = _sessionVersion;
     isLoading = true;
     errorMessage = null;
 
     notifyListeners();
 
     try {
-      groups = await _groupService.getGroups();
+      final loadedGroups = await _groupService.getGroups();
+      if (sessionVersion == _sessionVersion) groups = loadedGroups;
     } catch (error) {
-      errorMessage = error.toString().replaceFirst('Exception: ', '');
+      if (sessionVersion == _sessionVersion) {
+        errorMessage = error.toString().replaceFirst('Exception: ', '');
+      }
     } finally {
-      isLoading = false;
-      notifyListeners();
+      if (sessionVersion == _sessionVersion) {
+        isLoading = false;
+        notifyListeners();
+      }
     }
   }
 
@@ -51,6 +85,7 @@ class GroupProvider extends ChangeNotifier {
     String? description,
     required bool shareLocationMandatorily,
   }) async {
+    final sessionVersion = _sessionVersion;
     isLoading = true;
     errorMessage = null;
     group = null;
@@ -64,20 +99,26 @@ class GroupProvider extends ChangeNotifier {
         shareLocationMandatorily: shareLocationMandatorily,
       );
 
-      group = await _groupService.createGroup(request: request);
+      final createdGroup = await _groupService.createGroup(request: request);
+      if (sessionVersion != _sessionVersion) return false;
+      group = createdGroup;
 
       return true;
     } catch (error) {
+      if (sessionVersion != _sessionVersion) return false;
       errorMessage = error.toString().replaceFirst('Exception: ', '');
 
       return false;
     } finally {
-      isLoading = false;
-      notifyListeners();
+      if (sessionVersion == _sessionVersion) {
+        isLoading = false;
+        notifyListeners();
+      }
     }
   }
 
   Future<bool> joinGroup({required String invitationCode}) async {
+    final sessionVersion = _sessionVersion;
     isLoading = true;
     errorMessage = null;
     joinResponse = null;
@@ -87,16 +128,21 @@ class GroupProvider extends ChangeNotifier {
     try {
       final request = JoinGroupRequest(invitationCode: invitationCode);
 
-      joinResponse = await _groupService.joinGroup(request: request);
+      final joinedGroup = await _groupService.joinGroup(request: request);
+      if (sessionVersion != _sessionVersion) return false;
+      joinResponse = joinedGroup;
 
       return true;
     } catch (error) {
+      if (sessionVersion != _sessionVersion) return false;
       errorMessage = error.toString().replaceFirst('Exception: ', '');
 
       return false;
     } finally {
-      isLoading = false;
-      notifyListeners();
+      if (sessionVersion == _sessionVersion) {
+        isLoading = false;
+        notifyListeners();
+      }
     }
   }
 
@@ -112,6 +158,7 @@ class GroupProvider extends ChangeNotifier {
       return false;
     }
 
+    final sessionVersion = _sessionVersion;
     isLoading = true;
     errorMessage = null;
 
@@ -119,16 +166,20 @@ class GroupProvider extends ChangeNotifier {
 
     try {
       await _groupService.updateMemberRole(memberId: memberId, role: role);
+      if (sessionVersion != _sessionVersion) return false;
       _applyUpdatedMemberRole(memberId, role);
 
       return true;
     } catch (error) {
+      if (sessionVersion != _sessionVersion) return false;
       errorMessage = error.toString().replaceFirst('Exception: ', '');
 
       return false;
     } finally {
-      isLoading = false;
-      notifyListeners();
+      if (sessionVersion == _sessionVersion) {
+        isLoading = false;
+        notifyListeners();
+      }
     }
   }
 
@@ -146,6 +197,7 @@ class GroupProvider extends ChangeNotifier {
       return false;
     }
 
+    final sessionVersion = _sessionVersion;
     isLoading = true;
     errorMessage = null;
     updatedGroup = null;
@@ -163,17 +215,21 @@ class GroupProvider extends ChangeNotifier {
         groupId: groupId,
         request: request,
       );
+      if (sessionVersion != _sessionVersion) return false;
 
       _applyUpdatedGroup(updatedGroup);
 
       return true;
     } catch (error) {
+      if (sessionVersion != _sessionVersion) return false;
       errorMessage = error.toString().replaceFirst('Exception: ', '');
 
       return false;
     } finally {
-      isLoading = false;
-      notifyListeners();
+      if (sessionVersion == _sessionVersion) {
+        isLoading = false;
+        notifyListeners();
+      }
     }
   }
 
@@ -234,24 +290,30 @@ class GroupProvider extends ChangeNotifier {
   }
 
   Future<bool> getGroups() async {
+    final sessionVersion = _sessionVersion;
     isLoading = true;
     errorMessage = null;
 
     notifyListeners();
 
     try {
-      groups = await _groupService.getGroups();
+      final loadedGroups = await _groupService.getGroups();
+      if (sessionVersion != _sessionVersion) return false;
+      groups = loadedGroups;
 
       return true;
     } catch (error) {
+      if (sessionVersion != _sessionVersion) return false;
       errorMessage = error.toString().replaceFirst('Exception: ', '');
       groups = [];
       activeGroup = null;
 
       return false;
     } finally {
-      isLoading = false;
-      notifyListeners();
+      if (sessionVersion == _sessionVersion) {
+        isLoading = false;
+        notifyListeners();
+      }
     }
   }
 
@@ -260,27 +322,40 @@ class GroupProvider extends ChangeNotifier {
       return;
     }
 
+    final sessionVersion = _sessionVersion;
     final success = await getGroups();
 
-    if (!success) {
+    if (!success || sessionVersion != _sessionVersion) {
       return;
     }
 
     await _restoreActiveGroup();
 
+    if (sessionVersion != _sessionVersion) return;
     _isInitialized = true;
     notifyListeners();
   }
 
   Future<void> _restoreActiveGroup() async {
+    final sessionVersion = _sessionVersion;
     if (groups.isEmpty) {
       activeGroup = null;
       groupDetails = null;
-      await _preferencesService.clearActiveGroupId();
+      try {
+        await _preferencesService.clearActiveGroupId();
+      } catch (error) {
+        debugPrint('No se pudo limpiar el grupo activo guardado: $error');
+      }
       return;
     }
 
-    final savedGroupId = await _preferencesService.getActiveGroupId();
+    int? savedGroupId;
+    try {
+      savedGroupId = await _preferencesService.getActiveGroupId();
+    } catch (error) {
+      debugPrint('No se pudo leer el grupo activo guardado: $error');
+    }
+    if (sessionVersion != _sessionVersion) return;
 
     if (savedGroupId != null) {
       for (final group in groups) {
@@ -297,15 +372,27 @@ class GroupProvider extends ChangeNotifier {
     activeGroup = groups[randomIndex];
     groupDetails = null;
 
-    await _preferencesService.saveActiveGroupId(activeGroup!.id);
+    try {
+      await _saveActiveGroupId(activeGroup!.id);
+    } catch (error) {
+      debugPrint('No se pudo guardar el grupo activo: $error');
+    }
+    if (sessionVersion != _sessionVersion) return;
     await getGroupDetails(groupId: activeGroup!.id);
   }
 
   Future<void> selectGroup(GetGroupsResponseModel group) async {
+    if (!groups.any((current) => current.id == group.id)) return;
+    final sessionVersion = _sessionVersion;
     activeGroup = group;
     groupDetails = null;
 
-    await _preferencesService.saveActiveGroupId(group.id);
+    try {
+      await _saveActiveGroupId(group.id);
+    } catch (error) {
+      debugPrint('No se pudo guardar el grupo activo: $error');
+    }
+    if (sessionVersion != _sessionVersion) return;
 
     notifyListeners();
 
@@ -313,23 +400,29 @@ class GroupProvider extends ChangeNotifier {
   }
 
   Future<bool> getGroupDetails({required int groupId}) async {
+    final sessionVersion = _sessionVersion;
     isLoading = true;
     errorMessage = null;
 
     notifyListeners();
 
     try {
-      groupDetails = await _groupService.getGroup(groupId: groupId);
+      final loadedDetails = await _groupService.getGroup(groupId: groupId);
+      if (sessionVersion != _sessionVersion) return false;
+      groupDetails = loadedDetails;
 
       return true;
     } catch (error) {
+      if (sessionVersion != _sessionVersion) return false;
       errorMessage = error.toString().replaceFirst('Exception: ', '');
       groupDetails = null;
 
       return false;
     } finally {
-      isLoading = false;
-      notifyListeners();
+      if (sessionVersion == _sessionVersion) {
+        isLoading = false;
+        notifyListeners();
+      }
     }
   }
 }

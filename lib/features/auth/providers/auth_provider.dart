@@ -6,14 +6,17 @@ import '../models/login_request.dart';
 import '../models/register_request.dart';
 import '../models/user_model.dart';
 import '../services/auth_service.dart';
+import '../services/session_state_cleanup.dart';
 
 class AuthProvider extends ChangeNotifier {
   final AuthService _authService;
+  final SessionStateCleanup _sessionStateCleanup;
 
-  AuthProvider(this._authService);
+  AuthProvider(this._authService, this._sessionStateCleanup);
 
   bool isLoading = false;
   bool isChangingPassword = false;
+  bool isDeletingAccount = false;
   String? errorMessage;
   AuthResponse? authResponse;
 
@@ -93,7 +96,7 @@ class AuthProvider extends ChangeNotifier {
 
     try {
       await _authService.logout();
-      authResponse = null;
+      await _finishSession();
 
       return true;
     } catch (error) {
@@ -146,5 +149,35 @@ class AuthProvider extends ChangeNotifier {
       user: user,
     );
     notifyListeners();
+  }
+
+  Future<bool> deleteAccount() async {
+    if (isDeletingAccount) return false;
+    isDeletingAccount = true;
+    errorMessage = null;
+    notifyListeners();
+
+    try {
+      await _authService.deleteAccount();
+      await _finishSession();
+      return true;
+    } catch (error) {
+      errorMessage = error.toString().replaceFirst('Exception: ', '');
+      return false;
+    } finally {
+      isDeletingAccount = false;
+      notifyListeners();
+    }
+  }
+
+  Future<void> _finishSession() async {
+    authResponse = null;
+    notifyListeners();
+    try {
+      await _sessionStateCleanup.clear();
+    } catch (error, stackTrace) {
+      debugPrint('No se pudo completar la limpieza local de sesión: $error');
+      debugPrintStack(stackTrace: stackTrace);
+    }
   }
 }

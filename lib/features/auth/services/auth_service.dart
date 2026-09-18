@@ -1,3 +1,5 @@
+import 'package:flutter/foundation.dart';
+
 import '../../../core/network/api_client.dart';
 import '../../../core/storage/session_storage_service.dart';
 import '../models/auth_response.dart';
@@ -44,6 +46,7 @@ class AuthService {
     final hasValidSession = await _sessionStorage.hasValidSession();
 
     if (!hasValidSession) {
+      await _clearInvalidSession();
       return null;
     }
 
@@ -62,17 +65,38 @@ class AuthService {
 
       return response;
     } catch (_) {
-      await _sessionStorage.clearSession();
-
+      await _clearInvalidSession();
       return null;
     }
   }
 
   Future<void> logout() async {
-    await _backgroundLocationService.stop();
-    await _pushNotificationService.unregisterCurrentDevice();
+    try {
+      await _backgroundLocationService.stop();
+    } catch (error, stackTrace) {
+      debugPrint('No se pudo detener la ubicación antes del logout: $error');
+      debugPrintStack(stackTrace: stackTrace);
+    }
+    try {
+      await _pushNotificationService.unregisterCurrentDevice();
+    } catch (error, stackTrace) {
+      debugPrint('No se pudo desregistrar push antes del logout: $error');
+      debugPrintStack(stackTrace: stackTrace);
+    }
     await _apiClient.authenticatedPostNoContent('/user/logout');
-    await _sessionStorage.clearSession();
+  }
+
+  Future<void> deleteAccount() async {
+    await _apiClient.authenticatedDelete('/user/me');
+  }
+
+  Future<void> _clearInvalidSession() async {
+    try {
+      await _sessionStorage.clearSession();
+    } catch (error, stackTrace) {
+      debugPrint('No se pudo borrar una sesión inválida: $error');
+      debugPrintStack(stackTrace: stackTrace);
+    }
     _pushNotificationService.onLoggedOut();
   }
 
