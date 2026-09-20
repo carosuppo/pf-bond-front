@@ -38,7 +38,7 @@ class EventsScreen extends StatelessWidget {
         elevation: 6,
         highlightElevation: 12,
         onPressed: () => _goToCreateEvent(context),
-        child: const Icon(Icons.add_rounded),
+        child: const Icon(Icons.add_rounded, size: 32),
       ),
       bottomNavigationBar: SafeArea(
         top: false,

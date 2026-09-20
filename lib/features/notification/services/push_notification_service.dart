@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:ui';
 
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
@@ -79,7 +80,7 @@ class PushNotificationService {
 
     await _localNotifications.initialize(
       settings: const InitializationSettings(
-        android: AndroidInitializationSettings('@mipmap/ic_launcher'),
+        android: AndroidInitializationSettings('ic_notification'),
         iOS: DarwinInitializationSettings(),
       ),
       onDidReceiveNotificationResponse: (response) {
@@ -141,6 +142,8 @@ class PushNotificationService {
           'bond_default',
           'Notificaciones de Bond',
           channelDescription: 'Notificaciones generales de Bond.',
+          icon: 'ic_notification',
+          color: Color(0xFFFFFFFF),
           importance: Importance.high,
           priority: Priority.high,
         ),

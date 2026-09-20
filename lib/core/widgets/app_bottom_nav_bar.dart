@@ -44,8 +44,8 @@ class AppBottomNavBar extends StatelessWidget {
   static const _items = [
     _BottomNavItem(
       destination: AppBottomDestination.map,
-      icon: Icons.location_on_outlined,
-      selectedIcon: Icons.location_on,
+      icon: Icons.person_pin_circle_outlined,
+      selectedIcon: Icons.person_pin_circle_rounded,
       tooltip: 'Ubicación',
     ),
     _BottomNavItem(
@@ -57,7 +57,7 @@ class AppBottomNavBar extends StatelessWidget {
     _BottomNavItem(
       destination: AppBottomDestination.settings,
       icon: Icons.settings_outlined,
-      selectedIcon: Icons.settings,
+      selectedIcon: Icons.settings_rounded,
       tooltip: 'Configuración',
     ),
   ];
@@ -99,7 +99,7 @@ class AppBottomNavBar extends StatelessWidget {
       icon: Icon(
         isSelected ? item.selectedIcon : item.icon,
         size: 30,
-        color: Colors.white,
+        color: isSelected ? AppColors.text : AppColors.bottomBarIconInactive,
       ),
     );
   }

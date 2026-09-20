@@ -25,7 +25,7 @@ class AuthTextField extends StatelessWidget {
       style: const TextStyle(color: AppColors.text),
       decoration: InputDecoration(
         labelText: label,
-        labelStyle: const TextStyle(color: AppColors.mutedText),
+        labelStyle: const TextStyle(color: AppColors.placeholder),
         filled: true,
         fillColor: AppColors.fieldColor,
         enabledBorder: OutlineInputBorder(

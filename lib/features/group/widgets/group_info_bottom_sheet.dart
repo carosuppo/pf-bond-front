@@ -131,7 +131,7 @@ class GroupInfoBottomSheet extends StatelessWidget {
                     width: 42,
                     height: 42,
                     decoration: BoxDecoration(
-                      color: AppColors.fieldColor,
+                      color: AppColors.surface,
                       borderRadius: BorderRadius.circular(12),
                     ),
                     child: Icon(
@@ -245,7 +245,7 @@ class GroupInfoBottomSheet extends StatelessWidget {
                       isLoading: groupProvider.isLoading,
                     ),
                     if (i < displayedGroup.members.length - 1)
-                      const Divider(height: 1, color: AppColors.fieldColor),
+                      const Divider(height: 1, color: AppColors.surface),
                   ],
                 ],
               ),
@@ -306,7 +306,7 @@ class _MemberListItem extends StatelessWidget {
             width: 40,
             height: 40,
             decoration: BoxDecoration(
-              color: AppColors.fieldColor,
+              color: AppColors.surface,
               shape: BoxShape.circle,
             ),
             child: Center(
@@ -486,7 +486,7 @@ class _RoleBadge extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 5),
       decoration: BoxDecoration(
-        color: AppColors.fieldColor,
+        color: AppColors.surface,
         borderRadius: BorderRadius.circular(10),
         border: Border.all(color: AppColors.border),
       ),

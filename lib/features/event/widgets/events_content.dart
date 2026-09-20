@@ -273,7 +273,7 @@ class _EventCard extends StatelessWidget {
                 width: 42,
                 height: 42,
                 decoration: BoxDecoration(
-                  color: AppColors.fieldColor,
+                  color: AppColors.surface,
                   borderRadius: BorderRadius.circular(12),
                 ),
                 child: const Icon(
@@ -437,7 +437,7 @@ class _CenteredMessage extends StatelessWidget {
             width: 112,
             height: 112,
             decoration: const BoxDecoration(
-              color: AppColors.fieldColor,
+              color: AppColors.surface,
               shape: BoxShape.circle,
             ),
             child: Icon(icon, size: 56, color: AppColors.primary),
