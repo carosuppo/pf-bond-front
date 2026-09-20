@@ -2,15 +2,15 @@ import 'package:flutter/material.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:provider/provider.dart';
 
+import '../../../core/models/geocoding_result.dart';
+import '../../../core/services/geocoding_service.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../group/models/get_member_model.response.dart';
 import '../../group/providers/group_provider.dart';
 import '../../location/widgets/location_map.dart';
 import '../formatters/event_date_formatter.dart';
 import '../models/event_model.response.dart';
-import '../models/geocoding_result.dart';
 import '../providers/event_provider.dart';
-import '../services/geocoding_service.dart';
 import 'event_location_editor.dart';
 
 Future<void> showEventDetailsModal(

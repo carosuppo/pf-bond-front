@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:provider/provider.dart';
 
+import '../../../core/models/geocoding_result.dart';
+import '../../../core/services/geocoding_service.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/widgets/buttons/app_primary_button.dart';
 import '../../../core/widgets/buttons/app_secondary_button.dart';
@@ -11,9 +13,7 @@ import '../../location/models/location_permission_status.dart';
 import '../../location/services/location_service.dart';
 import '../../location/widgets/location_map.dart';
 import '../models/event_model.response.dart';
-import '../models/geocoding_result.dart';
 import '../providers/event_provider.dart';
-import '../services/geocoding_service.dart';
 
 class EventLocationEditor extends StatefulWidget {
   final EventResponseModel event;

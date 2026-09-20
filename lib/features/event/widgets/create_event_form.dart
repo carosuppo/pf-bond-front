@@ -37,6 +37,8 @@ class _CreateEventFormState extends State<CreateEventForm> {
   }
 
   Future<void> _selectStartDateTime() async {
+    FocusScope.of(context).unfocus();
+
     final result = await showEventDateTimePicker(
       context: context,
       type: EventDateTimePickerType.start,
@@ -59,6 +61,8 @@ class _CreateEventFormState extends State<CreateEventForm> {
   }
 
   Future<void> _selectEndDateTime() async {
+    FocusScope.of(context).unfocus();
+
     if (_startAt == null) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(

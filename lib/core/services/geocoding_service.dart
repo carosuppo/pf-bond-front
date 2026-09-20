@@ -15,10 +15,7 @@ class GeocodingService {
     });
 
     final response = await http
-        .get(
-          uri,
-          headers: const {'User-Agent': 'Bond/1.0 (event-location-search)'},
-        )
+        .get(uri, headers: const {'User-Agent': 'Bond/1.0 (geocoding)'})
         .timeout(const Duration(seconds: 15));
 
     if (response.statusCode < 200 || response.statusCode >= 300) {
@@ -44,10 +41,7 @@ class GeocodingService {
     });
 
     final response = await http
-        .get(
-          uri,
-          headers: const {'User-Agent': 'Bond/1.0 (event-location-search)'},
-        )
+        .get(uri, headers: const {'User-Agent': 'Bond/1.0 (geocoding)'})
         .timeout(const Duration(seconds: 15));
 
     if (response.statusCode < 200 || response.statusCode >= 300) {
@@ -93,13 +87,17 @@ class GeocodingService {
     final province = _firstNonEmpty([address['state']]);
     final country = _firstNonEmpty([address['country']]);
 
-    final streetAndNumber = [street, houseNumber]
-        .where((part) => part.isNotEmpty)
-        .join(' ');
+    final streetAndNumber = [
+      street,
+      houseNumber,
+    ].where((part) => part.isNotEmpty).join(' ');
 
-    return [streetAndNumber, city, province, country]
-        .where((part) => part.isNotEmpty)
-        .join(', ');
+    return [
+      streetAndNumber,
+      city,
+      province,
+      country,
+    ].where((part) => part.isNotEmpty).join(', ');
   }
 
   String _firstNonEmpty(List<dynamic> values) {

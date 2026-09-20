@@ -712,6 +712,7 @@ class _MapScreenState extends ConsumerState<MapScreen> {
                       _poiSheetScrollController = scrollController;
 
                       return Material(
+                        color: AppColors.background,
                         elevation: 12,
                         borderRadius: const BorderRadius.vertical(
                           top: Radius.circular(20),
@@ -726,7 +727,7 @@ class _MapScreenState extends ConsumerState<MapScreen> {
                               child: Padding(
                                 padding: const EdgeInsets.only(
                                   top: 10,
-                                  bottom: 8,
+                                  bottom: 12,
                                 ),
                                 child: Column(
                                   children: [
@@ -738,14 +739,17 @@ class _MapScreenState extends ConsumerState<MapScreen> {
                                         borderRadius: BorderRadius.circular(2),
                                       ),
                                     ),
-                                    const SizedBox(height: 6),
+                                    const SizedBox(height: 14),
                                     Text(
                                       _editingPoint == null
-                                          ? 'Creando punto de interés'
-                                          : 'Editando punto de interés',
-                                      style: Theme.of(
-                                        context,
-                                      ).textTheme.labelLarge,
+                                          ? 'Crear punto de interés'
+                                          : 'Editar punto de interés',
+                                      textAlign: TextAlign.center,
+                                      style: const TextStyle(
+                                        color: AppColors.text,
+                                        fontSize: 20,
+                                        fontWeight: FontWeight.w600,
+                                      ),
                                     ),
                                   ],
                                 ),
