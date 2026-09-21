@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:provider/provider.dart' as provider;
@@ -12,6 +13,7 @@ import 'core/theme/app_colors.dart';
 import 'core/timezone/app_timezone.dart';
 import 'features/auth/providers/auth_provider.dart';
 import 'features/auth/services/auth_service.dart';
+import 'features/auth/services/session_state_cleanup.dart';
 import 'features/event/providers/event_provider.dart';
 import 'features/event/services/event_service.dart';
 import 'features/group/providers/group_provider.dart';
@@ -22,6 +24,7 @@ import 'features/notification/services/push_notification_service.dart';
 import 'features/point_of_interest/providers/point_of_interest_provider.dart';
 import 'features/point_of_interest/services/point_of_interest_service.dart';
 import 'features/profile/providers/profile_provider.dart';
+import 'features/profile/services/profile_photo_picker_service.dart';
 import 'features/profile/services/profile_service.dart';
 
 Future<void> main() async {
@@ -77,6 +80,9 @@ class MyApp extends StatelessWidget {
         provider.Provider<ProfileService>(
           create: (context) => ProfileService(context.read<ApiClient>()),
         ),
+        provider.Provider<ProfilePhotoPickerService>(
+          create: (_) => ProfilePhotoPickerService(),
+        ),
         provider.Provider<GroupService>(
           create: (context) => GroupService(context.read<ApiClient>()),
         ),
@@ -84,10 +90,8 @@ class MyApp extends StatelessWidget {
           create: (context) => ProfileProvider(
             context.read<ProfileService>(),
             context.read<GroupService>(),
+            context.read<ProfilePhotoPickerService>(),
           ),
-        ),
-        provider.ChangeNotifierProvider<AuthProvider>(
-          create: (context) => AuthProvider(context.read<AuthService>()),
         ),
         provider.ChangeNotifierProvider<GroupProvider>(
           create: (context) => GroupProvider(
@@ -108,6 +112,28 @@ class MyApp extends StatelessWidget {
         ),
         provider.ChangeNotifierProvider<EventProvider>(
           create: (context) => EventProvider(context.read<EventService>()),
+        ),
+        provider.Provider<SessionStateCleanup>(
+          create: (context) => LocalSessionStateCleanup(
+            storage: context.read<SessionStorageService>(),
+            push: context.read<PushNotificationService>(),
+            preferences: context.read<AppPreferencesService>(),
+            group: context.read<GroupProvider>(),
+            profile: context.read<ProfileProvider>(),
+            points: context.read<PointOfInterestProvider>(),
+            events: context.read<EventProvider>(),
+            locationContainer: ProviderScope.containerOf(
+              context,
+              listen: false,
+            ),
+            backgroundLocation: context.read<BackgroundLocationService>(),
+          ),
+        ),
+        provider.ChangeNotifierProvider<AuthProvider>(
+          create: (context) => AuthProvider(
+            context.read<AuthService>(),
+            context.read<SessionStateCleanup>(),
+          ),
         ),
       ],
       child: MaterialApp(
@@ -148,6 +174,14 @@ class MyApp extends StatelessWidget {
         ),
         initialRoute: AppRoutes.splash,
         onGenerateRoute: AppRouter.onGenerateRoute,
+        builder: (_, child) => AnnotatedRegion<SystemUiOverlayStyle>(
+          value: const SystemUiOverlayStyle(
+            statusBarColor: AppColors.background,
+            statusBarIconBrightness: Brightness.light,
+            statusBarBrightness: Brightness.dark,
+          ),
+          child: child ?? const SizedBox.shrink(),
+        ),
       ),
     );
   }

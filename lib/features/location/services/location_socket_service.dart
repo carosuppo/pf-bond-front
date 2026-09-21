@@ -11,6 +11,7 @@ import '../models/location_socket_event.dart';
 
 class LocationSocketService {
   final SessionStorageService _sessionStorage;
+  final WebSocketChannel Function(Uri) _channelFactory;
 
   final StreamController<LocationSocketEvent> _events =
       StreamController<LocationSocketEvent>.broadcast();
@@ -24,24 +25,35 @@ class LocationSocketService {
   int? _groupId;
 
   bool _closedByUser = false;
+  int _connectionVersion = 0;
 
-  LocationSocketService(this._sessionStorage);
+  LocationSocketService(
+    this._sessionStorage, {
+    WebSocketChannel Function(Uri)? channelFactory,
+  }) : _channelFactory = channelFactory ?? WebSocketChannel.connect;
 
   Stream<LocationSocketEvent> get events => _events.stream;
 
   Future<void> connect(int groupId) async {
-    await disconnect();
-
+    final connectionVersion = ++_connectionVersion;
+    _closedByUser = true;
+    _groupId = null;
+    await _closeCurrentConnection();
+    if (_connectionVersion != connectionVersion) return;
     _closedByUser = false;
     _groupId = groupId;
 
-    await _open();
+    await _open(connectionVersion);
   }
 
-  Future<void> _open() async {
+  Future<void> _open(int connectionVersion) async {
     final token = await _sessionStorage.getSessionToken();
 
-    if (token == null || token.isEmpty || _groupId == null || _closedByUser) {
+    if (token == null ||
+        token.isEmpty ||
+        _groupId == null ||
+        _closedByUser ||
+        _connectionVersion != connectionVersion) {
       return;
     }
 
@@ -55,7 +67,7 @@ class LocationSocketService {
       query: null,
     );
 
-    final channel = WebSocketChannel.connect(uri);
+    final channel = _channelFactory(uri);
 
     _channel = channel;
 
@@ -138,23 +150,35 @@ class LocationSocketService {
       return;
     }
 
-    _reconnectTimer = Timer(LocationTrackingConfig.reconnectDelay, _open);
+    final connectionVersion = _connectionVersion;
+    _reconnectTimer = Timer(
+      LocationTrackingConfig.reconnectDelay,
+      () => _open(connectionVersion),
+    );
   }
 
   Future<void> disconnect() async {
+    _connectionVersion++;
     _closedByUser = true;
     _groupId = null;
 
+    await _closeCurrentConnection();
+  }
+
+  Future<void> _closeCurrentConnection() async {
     _reconnectTimer?.cancel();
 
     _reconnectTimer = null;
 
-    await _subscription?.cancel();
-
-    await _channel?.sink.close();
-
+    final subscription = _subscription;
+    final channel = _channel;
     _subscription = null;
     _channel = null;
+    try {
+      await subscription?.cancel();
+    } finally {
+      await channel?.sink.close();
+    }
   }
 
   Future<void> dispose() async {

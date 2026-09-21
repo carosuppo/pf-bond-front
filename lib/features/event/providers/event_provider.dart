@@ -17,6 +17,7 @@ class EventProvider extends ChangeNotifier {
   List<EventResponseModel> events = [];
   int? _eventsGroupId;
   int _eventsLoadVersion = 0;
+  int _sessionVersion = 0;
 
   List<EventResponseModel> get todayEvents {
     final now = AppTimezone.now();
@@ -58,14 +59,18 @@ class EventProvider extends ChangeNotifier {
   }
 
   void clearEvents() {
+    _sessionVersion++;
     _eventsLoadVersion++;
     _eventsGroupId = null;
     event = null;
     events = [];
     isEventsLoading = false;
+    isLoading = false;
     errorMessage = null;
     notifyListeners();
   }
+
+  void resetSessionState() => clearEvents();
 
   Future<bool> createEvent({
     required int groupId,
@@ -75,6 +80,7 @@ class EventProvider extends ChangeNotifier {
     DateTime? endAt,
     required List<int> memberIds,
   }) async {
+    final sessionVersion = _sessionVersion;
     isLoading = true;
     errorMessage = null;
     event = null;
@@ -90,10 +96,12 @@ class EventProvider extends ChangeNotifier {
         memberIds: memberIds,
       );
 
-      event = await _eventService.createEvent(
+      final createdEvent = await _eventService.createEvent(
         groupId: groupId,
         request: request,
       );
+      if (sessionVersion != _sessionVersion) return false;
+      event = createdEvent;
 
       if (_eventsGroupId == groupId) {
         events = [...events, event!]
@@ -102,11 +110,14 @@ class EventProvider extends ChangeNotifier {
 
       return true;
     } catch (error) {
+      if (sessionVersion != _sessionVersion) return false;
       errorMessage = error.toString().replaceFirst('Exception: ', '');
       return false;
     } finally {
-      isLoading = false;
-      notifyListeners();
+      if (sessionVersion == _sessionVersion) {
+        isLoading = false;
+        notifyListeners();
+      }
     }
   }
 
@@ -116,6 +127,7 @@ class EventProvider extends ChangeNotifier {
     required double latitude,
     required double longitude,
   }) async {
+    final sessionVersion = _sessionVersion;
     try {
       final updatedEvent = await _eventService.setEventLocation(
         groupId: groupId,
@@ -123,6 +135,7 @@ class EventProvider extends ChangeNotifier {
         latitude: latitude,
         longitude: longitude,
       );
+      if (sessionVersion != _sessionVersion) return null;
 
       final index = events.indexWhere((event) => event.id == eventId);
 
@@ -137,6 +150,7 @@ class EventProvider extends ChangeNotifier {
       notifyListeners();
       return updatedEvent;
     } catch (error) {
+      if (sessionVersion != _sessionVersion) return null;
       errorMessage = error.toString().replaceFirst('Exception: ', '');
       notifyListeners();
       return null;

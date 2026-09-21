@@ -1,5 +1,8 @@
 import 'dart:math' as math;
+import 'package:bond_front/core/theme/app_colors.dart';
+import 'package:bond_front/core/widgets/user_avatar.dart';
 import 'package:bond_front/features/location/constants/default_location.dart';
+import 'package:bond_front/features/location/constants/location_tracking_config.dart';
 import 'package:bond_front/features/location/models/location_state.dart';
 import 'package:bond_front/features/location/models/location_model.dart';
 import 'package:bond_front/features/location/models/location_sharing_model.dart';
@@ -27,9 +30,12 @@ Future<void> pumpMap(
   MapController controller, {
   LocationState? state,
   ValueChanged<LatLng>? onTap,
+  void Function(int memberId)? onMemberTap,
   List<PointOfInterest> points = const [],
   LatLng? previewPoint,
   PointOfInterestColor previewColor = PointOfInterestColor.blue,
+  bool showOffscreenPoints = false,
+  String? ownProfileName,
 }) async {
   await tester.pumpWidget(
     ProviderScope(
@@ -45,9 +51,12 @@ Future<void> pumpMap(
             height: 550,
             child: LocationMap(
               groupId: 20,
+              ownProfileName: ownProfileName,
               controller: controller,
               onTap: onTap,
+              onMemberTap: onMemberTap,
               points: points,
+              showOffscreenPoints: showOffscreenPoints,
               previewPoint: previewPoint,
               previewRadius: 100,
               previewColor: previewColor,
@@ -80,9 +89,14 @@ void main() {
           memberId: 2,
           userId: 2,
           name: 'Ana',
+          profilePhoto: 'https://example.com/ana.jpg',
           latitude: target.latitude,
           longitude: target.longitude,
-          lastSeenAt: DateTime.now().subtract(Duration(minutes: stale ? 4 : 1)),
+          lastSeenAt: DateTime.now().subtract(
+            stale
+                ? LocationTrackingConfig.staleAfter + const Duration(minutes: 1)
+                : const Duration(minutes: 1),
+          ),
         );
         var mapTaps = 0;
         await pumpMap(
@@ -97,13 +111,20 @@ void main() {
         expect(find.byIcon(Icons.navigation), findsOneWidget);
         final arrow = find.byIcon(Icons.navigation);
         final circleFinder = find
-            .ancestor(of: arrow, matching: find.byType(Container))
+            .ancestor(
+              of: find.byType(UserAvatar),
+              matching: find.byType(Container),
+            )
             .first;
         final circle = tester.widget<Container>(circleFinder);
         final color = buildDistinctMarkerColors([2])[2]!;
         expect(
           (circle.decoration as BoxDecoration).color,
           stale ? color.withAlpha(110) : color,
+        );
+        expect(
+          tester.widget<UserAvatar>(find.byType(UserAvatar)).photoUrl,
+          'https://example.com/ana.jpg',
         );
         final transform = tester.widget<Transform>(
           find.ancestor(of: arrow, matching: find.byType(Transform)).first,
@@ -158,7 +179,8 @@ void main() {
         ),
       ],
     );
-    await pumpMap(tester, controller, state: state);
+    await pumpMap(tester, controller, state: state, ownProfileName: 'prueba');
+    expect(tester.widget<UserAvatar>(find.byType(UserAvatar)).name, 'prueba');
     controller.move(
       LatLng(defaultLocation.latitude + 1, defaultLocation.longitude),
       13.25,
@@ -168,6 +190,64 @@ void main() {
     await tester.pump();
     expect(controller.camera.center, defaultLocation);
     expect(controller.camera.zoom, 13.25);
+    await disposeMap(tester, controller);
+  });
+  testWidgets('clusters members less than 50 meters apart', (tester) async {
+    final controller = MapController();
+    int? selectedMemberId;
+    final memberA = MemberLocationModel(
+      memberId: 2,
+      userId: 2,
+      name: 'Ana',
+      latitude: defaultLocation.latitude,
+      longitude: defaultLocation.longitude,
+      lastSeenAt: DateTime.now(),
+    );
+    final memberB = MemberLocationModel(
+      memberId: 3,
+      userId: 3,
+      name: 'Luis',
+      latitude: defaultLocation.latitude,
+      longitude: defaultLocation.longitude + 0.0004,
+      lastSeenAt: DateTime.now(),
+    );
+
+    await pumpMap(
+      tester,
+      controller,
+      state: LocationState.initial().copyWith(
+        visibleMembers: {2: memberA, 3: memberB},
+      ),
+      onMemberTap: (memberId) => selectedMemberId = memberId,
+    );
+    await tester.pump();
+
+    final markers = tester
+        .widget<MarkerLayer>(find.byType(MarkerLayer))
+        .markers;
+    expect(markers, hasLength(1));
+    expect(find.byType(UserAvatar), findsNWidgets(2));
+
+    final clusterContainer = markers.single.child as Container;
+    final clusterWrap = clusterContainer.child as Wrap;
+    expect(clusterWrap.children, hasLength(2));
+    expect(clusterWrap.spacing, 5);
+    expect(clusterWrap.runSpacing, 5);
+    final decoration = clusterContainer.decoration as BoxDecoration;
+    expect(decoration.borderRadius, BorderRadius.circular(15));
+    expect(decoration.color, isNull);
+    expect(decoration.border?.top.color, AppColors.primary);
+
+    final zoomBeforeSelection = controller.camera.zoom;
+    await tester.tap(find.byType(UserAvatar).first);
+    await tester.pump();
+    expect(selectedMemberId, 2);
+    expect(controller.camera.zoom, zoomBeforeSelection);
+
+    await tester.tap(find.byType(UserAvatar).last);
+    await tester.pump();
+    expect(selectedMemberId, 3);
+
     await disposeMap(tester, controller);
   });
   testWidgets('empty overlay area passes taps and drag through to FlutterMap', (
@@ -200,7 +280,7 @@ void main() {
     await disposeMap(tester, controller);
   });
   testWidgets(
-    'POI flag and circle use their color; people remain pins; preview uses its color',
+    'POI flag and circle use their color; people use avatars; preview uses its color',
     (tester) async {
       final controller = MapController();
       final member = MemberLocationModel(
@@ -240,7 +320,6 @@ void main() {
           .widget<MarkerLayer>(find.byType(MarkerLayer))
           .markers;
       Icon iconAt(int i) => (markers[i].child as Column).children.first as Icon;
-      expect(iconAt(0).icon, Icons.location_pin);
       expect(iconAt(1).icon, Icons.flag_rounded);
       expect(iconAt(1).color, Colors.red);
       expect(iconAt(2).icon, Icons.flag_rounded);
@@ -251,6 +330,52 @@ void main() {
       );
       await tester.pump();
       expect(find.byIcon(Icons.navigation), findsOneWidget); // Only the person.
+      await disposeMap(tester, controller);
+    },
+  );
+  testWidgets(
+    'offscreen POI indicator uses a flag and follows the list state',
+    (tester) async {
+      final controller = MapController();
+      final point = PointOfInterest(
+        id: 1,
+        name: 'Colegio',
+        radius: 100,
+        latitude: defaultLocation.latitude,
+        longitude: defaultLocation.longitude + 1,
+        groupId: 20,
+        createdAt: DateTime(2026),
+        color: PointOfInterestColor.red,
+      );
+
+      await pumpMap(
+        tester,
+        controller,
+        points: [point],
+        showOffscreenPoints: true,
+      );
+      controller.move(defaultLocation, 15);
+      await tester.pump();
+
+      final offscreenFlag = find.byWidgetPredicate(
+        (widget) =>
+            widget is Icon &&
+            widget.icon == Icons.flag_rounded &&
+            widget.color == Colors.white,
+      );
+      expect(offscreenFlag, findsOneWidget);
+      expect(
+        find.byWidgetPredicate(
+          (widget) =>
+              widget is Icon &&
+              widget.icon == Icons.navigation &&
+              widget.color == Colors.red,
+        ),
+        findsOneWidget,
+      );
+
+      await pumpMap(tester, controller, points: [point]);
+      expect(offscreenFlag, findsNothing);
       await disposeMap(tester, controller);
     },
   );

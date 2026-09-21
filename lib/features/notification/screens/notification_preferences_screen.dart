@@ -128,45 +128,58 @@ class GroupNotificationPreferencesScreen extends StatelessWidget {
         !state.isSaving &&
         !state.isLoading;
     return Scaffold(
-      appBar: AppBar(
-        title: Text(group?.groupName ?? 'Notificaciones del grupo'),
-      ),
-      body: group == null
-          ? const Center(child: Text('Este grupo ya no está disponible.'))
-          : ListView(
-              children: [
-                if (state.isSaving) const LinearProgressIndicator(),
-                if (state.errorMessage != null)
-                  Padding(
-                    padding: const EdgeInsets.all(16),
-                    child: Text(
-                      state.errorMessage!,
-                      style: TextStyle(
-                        color: Theme.of(context).colorScheme.error,
-                      ),
-                    ),
-                  ),
-                SwitchListTile(
-                  title: const Text('Notificaciones de este grupo'),
-                  value: group.enabled,
-                  onChanged: enabled
-                      ? (value) => state.setGroup(group, value)
-                      : null,
-                ),
-                const Padding(
-                  padding: EdgeInsets.all(16),
-                  child: Text('Tipos de notificación'),
-                ),
-                for (final entry in notificationTypeLabels.entries)
-                  SwitchListTile(
-                    title: Text(entry.value),
-                    value: group.types[entry.key] ?? true,
-                    onChanged: enabled && group.enabled
-                        ? (value) => state.setType(group, entry.key, value)
-                        : null,
-                  ),
-              ],
+      backgroundColor: AppColors.background,
+      body: SafeArea(
+        child: Column(
+          children: [
+            AppScreenHeader(
+              title: group?.groupName ?? 'Notificaciones del grupo',
+              onBack: () => Navigator.of(context).maybePop(),
             ),
+            Expanded(
+              child: group == null
+                  ? const Center(
+                      child: Text('Este grupo ya no está disponible.'),
+                    )
+                  : ListView(
+                      children: [
+                        if (state.isSaving) const LinearProgressIndicator(),
+                        if (state.errorMessage != null)
+                          Padding(
+                            padding: const EdgeInsets.all(16),
+                            child: Text(
+                              state.errorMessage!,
+                              style: TextStyle(
+                                color: Theme.of(context).colorScheme.error,
+                              ),
+                            ),
+                          ),
+                        SwitchListTile(
+                          title: const Text('Notificaciones de este grupo'),
+                          value: group.enabled,
+                          onChanged: enabled
+                              ? (value) => state.setGroup(group, value)
+                              : null,
+                        ),
+                        const Padding(
+                          padding: EdgeInsets.all(16),
+                          child: Text('Tipos de notificación'),
+                        ),
+                        for (final entry in notificationTypeLabels.entries)
+                          SwitchListTile(
+                            title: Text(entry.value),
+                            value: group.types[entry.key] ?? true,
+                            onChanged: enabled && group.enabled
+                                ? (value) =>
+                                      state.setType(group, entry.key, value)
+                                : null,
+                          ),
+                      ],
+                    ),
+            ),
+          ],
+        ),
+      ),
     );
   }
 }

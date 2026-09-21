@@ -6,7 +6,7 @@ import '../../../core/validators/form_validators.dart';
 import '../../../core/widgets/app_screen_header.dart';
 import '../providers/auth_provider.dart';
 import '../widgets/auth_submit_button.dart';
-import '../widgets/auth_text_field.dart';
+import '../widgets/password_text_field.dart';
 
 class ChangePasswordScreen extends StatefulWidget {
   const ChangePasswordScreen({super.key});
@@ -179,24 +179,21 @@ class _ChangePasswordScreenState extends State<ChangePasswordScreen> {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.stretch,
                       children: [
-                        AuthTextField(
+                        PasswordTextField(
                           controller: _currentPasswordController,
                           label: 'Contraseña actual',
-                          obscureText: true,
                           validator: _validateCurrentPassword,
                         ),
                         const SizedBox(height: 14),
-                        AuthTextField(
+                        PasswordTextField(
                           controller: _newPasswordController,
                           label: 'Nueva contraseña',
-                          obscureText: true,
                           validator: _validateNewPassword,
                         ),
                         const SizedBox(height: 14),
-                        AuthTextField(
+                        PasswordTextField(
                           controller: _confirmPasswordController,
                           label: 'Confirmar nueva contraseña',
-                          obscureText: true,
                           validator: _validateConfirmPassword,
                         ),
                         const SizedBox(height: 22),

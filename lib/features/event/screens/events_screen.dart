@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 
 import '../../../core/routes/app_routes.dart';
 import '../../../core/theme/app_colors.dart';
-import '../../../core/widgets/app_bottom_nav_bar.dart';
 import '../../group/widgets/group_selector_button.dart';
 import '../widgets/events_content.dart';
 
@@ -39,14 +38,6 @@ class EventsScreen extends StatelessWidget {
         highlightElevation: 12,
         onPressed: () => _goToCreateEvent(context),
         child: const Icon(Icons.add_rounded, size: 32),
-      ),
-      bottomNavigationBar: SafeArea(
-        top: false,
-        child: AppBottomNavBar(
-          selectedDestination: AppBottomDestination.events,
-          onDestinationSelected: (destination) =>
-              navigateToAppDestination(context, destination),
-        ),
       ),
     );
   }

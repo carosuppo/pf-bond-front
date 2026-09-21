@@ -5,6 +5,7 @@ import 'package:provider/provider.dart';
 import '../../../core/routes/app_routes.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/widgets/buttons/app_primary_button.dart';
+import '../../../core/widgets/user_avatar.dart';
 import '../../auth/providers/auth_provider.dart';
 import '../formatters/invitation_code_formatter.dart';
 import '../models/get_group_model.response.dart';
@@ -14,11 +15,13 @@ import '../providers/group_provider.dart';
 class GroupInfoBottomSheet extends StatelessWidget {
   final GetGroupResponseModel group;
   final ScrollController scrollController;
+  final Widget? bottomContent;
 
   const GroupInfoBottomSheet({
     super.key,
     required this.group,
     required this.scrollController,
+    this.bottomContent,
   });
 
   @override
@@ -250,6 +253,10 @@ class GroupInfoBottomSheet extends StatelessWidget {
                 ],
               ),
             ),
+            if (bottomContent != null) ...[
+              const SizedBox(height: 24),
+              bottomContent!,
+            ],
           ],
         ),
       ),
@@ -302,23 +309,10 @@ class _MemberListItem extends StatelessWidget {
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
       child: Row(
         children: [
-          Container(
-            width: 40,
-            height: 40,
-            decoration: BoxDecoration(
-              color: AppColors.surface,
-              shape: BoxShape.circle,
-            ),
-            child: Center(
-              child: Text(
-                member.name.isNotEmpty ? member.name[0].toUpperCase() : '?',
-                style: const TextStyle(
-                  color: AppColors.primary,
-                  fontSize: 16,
-                  fontWeight: FontWeight.w600,
-                ),
-              ),
-            ),
+          UserAvatar(
+            name: member.name,
+            photoUrl: member.profilePhoto,
+            radius: 20,
           ),
           const SizedBox(width: 12),
           Expanded(

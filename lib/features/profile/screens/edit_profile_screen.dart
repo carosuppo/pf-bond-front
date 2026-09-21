@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
-import '../../../core/routes/app_routes.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/validators/form_validators.dart';
 import '../../../core/widgets/app_screen_header.dart';
@@ -21,13 +20,10 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
   final _formKey = GlobalKey<FormState>();
 
   final _nameController = TextEditingController();
-  final _emailController = TextEditingController();
 
   String? _initialName;
-  String? _initialEmail;
 
   bool _hasLoaded = false;
-  bool _allowPopAfterSave = false;
 
   @override
   void initState() {
@@ -39,7 +35,6 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
   @override
   void dispose() {
     _nameController.dispose();
-    _emailController.dispose();
 
     super.dispose();
   }
@@ -49,8 +44,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
       return false;
     }
 
-    return _nameController.text.trim() != _initialName ||
-        _emailController.text.trim() != _initialEmail;
+    return _nameController.text.trim() != _initialName;
   }
 
   Future<void> _loadProfile() async {
@@ -66,10 +60,8 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
       final user = profileProvider.user;
 
       _initialName = user?.name;
-      _initialEmail = user?.email;
 
       _nameController.text = user?.name ?? '';
-      _emailController.text = user?.email ?? '';
     }
 
     setState(() {
@@ -85,22 +77,21 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
     final profileProvider = context.read<ProfileProvider>();
 
     final name = _nameController.text.trim();
-    final email = _emailController.text.trim();
 
-    final success = await profileProvider.updateProfile(
-      name: name != _initialName ? name : null,
-      email: email != _initialEmail ? email : null,
-    );
+    final success = await profileProvider.updateProfile(name: name);
 
     if (!mounted) {
       return;
     }
 
     if (success) {
+      final updatedUser = profileProvider.user;
+      if (updatedUser != null) {
+        context.read<AuthProvider>().updateUser(updatedUser);
+      }
+
       setState(() {
         _initialName = name;
-        _initialEmail = email;
-        _allowPopAfterSave = true;
       });
 
       ScaffoldMessenger.of(context).showSnackBar(
@@ -123,56 +114,6 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
         ),
       );
     }
-  }
-
-  Future<void> _logout() async {
-    final shouldLogout = await showDialog<bool>(
-      context: context,
-      builder: (dialogContext) => AlertDialog(
-        title: const Text('Cerrar sesión'),
-        content: const Text('¿Estás seguro de que querés cerrar sesión?'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(dialogContext).pop(false),
-            child: const Text('Cancelar'),
-          ),
-          TextButton(
-            onPressed: () => Navigator.of(dialogContext).pop(true),
-            child: const Text(
-              'Cerrar sesión',
-              style: TextStyle(color: AppColors.error),
-            ),
-          ),
-        ],
-      ),
-    );
-
-    if (shouldLogout != true || !mounted) {
-      return;
-    }
-
-    final authProvider = context.read<AuthProvider>();
-    final success = await authProvider.logout();
-
-    if (!mounted) {
-      return;
-    }
-
-    if (success) {
-      Navigator.of(
-        context,
-      ).pushNamedAndRemoveUntil(AppRoutes.login, (route) => false);
-
-      return;
-    }
-
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(
-          authProvider.errorMessage ?? 'No se pudo cerrar la sesión.',
-        ),
-      ),
-    );
   }
 
   Future<void> _handlePopAttempt(bool didPop) async {
@@ -202,6 +143,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
     );
 
     if (shouldDiscard == true && mounted) {
+      context.read<ProfileProvider>().clearSelectedPhoto();
       Navigator.of(context).pop();
     }
   }
@@ -209,10 +151,9 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
   @override
   Widget build(BuildContext context) {
     final profileProvider = context.watch<ProfileProvider>();
-    final authProvider = context.watch<AuthProvider>();
 
     return PopScope(
-      canPop: _allowPopAfterSave || !_isDirty,
+      canPop: !_isDirty,
       onPopInvokedWithResult: (didPop, result) {
         _handlePopAttempt(didPop);
       },
@@ -225,7 +166,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
                 title: 'Modificar mi perfil',
                 onBack: () => Navigator.of(context).maybePop(),
               ),
-              Expanded(child: _buildBody(profileProvider, authProvider)),
+              Expanded(child: _buildBody(profileProvider)),
             ],
           ),
         ),
@@ -233,10 +174,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
     );
   }
 
-  Widget _buildBody(
-    ProfileProvider profileProvider,
-    AuthProvider authProvider,
-  ) {
+  Widget _buildBody(ProfileProvider profileProvider) {
     if (!_hasLoaded) {
       return const Center(child: CircularProgressIndicator());
     }
@@ -276,33 +214,11 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
               label: 'Nombre',
               validator: FormValidators.validateName,
             ),
-            const SizedBox(height: 14),
-            AuthTextField(
-              controller: _emailController,
-              label: 'Email',
-              keyboardType: TextInputType.emailAddress,
-              validator: FormValidators.validateEmail,
-            ),
             const SizedBox(height: 22),
             AuthSubmitButton(
               text: 'Guardar cambios',
               isLoading: profileProvider.isSaving,
               onPressed: _submit,
-            ),
-            const SizedBox(height: 32),
-            const Divider(),
-            const SizedBox(height: 16),
-            OutlinedButton.icon(
-              onPressed: authProvider.isLoading ? null : _logout,
-              icon: const Icon(Icons.logout),
-              label: Text(
-                authProvider.isLoading ? 'Cerrando sesión...' : 'Cerrar sesión',
-              ),
-              style: OutlinedButton.styleFrom(
-                foregroundColor: AppColors.error,
-                side: const BorderSide(color: AppColors.error),
-                padding: const EdgeInsets.symmetric(vertical: 14),
-              ),
             ),
           ],
         ),

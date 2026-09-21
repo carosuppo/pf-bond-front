@@ -2,6 +2,7 @@ class MemberLocationModel {
   final int memberId;
   final int userId;
   final String name;
+  final String? profilePhoto;
 
   final double latitude;
   final double longitude;
@@ -15,6 +16,7 @@ class MemberLocationModel {
     required this.memberId,
     required this.userId,
     required this.name,
+    this.profilePhoto,
     required this.latitude,
     required this.longitude,
     this.accuracy,
@@ -29,6 +31,8 @@ class MemberLocationModel {
       userId: json['userId'] as int,
 
       name: json['name'] as String,
+
+      profilePhoto: json['profilePhoto'] as String?,
 
       latitude: (json['latitude'] as num).toDouble(),
 
@@ -50,6 +54,7 @@ class MemberLocationModel {
     int? memberId,
     int? userId,
     String? name,
+    String? profilePhoto,
     double? latitude,
     double? longitude,
     double? accuracy,
@@ -62,6 +67,8 @@ class MemberLocationModel {
       userId: userId ?? this.userId,
 
       name: name ?? this.name,
+
+      profilePhoto: profilePhoto ?? this.profilePhoto,
 
       latitude: latitude ?? this.latitude,
 

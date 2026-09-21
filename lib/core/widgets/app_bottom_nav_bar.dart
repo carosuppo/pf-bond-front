@@ -1,24 +1,11 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 
-import '../routes/app_routes.dart';
+import '../../features/auth/providers/auth_provider.dart';
 import '../theme/app_colors.dart';
+import 'user_avatar.dart';
 
 enum AppBottomDestination { map, events, settings }
-
-extension AppBottomDestinationRoute on AppBottomDestination {
-  String get route => switch (this) {
-    AppBottomDestination.map => AppRoutes.map,
-    AppBottomDestination.events => AppRoutes.events,
-    AppBottomDestination.settings => AppRoutes.settings,
-  };
-}
-
-void navigateToAppDestination(
-  BuildContext context,
-  AppBottomDestination destination,
-) {
-  Navigator.of(context).pushReplacementNamed(destination.route);
-}
 
 class _BottomNavItem {
   const _BottomNavItem({
@@ -56,8 +43,8 @@ class AppBottomNavBar extends StatelessWidget {
     ),
     _BottomNavItem(
       destination: AppBottomDestination.settings,
-      icon: Icons.settings_outlined,
-      selectedIcon: Icons.settings_rounded,
+      icon: Icons.person_outline,
+      selectedIcon: Icons.person,
       tooltip: 'Configuración',
     ),
   ];
@@ -81,13 +68,16 @@ class AppBottomNavBar extends StatelessWidget {
       padding: const EdgeInsets.symmetric(horizontal: 40, vertical: 2),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-        children: [for (final item in _items) _buildButton(item)],
+        children: [for (final item in _items) _buildButton(context, item)],
       ),
     );
   }
 
-  Widget _buildButton(_BottomNavItem item) {
+  Widget _buildButton(BuildContext context, _BottomNavItem item) {
     final isSelected = item.destination == selectedDestination;
+    final user = item.destination == AppBottomDestination.settings
+        ? context.watch<AuthProvider>().authResponse?.user
+        : null;
 
     return IconButton(
       tooltip: item.tooltip,
@@ -96,11 +86,19 @@ class AppBottomNavBar extends StatelessWidget {
           : () => onDestinationSelected(item.destination),
       padding: EdgeInsets.zero,
       constraints: const BoxConstraints(minWidth: 40, minHeight: 36),
-      icon: Icon(
-        isSelected ? item.selectedIcon : item.icon,
-        size: 30,
-        color: isSelected ? AppColors.text : AppColors.bottomBarIconInactive,
-      ),
+      icon: item.destination == AppBottomDestination.settings
+          ? UserAvatar(
+              name: user?.name ?? '',
+              photoUrl: user?.profilePhoto,
+              radius: 15,
+              borderColor: isSelected ? Colors.white : null,
+              borderWidth: isSelected ? 1 : 0,
+            )
+          : Icon(
+              isSelected ? item.selectedIcon : item.icon,
+              size: 30,
+              color: Colors.white,
+            ),
     );
   }
 }

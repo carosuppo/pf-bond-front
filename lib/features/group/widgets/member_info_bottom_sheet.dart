@@ -1,16 +1,19 @@
 import 'package:flutter/material.dart';
 
 import '../../../core/theme/app_colors.dart';
+import '../../../core/widgets/user_avatar.dart';
 import '../models/get_member_info_model.response.dart';
 
 class MemberInfoBottomSheet extends StatelessWidget {
   final GetMemberInfoResponseModel memberInfo;
   final ScrollController scrollController;
+  final Widget? bottomContent;
 
   const MemberInfoBottomSheet({
     super.key,
     required this.memberInfo,
     required this.scrollController,
+    this.bottomContent,
   });
 
   @override
@@ -24,14 +27,24 @@ class MemberInfoBottomSheet extends StatelessWidget {
           children: [
             const SizedBox(height: 24),
             Center(
-              child: Text(
-                memberInfo.name,
-                textAlign: TextAlign.center,
-                style: const TextStyle(
-                  color: AppColors.text,
-                  fontSize: 24,
-                  fontWeight: FontWeight.w600,
-                ),
+              child: Column(
+                children: [
+                  UserAvatar(
+                    name: memberInfo.name,
+                    photoUrl: memberInfo.profilePhoto,
+                    radius: 42,
+                  ),
+                  const SizedBox(height: 12),
+                  Text(
+                    memberInfo.name,
+                    textAlign: TextAlign.center,
+                    style: const TextStyle(
+                      color: AppColors.text,
+                      fontSize: 24,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ],
               ),
             ),
             const SizedBox(height: 24),
@@ -85,6 +98,10 @@ class MemberInfoBottomSheet extends StatelessWidget {
                 ],
               ),
             ),
+            if (bottomContent != null) ...[
+              const SizedBox(height: 24),
+              bottomContent!,
+            ],
           ],
         ),
       ),
@@ -94,8 +111,13 @@ class MemberInfoBottomSheet extends StatelessWidget {
 
 class MemberInfoLoading extends StatelessWidget {
   final ScrollController scrollController;
+  final Widget? bottomContent;
 
-  const MemberInfoLoading({super.key, required this.scrollController});
+  const MemberInfoLoading({
+    super.key,
+    required this.scrollController,
+    this.bottomContent,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -103,11 +125,19 @@ class MemberInfoLoading extends StatelessWidget {
       child: SingleChildScrollView(
         controller: scrollController,
         padding: const EdgeInsets.fromLTRB(20, 12, 20, 80),
-        child: const SizedBox(
-          height: 120,
-          child: Center(
-            child: CircularProgressIndicator(color: AppColors.primary),
-          ),
+        child: Column(
+          children: [
+            const SizedBox(
+              height: 120,
+              child: Center(
+                child: CircularProgressIndicator(color: AppColors.primary),
+              ),
+            ),
+            if (bottomContent != null) ...[
+              const SizedBox(height: 24),
+              bottomContent!,
+            ],
+          ],
         ),
       ),
     );

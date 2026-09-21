@@ -17,6 +17,7 @@ class PointOfInterestProvider extends ChangeNotifier {
   String? errorMessage;
   int? _groupId;
   int _loadVersion = 0;
+  int _sessionVersion = 0;
 
   Future<void> loadPoints(int groupId) async {
     final loadVersion = ++_loadVersion;
@@ -41,27 +42,39 @@ class PointOfInterestProvider extends ChangeNotifier {
   }
 
   void clear() {
+    _sessionVersion++;
     _loadVersion++;
     _groupId = null;
     points = [];
+    loading = false;
+    saving = false;
+    updating = false;
+    deleting = false;
     errorMessage = null;
     notifyListeners();
   }
 
+  void resetSessionState() => clear();
+
   Future<bool> create(int groupId, CreatePointOfInterestRequest request) async {
+    final sessionVersion = _sessionVersion;
     saving = true;
     errorMessage = null;
     notifyListeners();
     try {
       final point = await _service.create(groupId, request);
+      if (sessionVersion != _sessionVersion) return false;
       if (_groupId == groupId) points = [...points, point];
       return true;
     } catch (error) {
+      if (sessionVersion != _sessionVersion) return false;
       errorMessage = _message(error);
       return false;
     } finally {
-      saving = false;
-      notifyListeners();
+      if (sessionVersion == _sessionVersion) {
+        saving = false;
+        notifyListeners();
+      }
     }
   }
 
@@ -70,11 +83,13 @@ class PointOfInterestProvider extends ChangeNotifier {
     int pointId,
     UpdatePointOfInterestRequest request,
   ) async {
+    final sessionVersion = _sessionVersion;
     updating = true;
     errorMessage = null;
     notifyListeners();
     try {
       final updated = await _service.update(groupId, pointId, request);
+      if (sessionVersion != _sessionVersion) return false;
       if (_groupId == groupId) {
         points = points
             .map((point) => point.id == pointId ? updated : point)
@@ -82,30 +97,38 @@ class PointOfInterestProvider extends ChangeNotifier {
       }
       return true;
     } catch (error) {
+      if (sessionVersion != _sessionVersion) return false;
       errorMessage = _message(error);
       return false;
     } finally {
-      updating = false;
-      notifyListeners();
+      if (sessionVersion == _sessionVersion) {
+        updating = false;
+        notifyListeners();
+      }
     }
   }
 
   Future<bool> delete(int groupId, int pointId) async {
+    final sessionVersion = _sessionVersion;
     deleting = true;
     errorMessage = null;
     notifyListeners();
     try {
       await _service.delete(groupId, pointId);
+      if (sessionVersion != _sessionVersion) return false;
       if (_groupId == groupId) {
         points = points.where((point) => point.id != pointId).toList();
       }
       return true;
     } catch (error) {
+      if (sessionVersion != _sessionVersion) return false;
       errorMessage = _message(error);
       return false;
     } finally {
-      deleting = false;
-      notifyListeners();
+      if (sessionVersion == _sessionVersion) {
+        deleting = false;
+        notifyListeners();
+      }
     }
   }
 

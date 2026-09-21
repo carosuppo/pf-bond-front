@@ -1,9 +1,11 @@
 import 'package:bond_front/features/location/constants/location_tracking_config.dart';
+import 'package:bond_front/core/theme/app_colors.dart';
 import 'package:bond_front/features/location/models/location_permission_status.dart';
 import 'package:bond_front/features/location/models/location_state.dart';
 import 'package:bond_front/features/location/models/member_location_model.dart';
 import 'package:bond_front/features/location/providers/location_provider.dart';
 import 'package:bond_front/features/location/widgets/location_map.dart';
+import 'package:bond_front/core/widgets/user_avatar.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -58,7 +60,7 @@ Future<void> _disposeMap(WidgetTester tester) async {
 
 void main() {
   testWidgets(
-    'BND-59 FE-01 muestra solo miembros activos, en su posicion y con colores distintos',
+    'BND-59 FE-01 muestra miembros con ubicacion antigua y atenua su avatar',
     (tester) async {
       final now = DateTime.now();
 
@@ -71,14 +73,14 @@ void main() {
         lastSeenAt: now.subtract(const Duration(minutes: 1)),
       );
 
-      final expired = MemberLocationModel(
+      final stale = MemberLocationModel(
         memberId: 3,
         userId: 3,
-        name: 'Vencido',
+        name: 'Antiguo',
         latitude: -34.61,
         longitude: -58.39,
         lastSeenAt: now.subtract(
-          Duration(minutes: LocationTrackingConfig.hideAfter.inMinutes + 1),
+          Duration(minutes: LocationTrackingConfig.staleAfter.inMinutes + 1),
         ),
       );
 
@@ -95,51 +97,57 @@ void main() {
         tester,
         _stateWithMembers({
           activeA.memberId: activeA,
-          expired.memberId: expired,
+          stale.memberId: stale,
           activeB.memberId: activeB,
         }),
       );
 
       final markerLayer = tester.widget<MarkerLayer>(find.byType(MarkerLayer));
 
-      // Solo deben existir los dos miembros activos.
-      expect(markerLayer.markers, hasLength(2));
+      expect(markerLayer.markers, hasLength(3));
 
       final firstMarker = markerLayer.markers[0];
 
-      final secondMarker = markerLayer.markers[1];
+      final staleMarker = markerLayer.markers[1];
 
       // Verificamos la posición geográfica de Ana.
       expect(firstMarker.point.latitude, activeA.latitude);
 
       expect(firstMarker.point.longitude, activeA.longitude);
 
-      // Verificamos la posición geográfica de Luis.
-      expect(secondMarker.point.latitude, activeB.latitude);
+      expect(staleMarker.point.latitude, stale.latitude);
 
-      expect(secondMarker.point.longitude, activeB.longitude);
+      expect(staleMarker.point.longitude, stale.longitude);
 
-      // Inspeccionamos directamente el contenido
-      // de los marcadores.
+      final staleColumn = staleMarker.child as Column;
+      final staleAvatar = staleColumn.children[1] as Opacity;
+
+      expect(staleAvatar.opacity, 0.5);
+      expect(staleAvatar.child, isA<UserAvatar>());
+
+      final thirdMarker = markerLayer.markers[2];
+
+      expect(thirdMarker.point.latitude, activeB.latitude);
+
       final firstColumn = firstMarker.child as Column;
 
-      final secondColumn = secondMarker.child as Column;
+      final thirdColumn = thirdMarker.child as Column;
 
-      final firstIcon = firstColumn.children[0] as Icon;
+      final firstName = firstColumn.children[0] as Text;
 
-      final secondIcon = secondColumn.children[0] as Icon;
+      final thirdName = thirdColumn.children[0] as Text;
 
-      final firstName = firstColumn.children[1] as Text;
+      final firstAvatar = firstColumn.children[1] as UserAvatar;
 
-      final secondName = secondColumn.children[1] as Text;
+      final thirdAvatar = thirdColumn.children[1] as UserAvatar;
 
-      // Los miembros visibles deben ser Ana y Luis.
       expect(firstName.data, 'Ana');
 
-      expect(secondName.data, 'Luis');
+      expect(thirdName.data, 'Luis');
 
-      // Cada miembro debe tener un color distinto.
-      expect(firstIcon.color, isNot(equals(secondIcon.color)));
+      expect(firstAvatar.borderColor, AppColors.primary);
+
+      expect(thirdAvatar.borderColor, AppColors.primary);
 
       await _disposeMap(tester);
     },

@@ -8,7 +8,6 @@ class AppRoutes {
   static const String groups = '/groups';
   static const String map = '/map';
   static const String settings = '/settings';
-  static const String profile = '/profile';
   static const String editProfile = '/edit-profile';
   static const String changePassword = '/change-password';
   static const String joinGroup = '/groups/join-group';

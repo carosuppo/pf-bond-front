@@ -7,6 +7,7 @@ import '../../../core/validators/form_validators.dart';
 import '../providers/auth_provider.dart';
 import '../widgets/auth_submit_button.dart';
 import '../widgets/auth_text_field.dart';
+import '../widgets/password_text_field.dart';
 
 class RegisterScreen extends StatefulWidget {
   const RegisterScreen({super.key});
@@ -140,10 +141,9 @@ class _RegisterScreenState extends State<RegisterScreen> {
                         validator: FormValidators.validateEmail,
                       ),
                       const SizedBox(height: 14),
-                      AuthTextField(
+                      PasswordTextField(
                         controller: _passwordController,
                         label: 'Contraseña',
-                        obscureText: true,
                         validator: _validatePassword,
                       ),
                       const SizedBox(height: 22),

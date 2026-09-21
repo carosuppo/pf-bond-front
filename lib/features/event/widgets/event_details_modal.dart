@@ -5,6 +5,7 @@ import 'package:provider/provider.dart';
 import '../../../core/models/geocoding_result.dart';
 import '../../../core/services/geocoding_service.dart';
 import '../../../core/theme/app_colors.dart';
+import '../../../core/widgets/user_avatar.dart';
 import '../../group/models/get_member_model.response.dart';
 import '../../group/providers/group_provider.dart';
 import '../../location/widgets/location_map.dart';
@@ -56,7 +57,7 @@ class EventDetailsModal extends StatelessWidget {
     required this.groupId,
   });
 
-  List<String> _memberNames(
+  List<_EventMember> _eventMembers(
     BuildContext context,
     EventResponseModel currentEvent,
   ) {
@@ -64,17 +65,24 @@ class EventDetailsModal extends StatelessWidget {
         context.watch<GroupProvider>().groupDetails?.members ??
         const <GetMemberResponseModel>[];
 
-    final nameById = {for (final member in members) member.id: member.name};
+    final memberById = {for (final member in members) member.id: member};
 
     return currentEvent.memberIds
-        .map((memberId) => nameById[memberId] ?? 'Miembro #$memberId')
+        .map((memberId) {
+          final member = memberById[memberId];
+
+          return _EventMember(
+            name: member?.name ?? 'Miembro #$memberId',
+            photoUrl: member?.profilePhoto,
+          );
+        })
         .toList(growable: false);
   }
 
   @override
   Widget build(BuildContext context) {
     final currentEvent = _currentEvent(context);
-    final memberNames = _memberNames(context, currentEvent);
+    final eventMembers = _eventMembers(context, currentEvent);
     final hasEnd = currentEvent.endAt != null;
     final sameDay =
         hasEnd &&
@@ -176,7 +184,7 @@ class EventDetailsModal extends StatelessWidget {
                         ),
                       ],
 
-                      if (memberNames.isNotEmpty) ...[
+                      if (eventMembers.isNotEmpty) ...[
                         const SizedBox(height: 20),
                         const _SectionTitle('Miembros'),
                         const SizedBox(height: 10),
@@ -184,8 +192,11 @@ class EventDetailsModal extends StatelessWidget {
                           spacing: 8,
                           runSpacing: 8,
                           children: [
-                            for (final name in memberNames)
-                              _MemberChip(name: name),
+                            for (final member in eventMembers)
+                              _MemberChip(
+                                name: member.name,
+                                photoUrl: member.photoUrl,
+                              ),
                           ],
                         ),
                       ],
@@ -393,15 +404,21 @@ class _EventLocationDetailsState extends State<_EventLocationDetails> {
   }
 }
 
+class _EventMember {
+  final String name;
+  final String? photoUrl;
+
+  const _EventMember({required this.name, required this.photoUrl});
+}
+
 class _MemberChip extends StatelessWidget {
   final String name;
+  final String? photoUrl;
 
-  const _MemberChip({required this.name});
+  const _MemberChip({required this.name, required this.photoUrl});
 
   @override
   Widget build(BuildContext context) {
-    final initial = name.isNotEmpty ? name[0].toUpperCase() : '?';
-
     return Container(
       padding: const EdgeInsets.fromLTRB(8, 6, 12, 6),
       decoration: BoxDecoration(
@@ -411,24 +428,7 @@ class _MemberChip extends StatelessWidget {
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Container(
-            width: 24,
-            height: 24,
-            decoration: const BoxDecoration(
-              color: AppColors.primary,
-              shape: BoxShape.circle,
-            ),
-            child: Center(
-              child: Text(
-                initial,
-                style: const TextStyle(
-                  color: AppColors.onPrimary,
-                  fontSize: 12,
-                  fontWeight: FontWeight.w700,
-                ),
-              ),
-            ),
-          ),
+          UserAvatar(name: name, photoUrl: photoUrl, radius: 12),
           const SizedBox(width: 8),
           Text(
             name,
