@@ -69,7 +69,10 @@ class _CreateGroupFormState extends State<CreateGroupForm> {
       await showModalBottomSheet<void>(
         context: context,
         builder: (_) {
-          return InvitationCodeModal(invitationCode: invitationCode);
+          return InvitationCodeModal(
+            invitationCode: invitationCode,
+            groupName: provider.group!.name,
+          );
         },
       );
 

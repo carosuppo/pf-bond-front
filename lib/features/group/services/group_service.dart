@@ -1,4 +1,5 @@
 import '../../../core/network/api_client.dart';
+import '../../../core/network/api_exception.dart';
 import '../models/create_group_model.request.dart';
 import '../models/create_group_model.response.dart';
 import '../models/get_group_model.response.dart';
@@ -29,12 +30,26 @@ class GroupService {
   Future<JoinGroupResponseModel> joinGroup({
     required JoinGroupRequest request,
   }) async {
-    final response = await _apiClient.authenticatedPost(
-      '/group/join',
-      request.toJson(),
-    );
+    try {
+      final response = await _apiClient.authenticatedPost(
+        '/group/join',
+        request.toJson(),
+      );
 
-    return JoinGroupResponseModel.fromJson(response);
+      return JoinGroupResponseModel.fromJson(response);
+    } on ApiException catch (error) {
+      final responseBody = error.responseBody;
+      if (error.statusCode == 409 &&
+          responseBody != null &&
+          responseBody['group'] is Map<String, dynamic>) {
+        return JoinGroupResponseModel.fromJson(
+          responseBody,
+          alreadyMember: true,
+        );
+      }
+
+      rethrow;
+    }
   }
 
   Future<GroupResponseModel> updateGroup({

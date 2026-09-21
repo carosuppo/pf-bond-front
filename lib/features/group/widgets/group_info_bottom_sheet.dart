@@ -11,6 +11,7 @@ import '../formatters/invitation_code_formatter.dart';
 import '../models/get_group_model.response.dart';
 import '../models/get_member_model.response.dart';
 import '../providers/group_provider.dart';
+import '../services/group_invitation_share_service.dart';
 
 class GroupInfoBottomSheet extends StatelessWidget {
   final GetGroupResponseModel group;
@@ -23,6 +24,29 @@ class GroupInfoBottomSheet extends StatelessWidget {
     required this.scrollController,
     this.bottomContent,
   });
+
+  Future<void> _shareViaWhatsApp(
+    BuildContext context,
+    GetGroupResponseModel displayedGroup,
+  ) async {
+    try {
+      await context.read<GroupInvitationShareService>().shareViaWhatsApp(
+        groupName: displayedGroup.name,
+        invitationCode: displayedGroup.invitationCode,
+      );
+    } catch (_) {
+      if (!context.mounted) {
+        return;
+      }
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'No se pudo compartir. Podés copiar el código manualmente.',
+          ),
+        ),
+      );
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -121,6 +145,16 @@ class GroupInfoBottomSheet extends StatelessWidget {
                         tooltip: 'Copiar código',
                       ),
                     ],
+                  ),
+                  const SizedBox(height: 12),
+                  SizedBox(
+                    width: double.infinity,
+                    child: OutlinedButton.icon(
+                      onPressed: () =>
+                          _shareViaWhatsApp(context, displayedGroup),
+                      icon: const Icon(Icons.share_rounded),
+                      label: const Text('Invitar por WhatsApp'),
+                    ),
                   ),
                 ],
               ),

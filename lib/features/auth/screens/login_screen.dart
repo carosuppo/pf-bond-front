@@ -7,6 +7,7 @@ import '../../../core/routes/navigation/post_auth_navigator.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/widgets/buttons/app_primary_button.dart';
 import '../../group/providers/group_provider.dart';
+import '../../group/services/group_invitation_coordinator.dart';
 import '../../location/providers/location_provider.dart';
 import '../providers/auth_provider.dart';
 import '../widgets/auth_text_field.dart';
@@ -64,6 +65,8 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
       context: context,
       groupProvider: context.read<GroupProvider>(),
       locationNotifier: ref.read(locationProvider.notifier),
+      invitationCoordinator: context.read<GroupInvitationCoordinator>(),
+      authProvider: authProvider,
     );
   }
 

@@ -207,6 +207,7 @@ class ApiClient {
     throw ApiException(
       _getErrorMessage(decodedBody),
       statusCode: response.statusCode,
+      responseBody: decodedBody is Map<String, dynamic> ? decodedBody : null,
     );
   }
 }

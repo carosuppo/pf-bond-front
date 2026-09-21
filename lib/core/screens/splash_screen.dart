@@ -5,6 +5,7 @@ import 'package:provider/provider.dart';
 import '../../core/routes/navigation/post_auth_navigator.dart';
 import '../../features/auth/providers/auth_provider.dart';
 import '../../features/group/providers/group_provider.dart';
+import '../../features/group/services/group_invitation_coordinator.dart';
 import '../../features/location/providers/location_provider.dart';
 import '../routes/app_routes.dart';
 
@@ -79,6 +80,8 @@ class _SplashScreenState extends ConsumerState<SplashScreen>
       context: context,
       groupProvider: groupProvider,
       locationNotifier: locationNotifier,
+      invitationCoordinator: context.read<GroupInvitationCoordinator>(),
+      authProvider: authProvider,
     );
   }
 

@@ -2,6 +2,7 @@ import 'dart:math';
 
 import 'package:flutter/material.dart';
 
+import '../../../core/network/api_exception.dart';
 import '../../../core/preferences/app_preferences_service.dart';
 import '../models/create_group_model.request.dart';
 import '../models/create_group_model.response.dart';
@@ -32,6 +33,7 @@ class GroupProvider extends ChangeNotifier {
   GetGroupResponseModel? groupDetails;
   List<GetGroupsResponseModel> groups = [];
   JoinGroupResponseModel? joinResponse;
+  int? joinErrorStatusCode;
 
   Future<void> resetSessionState() async {
     _sessionVersion++;
@@ -44,6 +46,7 @@ class GroupProvider extends ChangeNotifier {
     groupDetails = null;
     groups = [];
     joinResponse = null;
+    joinErrorStatusCode = null;
     notifyListeners();
     await _pendingPreferenceWrite;
   }
@@ -122,6 +125,7 @@ class GroupProvider extends ChangeNotifier {
     isLoading = true;
     errorMessage = null;
     joinResponse = null;
+    joinErrorStatusCode = null;
 
     notifyListeners();
 
@@ -135,6 +139,9 @@ class GroupProvider extends ChangeNotifier {
       return true;
     } catch (error) {
       if (sessionVersion != _sessionVersion) return false;
+      if (error is ApiException) {
+        joinErrorStatusCode = error.statusCode;
+      }
       errorMessage = error.toString().replaceFirst('Exception: ', '');
 
       return false;
@@ -397,6 +404,37 @@ class GroupProvider extends ChangeNotifier {
     notifyListeners();
 
     await getGroupDetails(groupId: group.id);
+  }
+
+  Future<bool> refreshAndSelectGroup({required int groupId}) async {
+    final sessionVersion = _sessionVersion;
+    final loaded = await getGroups();
+    if (!loaded || sessionVersion != _sessionVersion) {
+      return false;
+    }
+
+    GetGroupsResponseModel? joinedGroup;
+    for (final currentGroup in groups) {
+      if (currentGroup.id == groupId) {
+        joinedGroup = currentGroup;
+        break;
+      }
+    }
+
+    if (joinedGroup == null) {
+      errorMessage = 'No se pudo encontrar el grupo de la invitación.';
+      notifyListeners();
+      return false;
+    }
+
+    await selectGroup(joinedGroup);
+    if (sessionVersion != _sessionVersion || activeGroup?.id != groupId) {
+      return false;
+    }
+
+    _isInitialized = true;
+    notifyListeners();
+    return groupDetails?.id == groupId;
   }
 
   Future<bool> getGroupDetails({required int groupId}) async {
