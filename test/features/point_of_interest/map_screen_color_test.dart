@@ -10,6 +10,8 @@ import 'package:bond_front/features/group/models/get_groups_model.response.dart'
 import 'package:bond_front/features/group/providers/group_provider.dart';
 import 'package:bond_front/features/group/services/group_service.dart';
 import 'package:bond_front/features/location/constants/default_location.dart';
+import 'package:bond_front/features/location/models/location_model.dart';
+import 'package:bond_front/features/location/models/location_permission_status.dart';
 import 'package:bond_front/features/location/models/location_state.dart';
 import 'package:bond_front/features/location/models/location_socket_event.dart';
 import 'package:bond_front/features/location/models/member_location_model.dart';
@@ -21,8 +23,10 @@ import 'package:bond_front/features/location/services/location_service.dart';
 import 'package:bond_front/features/location/widgets/location_map.dart';
 import 'package:bond_front/features/notification/services/notification_api_service.dart';
 import 'package:bond_front/features/notification/services/push_notification_service.dart';
+import 'package:bond_front/features/point_of_interest/models/point_of_interest_request.dart';
 import 'package:bond_front/features/point_of_interest/providers/point_of_interest_provider.dart';
 import 'package:bond_front/features/point_of_interest/services/point_of_interest_service.dart';
+import 'package:bond_front/features/routing/models/route_mode.dart';
 import 'package:bond_front/features/routing/providers/navigation_provider.dart';
 import 'package:bond_front/features/routing/services/route_service.dart';
 import 'package:flutter/material.dart';
@@ -49,6 +53,7 @@ class MemoryApi extends ApiClient {
     'color': 'RED',
   };
   bool deleted = false;
+  int routeCalls = 0;
   @override
   Future<List<Map<String, dynamic>>> authenticatedGetList(String path) async =>
       [Map.of(point)];
@@ -62,9 +67,53 @@ class MemoryApi extends ApiClient {
   }
 
   @override
+  Future<Map<String, dynamic>> authenticatedPost(
+    String path,
+    Map<String, dynamic> body,
+  ) async {
+    routeCalls++;
+    return {
+      'points': [
+        {
+          'latitude': body['originLatitude'],
+          'longitude': body['originLongitude'],
+        },
+        {'latitude': point['latitude'], 'longitude': point['longitude']},
+      ],
+      'distanceMeters': 1200,
+      'durationSeconds': 600,
+    };
+  }
+
+  @override
   Future<void> authenticatedDelete(String path) async {
     deleted = true;
   }
+}
+
+class TestNavigationLocationService extends LocationService {
+  int cancellations = 0;
+  late final positions = StreamController<LocationModel>.broadcast(
+    sync: true,
+    onCancel: () => cancellations++,
+  );
+
+  @override
+  Future<LocationPermissionStatus> requestForegroundPermission() async =>
+      LocationPermissionStatus.whileInUse;
+
+  @override
+  Future<LocationModel> getCurrentLocation() async => LocationModel(
+    latitude: defaultLocation.latitude,
+    longitude: defaultLocation.longitude - 0.01,
+    accuracy: 5,
+    timestamp: DateTime(2026),
+  );
+
+  @override
+  Stream<LocationModel> getLocationStream() => positions.stream;
+
+  Future<void> close() => positions.close();
 }
 
 class StaticLocation extends LocationProvider {
@@ -108,6 +157,7 @@ void main() {
     addTearDown(tester.view.resetPhysicalSize);
     addTearDown(tester.view.resetDevicePixelRatio);
     final api = MemoryApi();
+    var now = DateTime.utc(2026, 9, 22, 17);
     final preferences = AppPreferencesService();
     final group = GroupProvider(GroupService(api), preferences)
       ..activeGroup = GetGroupsResponseModel(id: 20, name: 'Familia')
@@ -118,7 +168,10 @@ void main() {
         invitationCode: 'ABCDEF',
         members: [],
       );
-    final points = PointOfInterestProvider(PointOfInterestService(api));
+    final points = PointOfInterestProvider(
+      PointOfInterestService(api),
+      clock: () => now,
+    );
     final push = PushNotificationService(
       NotificationApiService(api),
       preferences,
@@ -133,7 +186,19 @@ void main() {
       _NoopSessionStateCleanup(),
     );
     final socket = TestSocket();
-    final navigation = NavigationProvider(RouteService(api), LocationService());
+    final navigationLocation = TestNavigationLocationService();
+    final navigation = NavigationProvider(
+      RouteService(api),
+      navigationLocation,
+    );
+    await points.loadPoints(20);
+    expect(
+      await navigation.start(
+        point: points.points.single,
+        selectedMode: RouteMode.walking,
+      ),
+      isTrue,
+    );
     await tester.pumpWidget(
       ProviderScope(
         overrides: [
@@ -170,20 +235,68 @@ void main() {
     }
 
     await expandPoints();
-    expect(find.text('Colegio'), findsNWidgets(2));
+    expect(find.text('Colegio'), findsNWidgets(3));
     expect(find.text('Punto de encuentro'), findsOneWidget);
     expect(find.text('Radio: 100 m'), findsOneWidget);
     expect(find.text('Cómo llegar'), findsOneWidget);
+    expect(api.routeCalls, 1);
+
+    expect(
+      await points.update(
+        20,
+        1,
+        const UpdatePointOfInterestRequest(name: 'UTN'),
+      ),
+      isTrue,
+    );
+    await tester.pump();
+    expect(navigation.destination?.name, 'UTN');
+    expect(api.routeCalls, 1);
+
     final deleteButton = find.byTooltip('Eliminar punto de interés');
     await tester.ensureVisible(deleteButton);
     await tester.tap(deleteButton);
     await tester.pumpAndSettle();
     expect(find.text('¿Eliminar este punto de interés?'), findsOneWidget);
     await tester.tap(find.widgetWithText(FilledButton, 'Eliminar'));
-    await tester.pumpAndSettle();
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 300));
+    await tester.pump();
+    await tester.pump();
     expect(api.deleted, isTrue);
     expect(points.points, isEmpty);
+    expect(navigation.active, isFalse);
+    expect(navigation.remainingPoints, isEmpty);
+    expect(navigationLocation.cancellations, 1);
+    expect(find.text('El destino ya no está disponible.'), findsOneWidget);
     expect(find.text('Punto de encuentro'), findsNothing);
+    await tester.pumpAndSettle();
+
+    api.point = {
+      ...api.point,
+      'isTemporary': true,
+      'endTime': now.add(const Duration(milliseconds: 250)).toIso8601String(),
+    };
+    await points.loadPoints(20);
+    expect(points.points, hasLength(1));
+    expect(
+      await navigation.start(
+        point: points.points.single,
+        selectedMode: RouteMode.walking,
+      ),
+      isTrue,
+    );
+    await tester.pump();
+    now = now.add(const Duration(milliseconds: 350));
+    await tester.pump(const Duration(milliseconds: 350));
+    await tester.pump();
+
+    expect(points.points, isEmpty);
+    expect(navigation.active, isFalse);
+    expect(navigation.remainingPoints, isEmpty);
+    expect(navigationLocation.cancellations, 2);
+    expect(find.text('El destino ya no está disponible.'), findsOneWidget);
+    await tester.pumpAndSettle();
 
     // Expanded group panel must not intercept the offscreen member's tap.
     final sheet = tester
@@ -217,6 +330,7 @@ void main() {
     points.dispose();
     auth.dispose();
     navigation.dispose();
+    await navigationLocation.close();
     push.dispose();
     await socket.dispose();
   });

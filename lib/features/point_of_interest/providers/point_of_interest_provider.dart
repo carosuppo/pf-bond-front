@@ -8,8 +8,10 @@ import '../services/point_of_interest_service.dart';
 
 class PointOfInterestProvider extends ChangeNotifier {
   final PointOfInterestService _service;
+  final DateTime Function() _clock;
 
-  PointOfInterestProvider(this._service);
+  PointOfInterestProvider(this._service, {DateTime Function()? clock})
+    : _clock = clock ?? DateTime.now;
 
   List<PointOfInterest> points = [];
   bool loading = false;
@@ -74,7 +76,7 @@ class PointOfInterestProvider extends ChangeNotifier {
     try {
       final point = await _service.create(groupId, request);
       if (sessionVersion != _sessionVersion) return false;
-      if (_groupId == groupId && point.isActiveAt(DateTime.now())) {
+      if (_groupId == groupId && point.isActiveAt(_clock())) {
         points = [...points, point];
         _scheduleExpiration();
       }
@@ -106,7 +108,7 @@ class PointOfInterestProvider extends ChangeNotifier {
       if (_groupId == groupId) {
         points = points
             .map((point) => point.id == pointId ? updated : point)
-            .where((point) => point.isActiveAt(DateTime.now()))
+            .where((point) => point.isActiveAt(_clock()))
             .toList();
         _scheduleExpiration();
       }
@@ -151,7 +153,7 @@ class PointOfInterestProvider extends ChangeNotifier {
       error.toString().replaceFirst('Exception: ', '');
 
   List<PointOfInterest> _activePoints(List<PointOfInterest> source) {
-    final now = DateTime.now();
+    final now = _clock();
     return source.where((point) => point.isActiveAt(now)).toList();
   }
 
@@ -169,7 +171,7 @@ class PointOfInterestProvider extends ChangeNotifier {
     }
 
     if (nextExpiration == null) return;
-    final delay = nextExpiration.difference(DateTime.now().toUtc());
+    final delay = nextExpiration.difference(_clock().toUtc());
     _expirationTimer = Timer(delay.isNegative ? Duration.zero : delay, () {
       final active = _activePoints(points);
       final changed = active.length != points.length;

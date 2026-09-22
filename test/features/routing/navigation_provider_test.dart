@@ -42,6 +42,7 @@ class _RouteService extends RouteService {
   _RouteService() : super(ApiClient(SessionStorageService()));
 
   final List<RouteResponse> responses = [];
+  final List<Completer<RouteResponse>> pendingResponses = [];
   Object? nextError;
   int calls = 0;
   RouteMode? lastMode;
@@ -61,6 +62,9 @@ class _RouteService extends RouteService {
     final error = nextError;
     nextError = null;
     if (error != null) throw error;
+    if (pendingResponses.isNotEmpty) {
+      return pendingResponses.removeAt(0).future;
+    }
     final controlled = pending;
     if (controlled != null) return controlled.future;
     return responses.isEmpty ? _route() : responses.removeAt(0);
@@ -78,19 +82,32 @@ LocationModel _location(
   timestamp: DateTime(2026),
 );
 
-RouteResponse _route({List<LatLng>? points}) => RouteResponse(
+RouteResponse _route({
+  List<LatLng>? points,
+  double distanceMeters = 1112,
+  double durationSeconds = 300,
+}) => RouteResponse(
   points: points ?? const [LatLng(0, 0), LatLng(0, 0.01)],
-  distanceMeters: 1112,
-  durationSeconds: 300,
+  distanceMeters: distanceMeters,
+  durationSeconds: durationSeconds,
 );
 
-PointOfInterest _destination() => PointOfInterest(
-  id: 5,
-  name: 'Universidad',
-  radius: 15,
-  latitude: 0,
-  longitude: 0.01,
-  groupId: 3,
+PointOfInterest _destination({
+  int id = 5,
+  int groupId = 3,
+  String name = 'Universidad',
+  String? description,
+  double radius = 15,
+  double latitude = 0,
+  double longitude = 0.01,
+}) => PointOfInterest(
+  id: id,
+  name: name,
+  description: description,
+  radius: radius,
+  latitude: latitude,
+  longitude: longitude,
+  groupId: groupId,
   createdAt: DateTime(2026),
 );
 
@@ -225,6 +242,169 @@ void main() {
     expect(provider.remainingPoints.first.longitude, closeTo(0.006, 0.0001));
     expect(routes.calls, 1);
     expect(provider.routeRevision, 1);
+  });
+
+  test('sincroniza datos visuales sin solicitar otra ruta', () async {
+    final location = _LocationService();
+    final routes = _RouteService();
+    final provider = NavigationProvider(routes, location);
+    addTearDown(provider.dispose);
+    addTearDown(location.positions.close);
+    await provider.start(
+      point: _destination(),
+      selectedMode: RouteMode.walking,
+    );
+
+    await provider.handleDestinationUpdated(
+      _destination(name: 'UTN', description: 'Campus actualizado'),
+    );
+    await provider.handleDestinationUpdated(
+      _destination(id: 8, name: 'Otro punto'),
+    );
+    await provider.handleDestinationUpdated(
+      _destination(groupId: 4, name: 'Otro grupo'),
+    );
+
+    expect(provider.destination?.name, 'UTN');
+    expect(provider.destination?.description, 'Campus actualizado');
+    expect(routes.calls, 1);
+    expect(provider.routeRevision, 1);
+  });
+
+  test(
+    'usa el radio actualizado para detectar llegada sin recalcular',
+    () async {
+      final location = _LocationService();
+      final routes = _RouteService();
+      final provider = NavigationProvider(routes, location);
+      addTearDown(provider.dispose);
+      addTearDown(location.positions.close);
+      await provider.start(
+        point: _destination(radius: 15),
+        selectedMode: RouteMode.walking,
+      );
+
+      await provider.handleDestinationUpdated(_destination(radius: 150));
+      location.positions.add(_location(0, 0.009));
+      await _flush();
+
+      expect(provider.active, isFalse);
+      expect(provider.remainingPoints, isEmpty);
+      expect(provider.takeNotice(), 'Llegaste a Universidad.');
+      expect(routes.calls, 1);
+    },
+  );
+
+  test(
+    'cambiar coordenadas recalcula desde la ubicación más reciente',
+    () async {
+      final location = _LocationService();
+      final routes = _RouteService()
+        ..responses.addAll([
+          _route(),
+          _route(
+            points: const [LatLng(0, 0.004), LatLng(0.005, 0.02)],
+            durationSeconds: 420,
+          ),
+        ]);
+      final provider = NavigationProvider(routes, location);
+      addTearDown(provider.dispose);
+      addTearDown(location.positions.close);
+      await provider.start(
+        point: _destination(),
+        selectedMode: RouteMode.driving,
+      );
+      location.positions.add(_location(0, 0.004));
+
+      await provider.handleDestinationUpdated(
+        _destination(latitude: 0.005, longitude: 0.02),
+      );
+
+      expect(provider.destination?.latitude, 0.005);
+      expect(provider.destination?.longitude, 0.02);
+      expect(routes.calls, 2);
+      expect(routes.lastMode, RouteMode.driving);
+      expect(routes.lastOrigin?.longitude, 0.004);
+      expect(provider.remainingPoints.last, const LatLng(0.005, 0.02));
+      expect(provider.durationSeconds, 420);
+      expect(provider.routeRevision, 2);
+      expect(provider.recalculating, isFalse);
+    },
+  );
+
+  test('una respuesta anterior no pisa la ruta al nuevo destino', () async {
+    final location = _LocationService();
+    final routes = _RouteService();
+    final provider = NavigationProvider(routes, location);
+    addTearDown(provider.dispose);
+    addTearDown(location.positions.close);
+    await provider.start(
+      point: _destination(),
+      selectedMode: RouteMode.driving,
+    );
+    final requestA = Completer<RouteResponse>();
+    final requestB = Completer<RouteResponse>();
+    routes.pendingResponses.addAll([requestA, requestB]);
+
+    for (var index = 0; index < 3; index++) {
+      location.positions.add(_location(0.002, 0.003 + index * 0.0001));
+    }
+    await _flush();
+    expect(routes.calls, 2);
+
+    final destinationUpdate = provider.handleDestinationUpdated(
+      _destination(latitude: 0.005, longitude: 0.02),
+    );
+    await _flush();
+    expect(routes.calls, 3);
+
+    requestB.complete(
+      _route(
+        points: const [LatLng(0.002, 0.0032), LatLng(0.005, 0.02)],
+        distanceMeters: 2200,
+        durationSeconds: 222,
+      ),
+    );
+    await destinationUpdate;
+    final revisionForB = provider.routeRevision;
+    expect(provider.remainingPoints.last, const LatLng(0.005, 0.02));
+    expect(provider.durationSeconds, 222);
+
+    requestA.complete(
+      _route(
+        points: const [LatLng(0.002, 0.0032), LatLng(0, 0.01)],
+        durationSeconds: 111,
+      ),
+    );
+    await _flush();
+
+    expect(provider.destination?.longitude, 0.02);
+    expect(provider.remainingPoints.last, const LatLng(0.005, 0.02));
+    expect(provider.durationSeconds, 222);
+    expect(provider.routeRevision, revisionForB);
+    expect(provider.recalculating, isFalse);
+  });
+
+  test('destino no disponible invalida un cálculo pendiente y avisa', () async {
+    final location = _LocationService();
+    final pendingRoute = Completer<RouteResponse>();
+    final routes = _RouteService()..pending = pendingRoute;
+    final provider = NavigationProvider(routes, location);
+    addTearDown(provider.dispose);
+    addTearDown(location.positions.close);
+
+    final starting = provider.start(
+      point: _destination(),
+      selectedMode: RouteMode.walking,
+    );
+    await _flush();
+    await provider.handleDestinationUnavailable();
+    pendingRoute.complete(_route());
+
+    expect(await starting, isFalse);
+    expect(provider.active, isFalse);
+    expect(provider.remainingPoints, isEmpty);
+    expect(provider.takeNotice(), 'El destino ya no está disponible.');
   });
 
   test('confirma desvío, recalcula una vez y respeta cooldown', () async {

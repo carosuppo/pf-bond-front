@@ -40,6 +40,7 @@ class NavigationProvider extends ChangeNotifier {
   DateTime? _lastRecalculationAt;
   int _offRouteReadings = 0;
   int _requestVersion = 0;
+  int _routeRequestVersion = 0;
   int _routeRevision = 0;
   String? _notice;
   int? _requestedGroupId;
@@ -62,6 +63,7 @@ class NavigationProvider extends ChangeNotifier {
   }) async {
     final requestVersion = ++_requestVersion;
     await _cancelSubscription();
+    if (requestVersion != _requestVersion) return false;
     _resetRouteState();
     _requestedGroupId = point.groupId;
     _requestedPointId = point.id;
@@ -181,6 +183,7 @@ class NavigationProvider extends ChangeNotifier {
     if (point == null || selectedMode == null || origin == null) return;
 
     final requestVersion = _requestVersion;
+    final routeRequestVersion = ++_routeRequestVersion;
     recalculating = true;
     _lastRecalculationAt = _clock();
     errorMessage = null;
@@ -193,23 +196,48 @@ class NavigationProvider extends ChangeNotifier {
         origin: origin,
         mode: selectedMode,
       );
-      if (requestVersion != _requestVersion || destination?.id != point.id) {
+      if (!_isCurrentRouteRequest(
+        requestVersion: requestVersion,
+        routeRequestVersion: routeRequestVersion,
+        point: point,
+      )) {
         return;
       }
       final latestLocation = currentLocation ?? origin;
       _applyRoute(route, latestLocation);
     } catch (error) {
-      if (requestVersion == _requestVersion && active) {
+      if (_isCurrentRouteRequest(
+        requestVersion: requestVersion,
+        routeRequestVersion: routeRequestVersion,
+        point: point,
+      )) {
         errorMessage = _message(error, 'No se pudo recalcular la ruta.');
         _notice =
             'No se pudo recalcular la ruta. Se mantiene el camino anterior.';
       }
     } finally {
-      if (requestVersion == _requestVersion && active) {
+      if (_isCurrentRouteRequest(
+        requestVersion: requestVersion,
+        routeRequestVersion: routeRequestVersion,
+        point: point,
+      )) {
         recalculating = false;
         notifyListeners();
       }
     }
+  }
+
+  bool _isCurrentRouteRequest({
+    required int requestVersion,
+    required int routeRequestVersion,
+    required PointOfInterest point,
+  }) {
+    final currentDestination = destination;
+    return requestVersion == _requestVersion &&
+        routeRequestVersion == _routeRequestVersion &&
+        currentDestination != null &&
+        currentDestination.id == point.id &&
+        currentDestination.groupId == point.groupId;
   }
 
   void _applyRoute(RouteResponse route, LocationModel location) {
@@ -227,8 +255,9 @@ class NavigationProvider extends ChangeNotifier {
   }
 
   Future<void> cancel() async {
-    _requestVersion++;
+    final requestVersion = ++_requestVersion;
     await _cancelSubscription();
+    if (requestVersion != _requestVersion) return;
     _resetRouteState();
     notifyListeners();
   }
@@ -240,12 +269,41 @@ class NavigationProvider extends ChangeNotifier {
     if (routeGroupId != null && routeGroupId != groupId) await cancel();
   }
 
+  Future<void> handleDestinationUpdated(PointOfInterest updatedPoint) async {
+    final currentDestination = destination;
+    if (currentDestination == null ||
+        currentDestination.id != updatedPoint.id ||
+        currentDestination.groupId != updatedPoint.groupId) {
+      return;
+    }
+
+    final coordinatesChanged =
+        currentDestination.latitude != updatedPoint.latitude ||
+        currentDestination.longitude != updatedPoint.longitude;
+    destination = updatedPoint;
+
+    if (!coordinatesChanged) {
+      notifyListeners();
+      return;
+    }
+
+    await _recalculate();
+  }
+
+  Future<void> handleDestinationUnavailable() async {
+    if (targetPointId == null || targetGroupId == null) return;
+    await _finishWithNotice('El destino ya no está disponible.');
+  }
+
   Future<void> _finishWithNotice(String message) async {
     _requestVersion++;
-    await _cancelSubscription();
+    final subscription = _locationSubscription;
+    _locationSubscription = null;
+    final cancellation = subscription?.cancel();
     _resetRouteState();
     _notice = message;
     notifyListeners();
+    await cancellation;
   }
 
   Future<void> _cancelSubscription() async {

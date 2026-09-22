@@ -371,10 +371,21 @@ class _MapScreenState extends ConsumerState<MapScreen> {
         targetGroupId == null) {
       return;
     }
-    final available = _pointProvider.points.any(
-      (point) => point.id == targetPointId && point.groupId == targetGroupId,
-    );
-    if (!available) unawaited(_navigation.cancel());
+    if (targetGroupId != _groupProvider.activeGroup?.id) return;
+
+    PointOfInterest? updatedDestination;
+    for (final point in _pointProvider.points) {
+      if (point.id == targetPointId && point.groupId == targetGroupId) {
+        updatedDestination = point;
+        break;
+      }
+    }
+
+    if (updatedDestination == null) {
+      unawaited(_navigation.handleDestinationUnavailable());
+    } else {
+      unawaited(_navigation.handleDestinationUpdated(updatedDestination));
+    }
   }
 
   void _onNavigationChanged() {
@@ -708,6 +719,7 @@ class _MapScreenState extends ConsumerState<MapScreen> {
                 ),
               if (groupProvider.groupDetails != null && !_editing)
                 Positioned.fill(
+                  key: const ValueKey('group-sheet'),
                   child: DraggableScrollableSheet(
                     controller: _sheetController,
                     initialChildSize: _minChildSize,
