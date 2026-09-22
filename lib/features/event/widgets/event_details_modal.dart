@@ -6,12 +6,14 @@ import '../../../core/models/geocoding_result.dart';
 import '../../../core/services/geocoding_service.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/widgets/user_avatar.dart';
+import '../../auth/providers/auth_provider.dart';
 import '../../group/models/get_member_model.response.dart';
 import '../../group/providers/group_provider.dart';
 import '../../location/widgets/location_map.dart';
 import '../formatters/event_date_formatter.dart';
 import '../models/event_model.response.dart';
 import '../providers/event_provider.dart';
+import '../screens/edit_event_screen.dart';
 import 'event_location_editor.dart';
 
 Future<void> showEventDetailsModal(
@@ -83,6 +85,7 @@ class EventDetailsModal extends StatelessWidget {
   Widget build(BuildContext context) {
     final currentEvent = _currentEvent(context);
     final eventMembers = _eventMembers(context, currentEvent);
+    final canEdit = _canEdit(context, currentEvent);
     final hasEnd = currentEvent.endAt != null;
     final sameDay =
         hasEnd &&
@@ -117,18 +120,39 @@ class EventDetailsModal extends StatelessWidget {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Row(
-                        crossAxisAlignment: CrossAxisAlignment.center,
+                        mainAxisAlignment: MainAxisAlignment.end,
                         children: [
-                          Expanded(
-                            child: Text(
-                              currentEvent.name,
-                              style: const TextStyle(
-                                color: AppColors.text,
-                                fontSize: 22,
-                                fontWeight: FontWeight.w700,
+                          if (canEdit)
+                            IconButton(
+                              onPressed: () async {
+                                final navigator = Navigator.of(context);
+                                final messenger = ScaffoldMessenger.of(context);
+                                final saved = await navigator.push<bool>(
+                                  MaterialPageRoute<bool>(
+                                    builder: (_) => EditEventScreen(
+                                      event: currentEvent,
+                                      groupId: groupId,
+                                    ),
+                                  ),
+                                );
+
+                                if (!messenger.mounted || saved != true) {
+                                  return;
+                                }
+
+                                messenger.showSnackBar(
+                                  const SnackBar(
+                                    content: Text('Evento actualizado.'),
+                                  ),
+                                );
+                              },
+                              tooltip: 'Editar',
+                              icon: const Icon(
+                                Icons.edit_rounded,
+                                color: AppColors.mutedText,
+                                size: 24,
                               ),
                             ),
-                          ),
                           IconButton(
                             onPressed: () => Navigator.of(context).pop(),
                             tooltip: 'Cerrar',
@@ -139,6 +163,15 @@ class EventDetailsModal extends StatelessWidget {
                             ),
                           ),
                         ],
+                      ),
+                      const SizedBox(height: 12),
+                      Text(
+                        currentEvent.name,
+                        style: const TextStyle(
+                          color: AppColors.text,
+                          fontSize: 22,
+                          fontWeight: FontWeight.w700,
+                        ),
                       ),
 
                       const SizedBox(height: 16),
@@ -284,6 +317,21 @@ class EventDetailsModal extends StatelessWidget {
     }
 
     return event;
+  }
+
+  bool _canEdit(BuildContext context, EventResponseModel currentEvent) {
+    final currentUserId = context.watch<AuthProvider>().authResponse?.user.id;
+    final members =
+        context.watch<GroupProvider>().groupDetails?.members ??
+        const <GetMemberResponseModel>[];
+
+    for (final member in members) {
+      if (member.idUser == currentUserId) {
+        return currentEvent.memberIds.contains(member.id);
+      }
+    }
+
+    return false;
   }
 }
 

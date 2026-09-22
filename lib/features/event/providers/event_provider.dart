@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../../../core/timezone/app_timezone.dart';
 import '../models/create_event_model.request.dart';
 import '../models/event_model.response.dart';
+import '../models/update_event_model.request.dart';
 import '../services/event_service.dart';
 
 class EventProvider extends ChangeNotifier {
@@ -106,6 +107,49 @@ class EventProvider extends ChangeNotifier {
       if (_eventsGroupId == groupId) {
         events = [...events, event!]
           ..sort((first, second) => first.startAt.compareTo(second.startAt));
+      }
+
+      return true;
+    } catch (error) {
+      if (sessionVersion != _sessionVersion) return false;
+      errorMessage = error.toString().replaceFirst('Exception: ', '');
+      return false;
+    } finally {
+      if (sessionVersion == _sessionVersion) {
+        isLoading = false;
+        notifyListeners();
+      }
+    }
+  }
+
+  Future<bool> updateEvent({
+    required int groupId,
+    required int eventId,
+    required UpdateEventRequestModel request,
+  }) async {
+    final sessionVersion = _sessionVersion;
+    isLoading = true;
+    errorMessage = null;
+
+    notifyListeners();
+
+    try {
+      final updatedEvent = await _eventService.updateEvent(
+        groupId: groupId,
+        eventId: eventId,
+        request: request,
+      );
+      if (sessionVersion != _sessionVersion) return false;
+
+      final index = events.indexWhere((event) => event.id == eventId);
+
+      if (index != -1) {
+        events[index] = updatedEvent;
+        events.sort((first, second) => first.startAt.compareTo(second.startAt));
+      }
+
+      if (event?.id == eventId) {
+        event = updatedEvent;
       }
 
       return true;
