@@ -120,18 +120,21 @@ void main() {
             ),
           ),
         );
-        expect(find.byType(ChoiceChip), findsNWidgets(7));
-        final initiallySelected = tester
-            .widgetList<ChoiceChip>(find.byType(ChoiceChip))
-            .singleWhere((chip) => chip.selected);
         expect(
-          (initiallySelected.label as Text).data,
-          editing ? 'Rojo' : 'Azul',
+          find.text(
+            editing
+                ? PointOfInterestColor.red.label
+                : PointOfInterestColor.blue.label,
+          ),
+          findsOneWidget,
         );
+        for (final color in PointOfInterestColor.values) {
+          expect(find.byTooltip(color.label), findsOneWidget);
+        }
         if (!editing) {
           await tester.enterText(find.byType(TextFormField).first, 'Colegio');
         }
-        await tester.tap(find.widgetWithText(ChoiceChip, 'Púrpura'));
+        await tester.tap(find.byTooltip(PointOfInterestColor.purple.label));
         await tester.pump();
         expect(preview, PointOfInterestColor.purple);
         final button = find.widgetWithText(
@@ -174,15 +177,13 @@ void main() {
           ),
         ),
       );
-      await tester.tap(find.widgetWithText(ChoiceChip, 'Púrpura'));
+      await tester.tap(find.byTooltip(PointOfInterestColor.purple.label));
       await tester.pump();
-      await tester.tap(find.widgetWithText(ChoiceChip, 'Púrpura'));
+      await tester.tap(find.byTooltip(PointOfInterestColor.purple.label));
       await tester.pump();
       expect(
-        tester
-            .widgetList<ChoiceChip>(find.byType(ChoiceChip))
-            .where((chip) => chip.selected),
-        hasLength(1),
+        find.text(PointOfInterestColor.purple.label),
+        findsOneWidget,
       );
       final close = key.currentState!.requestClose();
       await tester.pumpAndSettle();

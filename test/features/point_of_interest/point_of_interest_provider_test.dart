@@ -85,6 +85,8 @@ PointOfInterest _point({
   double radius = 150,
   double latitude = -34,
   double longitude = -58,
+  bool isTemporary = false,
+  DateTime? endTime,
 }) => PointOfInterest(
   id: id,
   name: name,
@@ -93,6 +95,8 @@ PointOfInterest _point({
   longitude: longitude,
   groupId: groupId,
   createdAt: DateTime(2026),
+  isTemporary: isTemporary,
+  endTime: endTime,
 );
 
 void main() {
@@ -171,6 +175,31 @@ void main() {
 
       expect(provider.points.single.id, 2);
       expect(provider.points.single.name, 'Nuevo');
+    },
+  );
+
+  test(
+    'retira un temporal al vencer sin recargar y clear cancela su estado',
+    () async {
+      final service = _FakeService()
+        ..stored = [
+          _point(
+            isTemporary: true,
+            endTime: DateTime.now().toUtc().add(
+              const Duration(milliseconds: 80),
+            ),
+          ),
+        ];
+      final provider = PointOfInterestProvider(service);
+      addTearDown(provider.dispose);
+
+      await provider.loadPoints(3);
+      expect(provider.points, hasLength(1));
+      await Future<void>.delayed(const Duration(milliseconds: 140));
+      expect(provider.points, isEmpty);
+
+      provider.clear();
+      expect(provider.points, isEmpty);
     },
   );
 }

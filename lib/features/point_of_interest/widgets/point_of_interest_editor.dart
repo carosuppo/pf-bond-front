@@ -22,6 +22,7 @@ class PointOfInterestEditor extends StatefulWidget {
   final Future<bool> Function(CreatePointOfInterestRequest request)? onCreate;
   final Future<bool> Function(UpdatePointOfInterestRequest request)? onUpdate;
   final VoidCallback onClosed;
+  final bool createTemporary;
 
   const PointOfInterestEditor({
     super.key,
@@ -34,6 +35,7 @@ class PointOfInterestEditor extends StatefulWidget {
     this.onCreate,
     this.onUpdate,
     required this.onClosed,
+    this.createTemporary = false,
   });
 
   @override
@@ -57,6 +59,7 @@ class PointOfInterestEditorState extends State<PointOfInterestEditor> {
   late PointOfInterestColor _color;
   bool _searching = false;
   bool _submitting = false;
+  int? _durationMinutes;
 
   bool get _dirty {
     final initial = widget.initial;
@@ -68,6 +71,7 @@ class PointOfInterestEditorState extends State<PointOfInterestEditor> {
           _descriptionController.text.isNotEmpty ||
           _radiusController.text != '100' ||
           widget.selectedLocation != null ||
+          _durationMinutes != null ||
           hasAddressInput;
     }
 
@@ -240,6 +244,8 @@ class PointOfInterestEditorState extends State<PointOfInterestEditor> {
             radius: radius,
             latitude: location.latitude,
             longitude: location.longitude,
+            isTemporary: widget.createTemporary,
+            durationMinutes: widget.createTemporary ? _durationMinutes : null,
           ),
         );
       } else {
@@ -440,15 +446,39 @@ class PointOfInterestEditorState extends State<PointOfInterestEditor> {
               const SizedBox(height: 16),
               GlobalTextField(
                 controller: _nameController,
-                label: 'Nombre *',
+                label: widget.createTemporary ? 'Nombre opcional' : 'Nombre *',
                 validator: (value) {
-                  if (value == null || value.trim().isEmpty) {
+                  if (!widget.createTemporary &&
+                      (value == null || value.trim().isEmpty)) {
                     return 'Ingresá un nombre.';
                   }
 
                   return null;
                 },
               ),
+              if (widget.createTemporary) ...[
+                const SizedBox(height: 16),
+                DropdownButtonFormField<int>(
+                  key: const ValueKey('temporary-duration'),
+                  initialValue: _durationMinutes,
+                  decoration: const InputDecoration(labelText: 'Vigencia *'),
+                  dropdownColor: AppColors.cardColor,
+                  items: const [
+                    DropdownMenuItem(value: 15, child: Text('15 minutos')),
+                    DropdownMenuItem(value: 30, child: Text('30 minutos')),
+                    DropdownMenuItem(value: 60, child: Text('1 hora')),
+                    DropdownMenuItem(value: 120, child: Text('2 horas')),
+                    DropdownMenuItem(value: 480, child: Text('8 horas')),
+                    DropdownMenuItem(value: 1440, child: Text('1 día')),
+                  ],
+                  onChanged: _submitting
+                      ? null
+                      : (value) => setState(() => _durationMinutes = value),
+                  validator: (value) => value == null || value <= 0
+                      ? 'Elegí cuánto tiempo estará disponible.'
+                      : null,
+                ),
+              ],
               const SizedBox(height: 16),
               GlobalTextField(
                 controller: _descriptionController,

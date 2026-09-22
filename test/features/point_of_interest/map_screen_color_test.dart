@@ -17,11 +17,14 @@ import 'package:bond_front/features/location/providers/location_provider.dart';
 import 'package:bond_front/features/location/screens/map_screen.dart';
 import 'package:bond_front/features/location/services/background_location_service.dart';
 import 'package:bond_front/features/location/services/location_socket_service.dart';
+import 'package:bond_front/features/location/services/location_service.dart';
 import 'package:bond_front/features/location/widgets/location_map.dart';
 import 'package:bond_front/features/notification/services/notification_api_service.dart';
 import 'package:bond_front/features/notification/services/push_notification_service.dart';
 import 'package:bond_front/features/point_of_interest/providers/point_of_interest_provider.dart';
 import 'package:bond_front/features/point_of_interest/services/point_of_interest_service.dart';
+import 'package:bond_front/features/routing/providers/navigation_provider.dart';
+import 'package:bond_front/features/routing/services/route_service.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -130,6 +133,7 @@ void main() {
       _NoopSessionStateCleanup(),
     );
     final socket = TestSocket();
+    final navigation = NavigationProvider(RouteService(api), LocationService());
     await tester.pumpWidget(
       ProviderScope(
         overrides: [
@@ -141,12 +145,23 @@ void main() {
             provider.ChangeNotifierProvider.value(value: group),
             provider.ChangeNotifierProvider.value(value: points),
             provider.ChangeNotifierProvider.value(value: auth),
+            provider.ChangeNotifierProvider.value(value: navigation),
           ],
           child: const MaterialApp(home: MapScreen()),
         ),
       ),
     );
     await tester.pumpAndSettle();
+    await tester.tap(find.byTooltip('Agregar punto de interés'));
+    await tester.pumpAndSettle();
+    expect(find.text('Punto de encuentro temporal'), findsOneWidget);
+    await tester.tap(find.text('Punto de encuentro temporal'));
+    await tester.pumpAndSettle();
+    expect(find.text('Crear punto de encuentro'), findsOneWidget);
+    expect(find.text('Vigencia *'), findsOneWidget);
+    await tester.tap(find.text('Cancelar'));
+    await tester.pumpAndSettle();
+
     Future<void> expandPoints() async {
       final tile = find.byType(ExpansionTile);
       await tester.ensureVisible(tile);
@@ -158,6 +173,7 @@ void main() {
     expect(find.text('Colegio'), findsNWidgets(2));
     expect(find.text('Punto de encuentro'), findsOneWidget);
     expect(find.text('Radio: 100 m'), findsOneWidget);
+    expect(find.text('Cómo llegar'), findsOneWidget);
     final deleteButton = find.byTooltip('Eliminar punto de interés');
     await tester.ensureVisible(deleteButton);
     await tester.tap(deleteButton);
@@ -181,7 +197,13 @@ void main() {
         .widget<LocationMap>(find.byType(LocationMap))
         .controller!;
     final zoom = controller.camera.zoom;
-    await tester.tap(find.byIcon(Icons.navigation));
+    final offscreenMember = find
+        .ancestor(
+          of: find.byIcon(Icons.navigation),
+          matching: find.byType(GestureDetector),
+        )
+        .first;
+    await tester.tap(offscreenMember);
     await tester.pumpAndSettle();
     expect(
       controller.camera.center.longitude,
@@ -194,6 +216,7 @@ void main() {
     group.dispose();
     points.dispose();
     auth.dispose();
+    navigation.dispose();
     push.dispose();
     await socket.dispose();
   });

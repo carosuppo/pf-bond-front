@@ -19,6 +19,7 @@ import 'features/event/services/event_service.dart';
 import 'features/group/providers/group_provider.dart';
 import 'features/group/services/group_service.dart';
 import 'features/location/services/background_location_service.dart';
+import 'features/location/services/location_service.dart';
 import 'features/notification/services/notification_api_service.dart';
 import 'features/notification/services/push_notification_service.dart';
 import 'features/point_of_interest/providers/point_of_interest_provider.dart';
@@ -26,6 +27,8 @@ import 'features/point_of_interest/services/point_of_interest_service.dart';
 import 'features/profile/providers/profile_provider.dart';
 import 'features/profile/services/profile_photo_picker_service.dart';
 import 'features/profile/services/profile_service.dart';
+import 'features/routing/providers/navigation_provider.dart';
+import 'features/routing/services/route_service.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -107,6 +110,16 @@ class MyApp extends StatelessWidget {
           create: (context) =>
               PointOfInterestProvider(context.read<PointOfInterestService>()),
         ),
+        provider.Provider<LocationService>(create: (_) => LocationService()),
+        provider.Provider<RouteService>(
+          create: (context) => RouteService(context.read<ApiClient>()),
+        ),
+        provider.ChangeNotifierProvider<NavigationProvider>(
+          create: (context) => NavigationProvider(
+            context.read<RouteService>(),
+            context.read<LocationService>(),
+          ),
+        ),
         provider.Provider<EventService>(
           create: (context) => EventService(context.read<ApiClient>()),
         ),
@@ -127,6 +140,7 @@ class MyApp extends StatelessWidget {
               listen: false,
             ),
             backgroundLocation: context.read<BackgroundLocationService>(),
+            navigation: context.read<NavigationProvider>(),
           ),
         ),
         provider.ChangeNotifierProvider<AuthProvider>(

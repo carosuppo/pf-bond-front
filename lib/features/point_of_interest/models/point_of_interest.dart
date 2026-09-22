@@ -10,6 +10,8 @@ class PointOfInterest {
   final double longitude;
   final int groupId;
   final DateTime createdAt;
+  final bool isTemporary;
+  final DateTime? endTime;
 
   const PointOfInterest({
     this.color = PointOfInterestColor.blue,
@@ -21,7 +23,12 @@ class PointOfInterest {
     required this.longitude,
     required this.groupId,
     required this.createdAt,
+    this.isTemporary = false,
+    this.endTime,
   });
+
+  bool isActiveAt(DateTime moment) =>
+      !isTemporary || (endTime?.isAfter(moment.toUtc()) ?? false);
 
   factory PointOfInterest.fromJson(Map<String, dynamic> json) {
     return PointOfInterest(
@@ -36,6 +43,10 @@ class PointOfInterest {
       longitude: (json['longitude'] as num).toDouble(),
       groupId: json['groupId'] as int,
       createdAt: DateTime.parse(json['createdAt'] as String),
+      isTemporary: json['isTemporary'] as bool? ?? false,
+      endTime: json['endTime'] == null
+          ? null
+          : DateTime.parse(json['endTime'] as String).toUtc(),
     );
   }
 }

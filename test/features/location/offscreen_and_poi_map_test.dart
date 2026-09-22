@@ -36,6 +36,7 @@ Future<void> pumpMap(
   PointOfInterestColor previewColor = PointOfInterestColor.blue,
   bool showOffscreenPoints = false,
   String? ownProfileName,
+  List<LatLng> routePoints = const [],
 }) async {
   await tester.pumpWidget(
     ProviderScope(
@@ -60,6 +61,7 @@ Future<void> pumpMap(
               previewPoint: previewPoint,
               previewRadius: 100,
               previewColor: previewColor,
+              routePoints: routePoints,
             ),
           ),
         ),
@@ -76,6 +78,17 @@ Future<void> disposeMap(WidgetTester tester, MapController controller) async {
 }
 
 void main() {
+  testWidgets('dibuja la ruta restante dentro del mapa', (tester) async {
+    final controller = MapController();
+    await pumpMap(
+      tester,
+      controller,
+      routePoints: const [LatLng(-34.6, -58.4), LatLng(-34.61, -58.41)],
+    );
+    expect(find.byType(PolylineLayer), findsOneWidget);
+    await disposeMap(tester, controller);
+  });
+
   for (final stale in [false, true]) {
     testWidgets(
       'offscreen member is tappable, preserves zoom and direction/color (stale=$stale)',

@@ -10,6 +10,7 @@ import '../../location/services/background_location_service.dart';
 import '../../notification/services/push_notification_service.dart';
 import '../../point_of_interest/providers/point_of_interest_provider.dart';
 import '../../profile/providers/profile_provider.dart';
+import '../../routing/providers/navigation_provider.dart';
 
 abstract interface class SessionStateCleanup {
   Future<void> clear();
@@ -26,6 +27,7 @@ class LocalSessionStateCleanup implements SessionStateCleanup {
     required this.events,
     required this.locationContainer,
     required this.backgroundLocation,
+    this.navigation,
   });
 
   final SessionStorageService storage;
@@ -37,6 +39,7 @@ class LocalSessionStateCleanup implements SessionStateCleanup {
   final EventProvider events;
   final ProviderContainer locationContainer;
   final BackgroundLocationService backgroundLocation;
+  final NavigationProvider? navigation;
 
   @override
   Future<void> clear() async {
@@ -45,6 +48,9 @@ class LocalSessionStateCleanup implements SessionStateCleanup {
     await _attempt('groups', () async => group.resetSessionState());
     await _attempt('profile', () async => profile.resetSessionState());
     await _attempt('POI', () async => points.resetSessionState());
+    await _attempt('navegación', () async {
+      await navigation?.clear();
+    });
     await _attempt('events', () async => events.resetSessionState());
     await _attempt('active group preference', preferences.clearActiveGroupId);
     await _attempt(

@@ -14,6 +14,7 @@ import '../../point_of_interest/models/point_of_interest_color.dart';
 import '../constants/default_location.dart';
 import '../constants/location_tracking_config.dart';
 import '../models/member_location_model.dart';
+import '../models/location_model.dart';
 import '../providers/location_provider.dart';
 import '../utils/marker_colors.dart';
 
@@ -32,6 +33,10 @@ class LocationMap extends ConsumerStatefulWidget {
   final String? ownProfileName;
   final double indicatorBottomFraction;
   final bool showOffscreenPoints;
+  final List<LatLng> routePoints;
+  final LocationModel? navigationLocation;
+  final int? destinationPointId;
+  final ValueChanged<PointOfInterest>? onPointTap;
 
   const LocationMap({
     super.key,
@@ -49,6 +54,10 @@ class LocationMap extends ConsumerStatefulWidget {
     this.ownProfileName,
     this.indicatorBottomFraction = 0,
     this.showOffscreenPoints = false,
+    this.routePoints = const [],
+    this.navigationLocation,
+    this.destinationPointId,
+    this.onPointTap,
   });
 
   @override
@@ -240,7 +249,9 @@ class _LocationMapState extends ConsumerState<LocationMap>
         state.sharingForGroup(widget.groupId!)?.effectiveLocationSharing ==
             true;
 
-    final ownLocation = ownSharing ? state.currentLocation : null;
+    final ownLocation =
+        widget.navigationLocation ??
+        (ownSharing ? state.currentLocation : null);
 
     final allMembers = state.visibleMembers.values.toList();
 
@@ -350,6 +361,16 @@ class _LocationMapState extends ConsumerState<LocationMap>
           subdomains: const ['a', 'b', 'c', 'd'],
           userAgentPackageName: 'com.example.bond_front',
         ),
+        if (widget.routePoints.length >= 2)
+          PolylineLayer(
+            polylines: [
+              Polyline(
+                points: widget.routePoints,
+                strokeWidth: 6,
+                color: AppColors.primary,
+              ),
+            ],
+          ),
         RichAttributionWidget(
           attributions: [
             TextSourceAttribution('OpenStreetMap contributors'),
@@ -387,6 +408,11 @@ class _LocationMapState extends ConsumerState<LocationMap>
                 point: LatLng(point.latitude, point.longitude),
                 name: point.name,
                 color: point.color.visualColor,
+                isTemporary: point.isTemporary,
+                isDestination: point.id == widget.destinationPointId,
+                onTap: widget.onPointTap == null
+                    ? null
+                    : () => widget.onPointTap!(point),
               ),
             if (widget.previewPoint != null && widget.previewRadius != null)
               _pointOfInterestMarker(
@@ -507,29 +533,47 @@ class _LocationMapState extends ConsumerState<LocationMap>
     required LatLng point,
     required String name,
     required Color color,
+    bool isTemporary = false,
+    bool isDestination = false,
+    VoidCallback? onTap,
   }) {
+    final content = Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Icon(
+          isDestination
+              ? Icons.location_on_rounded
+              : isTemporary
+              ? Icons.timer_rounded
+              : Icons.flag_rounded,
+          size: 42,
+          color: color,
+        ),
+        Text(
+          name,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+          textAlign: TextAlign.center,
+          style: const TextStyle(
+            color: Colors.black87,
+            fontSize: 13,
+            fontWeight: FontWeight.w600,
+          ),
+        ),
+      ],
+    );
     return Marker(
       point: point,
       rotate: true,
       width: 150,
       height: 66,
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(Icons.flag_rounded, size: 42, color: color),
-          Text(
-            name,
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-            textAlign: TextAlign.center,
-            style: const TextStyle(
-              color: Colors.black87,
-              fontSize: 13,
-              fontWeight: FontWeight.w600,
+      child: onTap == null
+          ? content
+          : GestureDetector(
+              behavior: HitTestBehavior.opaque,
+              onTap: onTap,
+              child: content,
             ),
-          ),
-        ],
-      ),
     );
   }
 
