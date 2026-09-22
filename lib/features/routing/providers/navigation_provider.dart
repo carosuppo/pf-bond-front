@@ -28,35 +28,136 @@ class NavigationProvider extends ChangeNotifier {
   PointOfInterest? destination;
   RouteMode? mode;
   LocationModel? currentLocation;
+
   List<LatLng> remainingPoints = const [];
+
   double remainingDistanceMeters = 0;
   double durationSeconds = 0;
+
   bool loading = false;
   bool recalculating = false;
+
   String? errorMessage;
 
   RouteProgressTracker? _tracker;
+
   StreamSubscription<LocationModel>? _locationSubscription;
+
   DateTime? _lastRecalculationAt;
+
   int _offRouteReadings = 0;
+
   int _requestVersion = 0;
   int _routeRequestVersion = 0;
   int _routeRevision = 0;
+
   String? _notice;
+
   PointOfInterest? _requestedDestination;
   RouteMode? _requestedMode;
   LocationModel? _requestedOrigin;
+
   Completer<bool>? _startCompleter;
 
+  bool _debugLocationSimulationEnabled = false;
+  LocationModel? _debugLocation;
+
   bool get active => destination != null;
+
   int get routeRevision => _routeRevision;
+
   int? get targetGroupId =>
       destination?.groupId ?? _requestedDestination?.groupId;
+
   int? get targetPointId => destination?.id ?? _requestedDestination?.id;
+
+  bool get debugLocationSimulationEnabled =>
+      kDebugMode && _debugLocationSimulationEnabled;
+
+  LocationModel? get debugLocation => kDebugMode ? _debugLocation : null;
+
+  void setDebugLocationSimulationEnabled(bool enabled) {
+    if (!kDebugMode || _debugLocationSimulationEnabled == enabled) {
+      return;
+    }
+
+    _debugLocationSimulationEnabled = enabled;
+
+    if (!enabled) {
+      _debugLocation = null;
+
+      if (!active && !loading) {
+        currentLocation = null;
+      }
+    }
+
+    notifyListeners();
+  }
+
+  void setDebugLocation(LatLng point) {
+    if (!kDebugMode || !_debugLocationSimulationEnabled) {
+      return;
+    }
+
+    final location = LocationModel(
+      latitude: point.latitude,
+      longitude: point.longitude,
+      accuracy: 5,
+      timestamp: _clock(),
+    );
+
+    _debugLocation = location;
+
+    /*
+     * Si todavía estamos calculando la ruta inicial, una nueva posición
+     * simulada debe convertirse en el nuevo origen.
+     *
+     * Si ya había una request inicial pendiente, se lanza otra.
+     * _routeRequestVersion hace que la respuesta vieja quede descartada.
+     */
+    if (loading && destination == null && _requestedDestination != null) {
+      currentLocation = location;
+
+      if (_requestedOrigin != null && _requestedMode != null) {
+        _requestedOrigin = location;
+
+        notifyListeners();
+
+        unawaited(_calculateInitialRoute(_requestVersion));
+      } else {
+        notifyListeners();
+      }
+
+      return;
+    }
+
+    if (active) {
+      /*
+       * Si el usuario vuelve a tocar el mapa mientras un recálculo está
+       * pendiente, la request anterior fue calculada desde otra posición.
+       *
+       * La invalidamos inmediatamente para impedir que esa respuesta
+       * vuelva a dibujar una ruta desde el punto anterior.
+       */
+      if (recalculating) {
+        _routeRequestVersion++;
+        recalculating = false;
+      }
+
+      _processLocation(location, debugInjected: true);
+
+      return;
+    }
+
+    currentLocation = location;
+    notifyListeners();
+  }
 
   String? takeNotice() {
     final notice = _notice;
+
     _notice = null;
+
     return notice;
   }
 
@@ -65,46 +166,83 @@ class NavigationProvider extends ChangeNotifier {
     required RouteMode selectedMode,
   }) async {
     final requestVersion = ++_requestVersion;
+
     _completePendingStart(false);
+
     await _cancelSubscription();
-    if (requestVersion != _requestVersion) return false;
+
+    if (requestVersion != _requestVersion) {
+      return false;
+    }
+
     _resetRouteState();
+
     _requestedDestination = point;
     _requestedMode = selectedMode;
+
     final completion = Completer<bool>();
+
     _startCompleter = completion;
+
     loading = true;
     errorMessage = null;
+
     notifyListeners();
 
     try {
-      final permission = await _locationService.requestForegroundPermission();
-      if (requestVersion != _requestVersion) return false;
-      if (permission != LocationPermissionStatus.whileInUse &&
-          permission != LocationPermissionStatus.always) {
-        _failInitialStart(requestVersion, _permissionMessage(permission));
-        return completion.future;
+      late final LocationModel location;
+
+      /*
+       * En DEBUG, si ya definimos una posición simulada, no necesitamos
+       * consultar el GPS real para determinar el origen.
+       */
+      final simulatedOrigin = debugLocationSimulationEnabled
+          ? _debugLocation
+          : null;
+
+      if (simulatedOrigin != null) {
+        location = simulatedOrigin;
+      } else {
+        final permission = await _locationService.requestForegroundPermission();
+
+        if (requestVersion != _requestVersion) {
+          return false;
+        }
+
+        if (permission != LocationPermissionStatus.whileInUse &&
+            permission != LocationPermissionStatus.always) {
+          _failInitialStart(requestVersion, _permissionMessage(permission));
+
+          return completion.future;
+        }
+
+        try {
+          location = await _locationService.getCurrentLocation();
+        } catch (_) {
+          _failInitialStart(
+            requestVersion,
+            'No se pudo obtener tu ubicación actual.',
+          );
+
+          return completion.future;
+        }
       }
 
-      late final LocationModel location;
-      try {
-        location = await _locationService.getCurrentLocation();
-      } catch (_) {
-        _failInitialStart(
-          requestVersion,
-          'No se pudo obtener tu ubicación actual.',
-        );
-        return completion.future;
+      if (requestVersion != _requestVersion) {
+        return false;
       }
-      if (requestVersion != _requestVersion) return false;
+
       _requestedOrigin = location;
+
       unawaited(_calculateInitialRoute(requestVersion));
+
       return completion.future;
     } catch (error) {
       _failInitialStart(
         requestVersion,
         _message(error, 'No se pudo calcular la ruta.'),
       );
+
       return completion.future;
     }
   }
@@ -113,6 +251,7 @@ class NavigationProvider extends ChangeNotifier {
     final point = _requestedDestination;
     final selectedMode = _requestedMode;
     final origin = _requestedOrigin;
+
     if (requestVersion != _requestVersion ||
         point == null ||
         selectedMode == null ||
@@ -121,6 +260,7 @@ class NavigationProvider extends ChangeNotifier {
     }
 
     final routeRequestVersion = ++_routeRequestVersion;
+
     try {
       final route = await _routeService.calculate(
         groupId: point.groupId,
@@ -128,6 +268,7 @@ class NavigationProvider extends ChangeNotifier {
         origin: origin,
         mode: selectedMode,
       );
+
       if (!_isCurrentInitialRouteRequest(
         requestVersion: requestVersion,
         routeRequestVersion: routeRequestVersion,
@@ -139,20 +280,30 @@ class NavigationProvider extends ChangeNotifier {
       destination = _requestedDestination;
       mode = selectedMode;
       currentLocation = origin;
-      _applyRoute(route, origin);
+
+      _applyRoute(route, origin, selectedMode);
+
       _locationSubscription = _locationService.getLocationStream().listen(
         _onLocation,
         onError: (Object _) {
-          if (!active) return;
+          if (!active) {
+            return;
+          }
+
           errorMessage = 'No se pudo actualizar tu ubicación.';
+
           notifyListeners();
         },
       );
+
       _requestedDestination = null;
       _requestedMode = null;
       _requestedOrigin = null;
+
       loading = false;
+
       _completePendingStart(true);
+
       notifyListeners();
     } catch (error) {
       if (_isCurrentInitialRouteRequest(
@@ -174,6 +325,7 @@ class NavigationProvider extends ChangeNotifier {
     required PointOfInterest point,
   }) {
     final requestedDestination = _requestedDestination;
+
     return requestVersion == _requestVersion &&
         routeRequestVersion == _routeRequestVersion &&
         requestedDestination != null &&
@@ -182,49 +334,107 @@ class NavigationProvider extends ChangeNotifier {
   }
 
   void _failInitialStart(int requestVersion, String message) {
-    if (requestVersion != _requestVersion) return;
+    if (requestVersion != _requestVersion) {
+      return;
+    }
+
     errorMessage = message;
     loading = false;
+
     _requestedDestination = null;
     _requestedMode = null;
     _requestedOrigin = null;
+
     _completePendingStart(false);
+
     notifyListeners();
   }
 
   void _completePendingStart(bool success) {
     final completion = _startCompleter;
+
     _startCompleter = null;
+
     if (completion != null && !completion.isCompleted) {
       completion.complete(success);
     }
   }
 
   void _onLocation(LocationModel location) {
-    final point = destination;
-    final selectedMode = mode;
-    final tracker = _tracker;
-    if (point == null || selectedMode == null || tracker == null) return;
-
-    currentLocation = location;
-    final userPoint = LatLng(location.latitude, location.longitude);
-    final destinationPoint = LatLng(point.latitude, point.longitude);
-    if (RouteProgressTracker.distanceMeters(userPoint, destinationPoint) <=
-        point.radius) {
-      unawaited(_finishWithNotice('Llegaste a ${point.name}.'));
+    /*
+     * Mientras DEBUG GPS está activo, ignoramos completamente las lecturas
+     * físicas para que no pisen la posición elegida manualmente.
+     */
+    if (debugLocationSimulationEnabled) {
       return;
     }
 
-    final progress = tracker.update(userPoint);
+    _processLocation(location);
+  }
+
+  void _processLocation(LocationModel location, {bool debugInjected = false}) {
+    final point = destination;
+    final selectedMode = mode;
+    final tracker = _tracker;
+
+    if (point == null || selectedMode == null || tracker == null) {
+      return;
+    }
+
+    currentLocation = location;
+
+    final userPoint = LatLng(location.latitude, location.longitude);
+
+    final destinationPoint = LatLng(point.latitude, point.longitude);
+
+    /*
+     * Llegada al destino.
+     */
+    if (RouteProgressTracker.distanceMeters(userPoint, destinationPoint) <=
+        point.radius) {
+      unawaited(_finishWithNotice('Llegaste a ${point.name}.'));
+
+      return;
+    }
+
+    final accuracy = math.max(0.0, location.accuracy);
+
+    final deviationThreshold = NavigationConfig.deviationThreshold(
+      selectedMode,
+    );
+
+    /*
+     * Solo dejamos que el progreso se "enganche" a la polyline si la
+     * posición está dentro de una distancia compatible con lo que
+     * consideraríamos todavía sobre la ruta.
+     *
+     * La accuracy amplía ligeramente esa tolerancia.
+     */
+    final maxSnapDistance = deviationThreshold + accuracy;
+
+    final progress = tracker.update(
+      userPoint,
+      maxSnapDistanceMeters: maxSnapDistance,
+    );
+
     remainingPoints = progress.remainingPoints;
+
     remainingDistanceMeters = progress.remainingDistanceMeters;
 
     final effectiveDeviation = math.max(
-      0,
-      progress.distanceToRouteMeters - math.max(0, location.accuracy),
+      0.0,
+      progress.distanceToRouteMeters - accuracy,
     );
-    if (effectiveDeviation >
-        NavigationConfig.deviationThreshold(selectedMode)) {
+
+    final severeDeviationThreshold = NavigationConfig.severeDeviationThreshold(
+      selectedMode,
+    );
+
+    final isOffRoute = effectiveDeviation > deviationThreshold;
+
+    final isSeverelyOffRoute = effectiveDeviation > severeDeviationThreshold;
+
+    if (isOffRoute) {
       _offRouteReadings++;
     } else {
       _offRouteReadings = 0;
@@ -232,31 +442,102 @@ class NavigationProvider extends ChangeNotifier {
 
     notifyListeners();
 
-    if (_offRouteReadings >= NavigationConfig.consecutiveOffRouteReadings &&
-        _canRecalculate()) {
-      _offRouteReadings = 0;
-      unawaited(_recalculate());
+    /*
+     * DEBUG:
+     *
+     * Cada tap equivale a UNA lectura de ubicación.
+     *
+     * No tendría sentido obligar al usuario a tocar tres veces casi el
+     * mismo lugar solamente para confirmar algo que nosotros mismos
+     * acabamos de simular deliberadamente.
+     */
+    final debugRequiresRecalculation = debugInjected && isOffRoute;
+
+    /*
+     * PRODUCCIÓN:
+     *
+     * Una desviación enorme tampoco necesita esperar tres lecturas.
+     */
+    final severeRequiresRecalculation = !debugInjected && isSeverelyOffRoute;
+
+    /*
+     * Para desviaciones normales mantenemos protección frente al ruido GPS.
+     */
+    final confirmedDeviation =
+        _offRouteReadings >= NavigationConfig.consecutiveOffRouteReadings;
+
+    final shouldRecalculate =
+        debugRequiresRecalculation ||
+        severeRequiresRecalculation ||
+        confirmedDeviation;
+
+    if (!shouldRecalculate) {
+      return;
     }
+
+    if (!_canRecalculate(
+      debugOverride: debugInjected,
+      urgent: isSeverelyOffRoute,
+    )) {
+      return;
+    }
+
+    _offRouteReadings = 0;
+
+    unawaited(_recalculate());
   }
 
-  bool _canRecalculate() {
-    if (recalculating) return false;
+  bool _canRecalculate({bool debugOverride = false, bool urgent = false}) {
+    /*
+     * En producción no lanzamos otra request mientras ya existe una.
+     *
+     * En DEBUG, setDebugLocation invalida explícitamente la anterior
+     * antes de llegar a este punto.
+     */
+    if (recalculating) {
+      return false;
+    }
+
+    /*
+     * El modo debug es deliberadamente interactivo y temporal.
+     * Cada posición simulada relevante debe poder disparar un cálculo.
+     */
+    if (debugOverride) {
+      return true;
+    }
+
     final last = _lastRecalculationAt;
-    return last == null ||
-        _clock().difference(last) >= NavigationConfig.recalculationCooldown;
+
+    if (last == null) {
+      return true;
+    }
+
+    final cooldown = urgent
+        ? NavigationConfig.severeRecalculationCooldown
+        : NavigationConfig.recalculationCooldown;
+
+    return _clock().difference(last) >= cooldown;
   }
 
   Future<void> _recalculate() async {
     final point = destination;
     final selectedMode = mode;
     final origin = currentLocation;
-    if (point == null || selectedMode == null || origin == null) return;
+
+    if (point == null || selectedMode == null || origin == null) {
+      return;
+    }
 
     final requestVersion = _requestVersion;
+
     final routeRequestVersion = ++_routeRequestVersion;
+
     recalculating = true;
+
     _lastRecalculationAt = _clock();
+
     errorMessage = null;
+
     notifyListeners();
 
     try {
@@ -266,6 +547,7 @@ class NavigationProvider extends ChangeNotifier {
         origin: origin,
         mode: selectedMode,
       );
+
       if (!_isCurrentRouteRequest(
         requestVersion: requestVersion,
         routeRequestVersion: routeRequestVersion,
@@ -273,8 +555,10 @@ class NavigationProvider extends ChangeNotifier {
       )) {
         return;
       }
+
       final latestLocation = currentLocation ?? origin;
-      _applyRoute(route, latestLocation);
+
+      _applyRoute(route, latestLocation, selectedMode);
     } catch (error) {
       if (_isCurrentRouteRequest(
         requestVersion: requestVersion,
@@ -282,8 +566,10 @@ class NavigationProvider extends ChangeNotifier {
         point: point,
       )) {
         errorMessage = _message(error, 'No se pudo recalcular la ruta.');
+
         _notice =
-            'No se pudo recalcular la ruta. Se mantiene el camino anterior.';
+            'No se pudo recalcular la ruta. '
+            'Se mantiene el camino anterior.';
       }
     } finally {
       if (_isCurrentRouteRequest(
@@ -292,6 +578,7 @@ class NavigationProvider extends ChangeNotifier {
         point: point,
       )) {
         recalculating = false;
+
         notifyListeners();
       }
     }
@@ -303,6 +590,7 @@ class NavigationProvider extends ChangeNotifier {
     required PointOfInterest point,
   }) {
     final currentDestination = destination;
+
     return requestVersion == _requestVersion &&
         routeRequestVersion == _routeRequestVersion &&
         currentDestination != null &&
@@ -310,40 +598,78 @@ class NavigationProvider extends ChangeNotifier {
         currentDestination.groupId == point.groupId;
   }
 
-  void _applyRoute(RouteResponse route, LocationModel location) {
+  void _applyRoute(
+    RouteResponse route,
+    LocationModel location,
+    RouteMode selectedMode,
+  ) {
     final tracker = RouteProgressTracker(route.points);
+
+    final accuracy = math.max(0.0, location.accuracy);
+
+    final maxSnapDistance =
+        NavigationConfig.deviationThreshold(selectedMode) + accuracy;
+
     final progress = tracker.update(
       LatLng(location.latitude, location.longitude),
+      maxSnapDistanceMeters: maxSnapDistance,
     );
+
     _tracker = tracker;
+
     remainingPoints = progress.remainingPoints;
+
     remainingDistanceMeters = progress.remainingDistanceMeters;
+
     durationSeconds = route.durationSeconds;
+
     errorMessage = null;
+
     _offRouteReadings = 0;
+
     _routeRevision++;
   }
 
   Future<void> cancel() async {
     final requestVersion = ++_requestVersion;
+
     _completePendingStart(false);
+
     await _cancelSubscription();
-    if (requestVersion != _requestVersion) return;
+
+    if (requestVersion != _requestVersion) {
+      return;
+    }
+
     _resetRouteState();
+
     notifyListeners();
   }
 
-  Future<void> clear() => cancel();
+  Future<void> clear() async {
+    if (kDebugMode) {
+      _debugLocationSimulationEnabled = false;
+
+      _debugLocation = null;
+    }
+
+    await cancel();
+  }
 
   Future<void> handleActiveGroupChanged(int? groupId) async {
     final routeGroupId = targetGroupId;
-    if (routeGroupId != null && routeGroupId != groupId) await cancel();
+
+    if (routeGroupId != null && routeGroupId != groupId) {
+      await cancel();
+    }
   }
 
   Future<void> handleDestinationUpdated(PointOfInterest updatedPoint) async {
     final currentDestination = destination;
+
     if (currentDestination == null) {
       final requestedDestination = _requestedDestination;
+
       if (requestedDestination == null ||
           requestedDestination.id != updatedPoint.id ||
           requestedDestination.groupId != updatedPoint.groupId) {
@@ -353,7 +679,9 @@ class NavigationProvider extends ChangeNotifier {
       final coordinatesChanged =
           requestedDestination.latitude != updatedPoint.latitude ||
           requestedDestination.longitude != updatedPoint.longitude;
+
       _requestedDestination = updatedPoint;
+
       notifyListeners();
 
       if (coordinatesChanged &&
@@ -361,6 +689,7 @@ class NavigationProvider extends ChangeNotifier {
           _requestedMode != null) {
         await _calculateInitialRoute(_requestVersion);
       }
+
       return;
     }
 
@@ -372,52 +701,87 @@ class NavigationProvider extends ChangeNotifier {
     final coordinatesChanged =
         currentDestination.latitude != updatedPoint.latitude ||
         currentDestination.longitude != updatedPoint.longitude;
+
     destination = updatedPoint;
 
     if (!coordinatesChanged) {
       notifyListeners();
+
       return;
+    }
+
+    /*
+     * Cambió físicamente el destino.
+     *
+     * Una request pendiente hacia la versión anterior debe quedar inválida.
+     */
+    if (recalculating) {
+      _routeRequestVersion++;
+      recalculating = false;
     }
 
     await _recalculate();
   }
 
   Future<void> handleDestinationUnavailable() async {
-    if (targetPointId == null || targetGroupId == null) return;
+    if (targetPointId == null || targetGroupId == null) {
+      return;
+    }
+
     await _finishWithNotice('El destino ya no está disponible.');
   }
 
   Future<void> _finishWithNotice(String message) async {
     _requestVersion++;
+
     _completePendingStart(false);
+
     final subscription = _locationSubscription;
+
     _locationSubscription = null;
+
     final cancellation = subscription?.cancel();
+
     _resetRouteState();
+
     _notice = message;
+
     notifyListeners();
+
     await cancellation;
   }
 
   Future<void> _cancelSubscription() async {
     final subscription = _locationSubscription;
+
     _locationSubscription = null;
+
     await subscription?.cancel();
   }
 
   void _resetRouteState() {
     destination = null;
     mode = null;
-    currentLocation = null;
+
+    currentLocation = debugLocationSimulationEnabled ? _debugLocation : null;
+
     remainingPoints = const [];
+
     remainingDistanceMeters = 0;
+
     durationSeconds = 0;
+
     loading = false;
     recalculating = false;
+
     errorMessage = null;
+
     _tracker = null;
+
     _lastRecalculationAt = null;
+
     _offRouteReadings = 0;
+
     _requestedDestination = null;
     _requestedMode = null;
     _requestedOrigin = null;
@@ -426,23 +790,37 @@ class NavigationProvider extends ChangeNotifier {
   String _permissionMessage(LocationPermissionStatus permission) =>
       switch (permission) {
         LocationPermissionStatus.serviceDisabled =>
-          'Activá la ubicación del dispositivo para calcular la ruta.',
+          'Activá la ubicación del dispositivo '
+              'para calcular la ruta.',
+
         LocationPermissionStatus.denied ||
         LocationPermissionStatus.deniedForever =>
-          'Bond necesita permiso de ubicación mientras usás la app.',
-        _ => 'No se pudo obtener permiso para usar tu ubicación.',
+          'Bond necesita permiso de ubicación '
+              'mientras usás la app.',
+
+        _ =>
+          'No se pudo obtener permiso '
+              'para usar tu ubicación.',
       };
 
   String _message(Object error, String fallback) {
     final message = error.toString().replaceFirst('Exception: ', '').trim();
+
     return message.isEmpty ? fallback : message;
   }
 
   @override
   void dispose() {
     _requestVersion++;
+
     _completePendingStart(false);
+
+    _debugLocationSimulationEnabled = false;
+
+    _debugLocation = null;
+
     unawaited(_locationSubscription?.cancel());
+
     super.dispose();
   }
 }

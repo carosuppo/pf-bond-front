@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:bond_front/core/theme/app_colors.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -158,6 +159,16 @@ class _MapScreenState extends ConsumerState<MapScreen> {
   void _handleMapTap() {
     _clearMemberInfo();
     _collapseSheet();
+  }
+
+  void _handleDebugLocationTap(LatLng point) {
+    if (!kDebugMode ||
+        _editing ||
+        !_navigation.debugLocationSimulationEnabled) {
+      return;
+    }
+    _handleMapTap();
+    _navigation.setDebugLocation(point);
   }
 
   void _handleMemberTap(int memberId) {
@@ -628,6 +639,9 @@ class _MapScreenState extends ConsumerState<MapScreen> {
     final routeBottomPadding = groupProvider.groupDetails == null
         ? 32.0
         : screenHeight * routeSheetFraction + 32;
+    final debugSimulationEnabled =
+        kDebugMode && navigation.debugLocationSimulationEnabled;
+    final navigationOverlayTop = topPadding + (kDebugMode ? 132 : 72);
 
     return PopScope(
       canPop: !_editing,
@@ -667,7 +681,7 @@ class _MapScreenState extends ConsumerState<MapScreen> {
                         routeFitRevision: navigation.routeRevision,
                         routeFitPadding: EdgeInsets.fromLTRB(
                           48,
-                          topPadding + 220,
+                          topPadding + (kDebugMode ? 280 : 220),
                           48,
                           routeBottomPadding,
                         ),
@@ -684,7 +698,9 @@ class _MapScreenState extends ConsumerState<MapScreen> {
                             ? _maxChildSize
                             : _minChildSize,
                         controller: _mapController,
-                        onMapTap: _editing ? null : _handleMapTap,
+                        onMapTap: _editing || debugSimulationEnabled
+                            ? null
+                            : _handleMapTap,
                         onMemberTap: _editing ? null : _handleMemberTap,
                         onTap: _editing
                             ? (point) {
@@ -692,6 +708,8 @@ class _MapScreenState extends ConsumerState<MapScreen> {
                                   _draftLocation = point;
                                 });
                               }
+                            : debugSimulationEnabled
+                            ? _handleDebugLocationTap
                             : null,
                       ),
                     ],
@@ -704,9 +722,15 @@ class _MapScreenState extends ConsumerState<MapScreen> {
                 right: 0,
                 child: const GroupSelectorButton(),
               ),
+              if (kDebugMode && !_editing)
+                Positioned(
+                  top: topPadding + 66,
+                  left: 16,
+                  child: _DebugGpsControl(navigation: navigation),
+                ),
               if (!_editing && navigation.active)
                 Positioned(
-                  top: topPadding + 72,
+                  top: navigationOverlayTop,
                   left: 16,
                   right: 16,
                   child: _NavigationCard(
@@ -716,7 +740,7 @@ class _MapScreenState extends ConsumerState<MapScreen> {
                 )
               else if (!_editing && _selectedPoint != null)
                 Positioned(
-                  top: topPadding + 72,
+                  top: navigationOverlayTop,
                   left: 24,
                   right: 24,
                   child: _SelectedPointCard(
@@ -1040,6 +1064,42 @@ class _MapScreenState extends ConsumerState<MapScreen> {
             ),
         ],
       ),
+    );
+  }
+}
+
+class _DebugGpsControl extends StatelessWidget {
+  const _DebugGpsControl({required this.navigation});
+
+  final NavigationProvider navigation;
+
+  @override
+  Widget build(BuildContext context) {
+    final enabled = navigation.debugLocationSimulationEnabled;
+    final location = navigation.debugLocation;
+
+    return FilterChip(
+      key: const ValueKey('debug-gps-toggle'),
+      selected: enabled,
+      showCheckmark: false,
+      avatar: Icon(
+        enabled ? Icons.gps_fixed_rounded : Icons.gps_off_rounded,
+        size: 18,
+      ),
+      label: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text('DEBUG GPS · ${enabled ? 'ON' : 'OFF'}'),
+          if (enabled && location != null)
+            Text(
+              '${location.latitude.toStringAsFixed(6)}, '
+              '${location.longitude.toStringAsFixed(6)}',
+              style: Theme.of(context).textTheme.labelSmall,
+            ),
+        ],
+      ),
+      onSelected: navigation.setDebugLocationSimulationEnabled,
     );
   }
 }

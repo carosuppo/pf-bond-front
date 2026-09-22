@@ -17,6 +17,7 @@ class _LocationService extends LocationService {
   LocationPermissionStatus permission = LocationPermissionStatus.whileInUse;
   Object? currentError;
   LocationModel current = _location(0, 0);
+  int currentCalls = 0;
   int cancellations = 0;
   late final StreamController<LocationModel> positions =
       StreamController<LocationModel>.broadcast(
@@ -30,6 +31,7 @@ class _LocationService extends LocationService {
 
   @override
   Future<LocationModel> getCurrentLocation() async {
+    currentCalls++;
     if (currentError != null) throw currentError!;
     return current;
   }
@@ -138,6 +140,99 @@ void main() {
     expect(provider.active, isFalse);
     expect(provider.remainingPoints, isEmpty);
     expect(location.cancellations, 1);
+  });
+
+  test('la ruta inicial usa la ubicación simulada y clear la limpia', () async {
+    final location = _LocationService();
+    final routes = _RouteService();
+    final provider = NavigationProvider(routes, location);
+    addTearDown(provider.dispose);
+    addTearDown(location.positions.close);
+
+    provider.setDebugLocationSimulationEnabled(true);
+    provider.setDebugLocation(const LatLng(0.001, 0.002));
+
+    expect(provider.debugLocationSimulationEnabled, isTrue);
+    expect(provider.currentLocation?.latitude, 0.001);
+    expect(provider.currentLocation?.longitude, 0.002);
+    expect(
+      await provider.start(
+        point: _destination(),
+        selectedMode: RouteMode.walking,
+      ),
+      isTrue,
+    );
+
+    expect(routes.lastOrigin?.latitude, 0.001);
+    expect(routes.lastOrigin?.longitude, 0.002);
+    expect(location.currentCalls, 0);
+
+    await provider.clear();
+    expect(provider.debugLocationSimulationEnabled, isFalse);
+    expect(provider.debugLocation, isNull);
+    expect(provider.currentLocation, isNull);
+  });
+
+  test(
+    'la simulación actualiza progreso e ignora GPS real hasta desactivarse',
+    () async {
+      final location = _LocationService();
+      final routes = _RouteService()
+        ..responses.add(
+          _route(
+            points: const [LatLng(0, 0), LatLng(0, 0.005), LatLng(0, 0.01)],
+          ),
+        );
+      final provider = NavigationProvider(routes, location);
+      addTearDown(provider.dispose);
+      addTearDown(location.positions.close);
+
+      provider.setDebugLocationSimulationEnabled(true);
+      provider.setDebugLocation(const LatLng(0, 0));
+      await provider.start(
+        point: _destination(),
+        selectedMode: RouteMode.walking,
+      );
+      final initialDistance = provider.remainingDistanceMeters;
+
+      provider.setDebugLocation(const LatLng(0, 0.004));
+      final simulatedDistance = provider.remainingDistanceMeters;
+      expect(provider.currentLocation?.longitude, 0.004);
+      expect(simulatedDistance, lessThan(initialDistance));
+
+      location.positions.add(_location(0, 0.008));
+      expect(provider.currentLocation?.longitude, 0.004);
+      expect(provider.remainingDistanceMeters, simulatedDistance);
+
+      provider.setDebugLocationSimulationEnabled(false);
+      location.positions.add(_location(0, 0.006));
+      expect(provider.debugLocation, isNull);
+      expect(provider.currentLocation?.longitude, 0.006);
+      expect(provider.remainingDistanceMeters, lessThan(simulatedDistance));
+    },
+  );
+
+  test('una ubicación simulada dentro del radio finaliza la ruta', () async {
+    final location = _LocationService();
+    final routes = _RouteService();
+    final provider = NavigationProvider(routes, location);
+    addTearDown(provider.dispose);
+    addTearDown(location.positions.close);
+
+    provider.setDebugLocationSimulationEnabled(true);
+    provider.setDebugLocation(const LatLng(0, 0));
+    await provider.start(
+      point: _destination(radius: 15),
+      selectedMode: RouteMode.walking,
+    );
+
+    provider.setDebugLocation(const LatLng(0, 0.00995));
+    await _flush();
+
+    expect(provider.active, isFalse);
+    expect(provider.remainingPoints, isEmpty);
+    expect(provider.currentLocation?.longitude, 0.00995);
+    expect(provider.takeNotice(), 'Llegaste a Universidad.');
   });
 
   test('informa permiso denegado y ubicación no disponible', () async {

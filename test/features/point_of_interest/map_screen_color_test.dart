@@ -32,6 +32,7 @@ import 'package:bond_front/features/routing/services/route_service.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:latlong2/latlong.dart';
 import 'package:provider/provider.dart' as provider;
 
 class _NoopSessionStateCleanup implements SessionStateCleanup {
@@ -222,6 +223,38 @@ void main() {
         ),
       );
       await tester.pumpAndSettle();
+      final debugToggle = find.byKey(const ValueKey('debug-gps-toggle'));
+      expect(debugToggle, findsOneWidget);
+      await tester.tap(debugToggle);
+      await tester.pumpAndSettle();
+      expect(find.text('DEBUG GPS · ON'), findsOneWidget);
+
+      final debugMap = tester.widget<LocationMap>(find.byType(LocationMap));
+      expect(debugMap.onTap, isNotNull);
+      debugMap.onTap!(
+        LatLng(
+          defaultLocation.latitude - 0.005,
+          defaultLocation.longitude - 0.005,
+        ),
+      );
+      await tester.pumpAndSettle();
+      expect(
+        navigation.currentLocation?.latitude,
+        closeTo(defaultLocation.latitude - 0.005, 0.000001),
+      );
+      expect(
+        tester
+            .widget<LocationMap>(find.byType(LocationMap))
+            .navigationLocation
+            ?.longitude,
+        closeTo(defaultLocation.longitude - 0.005, 0.000001),
+      );
+
+      await tester.tap(debugToggle);
+      await tester.pumpAndSettle();
+      expect(find.text('DEBUG GPS · OFF'), findsOneWidget);
+      expect(navigation.currentLocation, isNull);
+
       await tester.tap(find.byTooltip('Agregar punto de interés'));
       await tester.pumpAndSettle();
       expect(find.text('Punto de encuentro temporal'), findsOneWidget);
