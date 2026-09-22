@@ -1,7 +1,7 @@
 import 'package:share_plus/share_plus.dart';
 import 'package:url_launcher/url_launcher.dart';
 
-import '../../../core/config/app_link_config.dart';
+import '../../../core/config/api_config.dart';
 import '../formatters/invitation_code_formatter.dart';
 import '../utils/invitation_code.dart';
 
@@ -14,22 +14,28 @@ class GroupInvitationShareService {
   GroupInvitationShareService({
     ExternalUriLauncher? launchExternalUri,
     SystemTextSharer? shareText,
+    this.apiBaseUrl,
   }) : _launchExternalUri = launchExternalUri ?? _defaultLaunchExternalUri,
        _shareText = shareText ?? _defaultShareText;
 
   final ExternalUriLauncher _launchExternalUri;
   final SystemTextSharer _shareText;
+  final String? apiBaseUrl;
 
   static String buildMessage({
     required String groupName,
     required String invitationCode,
+    required String apiBaseUrl,
   }) {
     final normalizedCode = InvitationCode.normalize(invitationCode);
-    final invitationLink = AppLinkConfig.invitationUri(normalizedCode);
+    final invitationLink = ApiConfig.invitationUri(
+      normalizedCode,
+      baseUrlOverride: apiBaseUrl,
+    );
     final displayedCode = formatInvitationCode(normalizedCode);
 
     return 'Te invito a unirte a mi grupo "$groupName" en Bond.\n\n'
-        'Tocá el enlace para unirte directamente:\n'
+        'Tocá el enlace para unirte:\n'
         '$invitationLink\n\n'
         'Código de invitación: $displayedCode';
   }
@@ -41,6 +47,7 @@ class GroupInvitationShareService {
     final message = buildMessage(
       groupName: groupName,
       invitationCode: invitationCode,
+      apiBaseUrl: apiBaseUrl ?? ApiConfig.baseUrl,
     );
     final whatsappUri = Uri(
       scheme: 'whatsapp',

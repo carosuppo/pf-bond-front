@@ -41,36 +41,42 @@ class _FakeAppLinkSource implements AppLinkSource {
 void main() {
   test('parses a valid Bond invitation link', () {
     expect(
-      AppLinkService.parseInvitationCode(
-        Uri.parse('https://bond.app/invite/ABCDEF'),
-      ),
+      AppLinkService.parseInvitationCode(Uri.parse('bond://invite/ABCDEF')),
       'ABCDEF',
     );
   });
 
   test('normalizes a displayed invitation code from a link', () {
     expect(
-      AppLinkService.parseInvitationCode(
-        Uri.parse('https://bond.app/invite/abc-def'),
-      ),
+      AppLinkService.parseInvitationCode(Uri.parse('bond://invite/abc-def')),
       'ABCDEF',
     );
   });
 
   test('rejects links without a valid invitation code', () {
     expect(
-      AppLinkService.parseInvitationCode(Uri.parse('https://bond.app/invite')),
+      AppLinkService.parseInvitationCode(Uri.parse('bond://invite/')),
+      isNull,
+    );
+    expect(
+      AppLinkService.parseInvitationCode(Uri.parse('bond://invite/ABC')),
+      isNull,
+    );
+    expect(
+      AppLinkService.parseInvitationCode(Uri.parse('bond://group/ABCDEF')),
+      isNull,
+    );
+    expect(
+      AppLinkService.parseInvitationCode(Uri.parse('http://invite/ABCDEF')),
+      isNull,
+    );
+    expect(
+      AppLinkService.parseInvitationCode(Uri.parse('bond://invite/ABCDEFG')),
       isNull,
     );
     expect(
       AppLinkService.parseInvitationCode(
-        Uri.parse('https://bond.app/invite/ABC'),
-      ),
-      isNull,
-    );
-    expect(
-      AppLinkService.parseInvitationCode(
-        Uri.parse('https://other.app/invite/ABCDEF'),
+        Uri.parse('bond://invite/ABCDEF/EXTRA'),
       ),
       isNull,
     );
@@ -79,7 +85,7 @@ void main() {
   test('stores the cold-start invitation before authentication', () async {
     final preferences = _MemoryPreferences();
     final source = _FakeAppLinkSource(
-      initialLink: Uri.parse('https://bond.app/invite/ABCDEF'),
+      initialLink: Uri.parse('bond://invite/ABCDEF'),
     );
     final service = AppLinkService(preferences, source: source);
 
@@ -97,12 +103,9 @@ void main() {
     var received = 0;
     final subscription = service.invitationCodes.listen((_) => received++);
 
+    expect(await service.processUri(Uri.parse('bond://invite/ABCDEF')), isTrue);
     expect(
-      await service.processUri(Uri.parse('https://bond.app/invite/ABCDEF')),
-      isTrue,
-    );
-    expect(
-      await service.processUri(Uri.parse('https://bond.app/invite/ABCDEF')),
+      await service.processUri(Uri.parse('bond://invite/ABCDEF')),
       isFalse,
     );
 

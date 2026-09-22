@@ -96,12 +96,11 @@ class AppLinkService {
   static String? parseInvitationCode(Uri uri) {
     if (uri.scheme.toLowerCase() != AppLinkConfig.scheme ||
         uri.host.toLowerCase() != AppLinkConfig.host ||
-        uri.pathSegments.length != 2 ||
-        uri.pathSegments.first.toLowerCase() != AppLinkConfig.invitationPath) {
+        uri.pathSegments.length != 1) {
       return null;
     }
 
-    final invitationCode = InvitationCode.normalize(uri.pathSegments.last);
+    final invitationCode = InvitationCode.normalize(uri.pathSegments.single);
     return InvitationCode.isValid(invitationCode) ? invitationCode : null;
   }
 

@@ -31,6 +31,7 @@ void main() {
 
   testWidgets('shows code, WhatsApp, copy, and done actions', (tester) async {
     final service = GroupInvitationShareService(
+      apiBaseUrl: 'http://192.168.1.10:3000',
       launchExternalUri: (_) async => true,
       shareText: (_) async {},
     );
@@ -48,6 +49,7 @@ void main() {
   ) async {
     Uri? launchedUri;
     final service = GroupInvitationShareService(
+      apiBaseUrl: 'http://192.168.1.10:3000',
       launchExternalUri: (uri) async {
         launchedUri = uri;
         return true;
@@ -85,6 +87,7 @@ void main() {
       ),
     );
     final service = GroupInvitationShareService(
+      apiBaseUrl: 'http://192.168.1.10:3000',
       launchExternalUri: (_) async => true,
       shareText: (_) async {},
     );
