@@ -10,9 +10,11 @@ class EventService {
   Future<List<EventResponseModel>> getEvents({
     required int groupId,
     required int year,
+    int? month,
   }) async {
+    final query = month == null ? '?year=$year' : '?year=$year&month=$month';
     final response = await _apiClient.authenticatedGetList(
-      '/group/$groupId/event?year=$year',
+      '/group/$groupId/event$query',
     );
     return response.map(EventResponseModel.fromJson).toList(growable: false);
   }

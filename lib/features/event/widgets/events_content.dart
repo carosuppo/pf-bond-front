@@ -6,6 +6,7 @@ import '../../group/providers/group_provider.dart';
 import '../formatters/event_date_formatter.dart';
 import '../models/event_model.response.dart';
 import '../providers/event_provider.dart';
+import 'event_calendar.dart';
 import 'event_details_modal.dart';
 
 class EventsContent extends StatefulWidget {
@@ -153,14 +154,10 @@ class _EventsContentState extends State<EventsContent> {
 
     final todayEvents = eventProvider.todayEvents;
 
-    if (todayEvents.isEmpty) {
-      return _buildRefreshable(const Center(child: _EmptyState()));
-    }
-
     final rowHeight = _rowHeight;
     final shouldCap = todayEvents.length > _maxVisibleEvents;
 
-    if (rowHeight == null) {
+    if (todayEvents.isNotEmpty && rowHeight == null) {
       WidgetsBinding.instance.addPostFrameCallback((_) => _measureRowHeight());
     }
 
@@ -177,42 +174,52 @@ class _EventsContentState extends State<EventsContent> {
             padding: EdgeInsets.fromLTRB(24, 16, 24, 0),
             child: _TodayHeader(),
           ),
-          Padding(
-            padding: const EdgeInsets.fromLTRB(24, 12, 24, 16),
-            child: Container(
-              decoration: BoxDecoration(
-                color: AppColors.cardColor,
-                borderRadius: BorderRadius.circular(18),
-                border: Border.all(color: AppColors.border),
-              ),
-              clipBehavior: Clip.antiAlias,
-              constraints: maxContainerHeight != null
-                  ? BoxConstraints(maxHeight: maxContainerHeight)
-                  : null,
-              child: ListView(
-                shrinkWrap: true,
-                padding: EdgeInsets.zero,
-                children: [
-                  for (var i = 0; i < todayEvents.length; i++) ...[
-                    if (i > 0)
-                      const Padding(
-                        padding: EdgeInsets.symmetric(horizontal: 12),
-                        child: Divider(height: 1, color: AppColors.divider),
-                      ),
-                    _EventCard(
-                      event: todayEvents[i],
-                      onTap: () {
-                        final groupId = groupProvider.activeGroup!.id;
+          if (todayEvents.isEmpty)
+            const Padding(
+              padding: EdgeInsets.fromLTRB(24, 12, 24, 0),
+              child: _TodayEmptyCard(),
+            )
+          else
+            Padding(
+              padding: const EdgeInsets.fromLTRB(24, 12, 24, 0),
+              child: Container(
+                decoration: BoxDecoration(
+                  color: AppColors.cardColor,
+                  borderRadius: BorderRadius.circular(18),
+                  border: Border.all(color: AppColors.border),
+                ),
+                clipBehavior: Clip.antiAlias,
+                constraints: maxContainerHeight != null
+                    ? BoxConstraints(maxHeight: maxContainerHeight)
+                    : null,
+                child: ListView(
+                  shrinkWrap: true,
+                  padding: EdgeInsets.zero,
+                  children: [
+                    for (var i = 0; i < todayEvents.length; i++) ...[
+                      if (i > 0)
+                        const Padding(
+                          padding: EdgeInsets.symmetric(horizontal: 12),
+                          child: Divider(height: 1, color: AppColors.divider),
+                        ),
+                      _EventCard(
+                        event: todayEvents[i],
+                        onTap: () {
+                          final groupId = groupProvider.activeGroup!.id;
 
-                        showEventDetailsModal(context, todayEvents[i], groupId);
-                      },
-                    ),
+                          showEventDetailsModal(
+                            context,
+                            todayEvents[i],
+                            groupId,
+                          );
+                        },
+                      ),
+                    ],
                   ],
-                ],
+                ),
               ),
             ),
-          ),
-          if (rowHeight == null)
+          if (todayEvents.isNotEmpty && rowHeight == null)
             Offstage(
               offstage: true,
               child: _EventCard(
@@ -221,6 +228,7 @@ class _EventsContentState extends State<EventsContent> {
                 onTap: () {},
               ),
             ),
+          const EventCalendar(),
         ],
       ),
     );
@@ -350,15 +358,31 @@ class _LoadingState extends StatelessWidget {
   }
 }
 
-class _EmptyState extends StatelessWidget {
-  const _EmptyState();
+class _TodayEmptyCard extends StatelessWidget {
+  const _TodayEmptyCard();
 
   @override
   Widget build(BuildContext context) {
-    return const _CenteredMessage(
-      icon: Icons.event_rounded,
-      title: 'No hay eventos para hoy',
-      subtitle: 'Los eventos programados para hoy\nvan a aparecer acá.',
+    return Container(
+      width: double.infinity,
+      decoration: BoxDecoration(
+        color: AppColors.cardColor,
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(color: AppColors.border),
+      ),
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 18),
+      child: const Row(
+        children: [
+          Icon(Icons.event_rounded, color: AppColors.primary, size: 24),
+          SizedBox(width: 12),
+          Expanded(
+            child: Text(
+              'No hay eventos para hoy.',
+              style: TextStyle(color: AppColors.mutedText, fontSize: 14),
+            ),
+          ),
+        ],
+      ),
     );
   }
 }
