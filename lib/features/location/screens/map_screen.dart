@@ -431,6 +431,7 @@ class _MapScreenState extends ConsumerState<MapScreen> {
   }
 
   void _startCreate({bool temporary = false}) {
+    if (_navigation.active) return;
     setState(() {
       _editing = true;
       _editingPoint = null;
@@ -445,6 +446,7 @@ class _MapScreenState extends ConsumerState<MapScreen> {
   }
 
   void _startEdit(PointOfInterest point) {
+    if (_navigation.active) return;
     setState(() {
       _editing = true;
       _editingPoint = point;
@@ -473,6 +475,7 @@ class _MapScreenState extends ConsumerState<MapScreen> {
   }
 
   void _selectPoint(PointOfInterest point) {
+    if (_navigation.active) return;
     setState(() => _selectedPoint = point);
     _mapController.move(LatLng(point.latitude, point.longitude), 16);
 
@@ -480,6 +483,7 @@ class _MapScreenState extends ConsumerState<MapScreen> {
   }
 
   Future<void> _chooseCreationType() async {
+    if (_navigation.active) return;
     final temporary = await showModalBottomSheet<bool>(
       context: context,
       builder: (sheetContext) => SafeArea(
@@ -501,11 +505,12 @@ class _MapScreenState extends ConsumerState<MapScreen> {
         ),
       ),
     );
-    if (!mounted || temporary == null) return;
+    if (!mounted || temporary == null || _navigation.active) return;
     _startCreate(temporary: temporary);
   }
 
   Future<void> _startNavigation(PointOfInterest point) async {
+    if (_navigation.active) return;
     final selectedMode = await showDialog<RouteMode>(
       context: context,
       builder: (dialogContext) => SimpleDialog(
@@ -528,7 +533,7 @@ class _MapScreenState extends ConsumerState<MapScreen> {
         ],
       ),
     );
-    if (!mounted || selectedMode == null) return;
+    if (!mounted || selectedMode == null || _navigation.active) return;
 
     final success = await _navigation.start(
       point: point,
@@ -547,6 +552,7 @@ class _MapScreenState extends ConsumerState<MapScreen> {
   }
 
   Future<void> _confirmDelete(PointOfInterest point) async {
+    if (_navigation.active) return;
     final messenger = ScaffoldMessenger.of(context);
 
     final confirmed = await showDialog<bool>(
@@ -566,7 +572,7 @@ class _MapScreenState extends ConsumerState<MapScreen> {
       ),
     );
 
-    if (confirmed != true || !mounted) {
+    if (confirmed != true || !mounted || _navigation.active) {
       return;
     }
 
@@ -667,7 +673,9 @@ class _MapScreenState extends ConsumerState<MapScreen> {
                         ),
                         navigationLocation: navigation.currentLocation,
                         destinationPointId: navigation.destination?.id,
-                        onPointTap: _editing ? null : _selectPoint,
+                        onPointTap: _editing || navigation.active
+                            ? null
+                            : _selectPoint,
                         indicatorBottomFraction: _editing
                             ? _poiMaxChildSize
                             : groupProvider.groupDetails == null
@@ -767,6 +775,7 @@ class _MapScreenState extends ConsumerState<MapScreen> {
                                       bottomContent:
                                           _buildPointOfInterestContent(
                                             pointProvider,
+                                            navigationActive: navigation.active,
                                           ),
                                     )
                                   : _memberInfo != null
@@ -776,6 +785,7 @@ class _MapScreenState extends ConsumerState<MapScreen> {
                                       bottomContent:
                                           _buildPointOfInterestContent(
                                             pointProvider,
+                                            navigationActive: navigation.active,
                                           ),
                                     )
                                   : GroupInfoBottomSheet(
@@ -784,6 +794,7 @@ class _MapScreenState extends ConsumerState<MapScreen> {
                                       bottomContent:
                                           _buildPointOfInterestContent(
                                             pointProvider,
+                                            navigationActive: navigation.active,
                                           ),
                                     ),
                             ),
@@ -921,7 +932,8 @@ class _MapScreenState extends ConsumerState<MapScreen> {
             ],
           ),
         ),
-        floatingActionButton: groupProvider.activeGroup != null && !_editing
+        floatingActionButton:
+            groupProvider.activeGroup != null && !_editing && !navigation.active
             ? FloatingActionButton(
                 backgroundColor: AppColors.primary,
                 foregroundColor: AppColors.onPrimary,
@@ -939,7 +951,10 @@ class _MapScreenState extends ConsumerState<MapScreen> {
     );
   }
 
-  Widget _buildPointOfInterestContent(PointOfInterestProvider pointProvider) {
+  Widget _buildPointOfInterestContent(
+    PointOfInterestProvider pointProvider, {
+    required bool navigationActive,
+  }) {
     return ListTileTheme.merge(
       minLeadingWidth: 22,
       horizontalTitleGap: 8,
@@ -1007,6 +1022,7 @@ class _MapScreenState extends ConsumerState<MapScreen> {
                     alignment: Alignment.center,
                     child: _PointOfInterestListItem(
                       point: pointProvider.points[index],
+                      navigationActive: navigationActive,
                       onTap: _selectPoint,
                       onEdit: _startEdit,
                       onDelete: (point) {
@@ -1030,6 +1046,7 @@ class _MapScreenState extends ConsumerState<MapScreen> {
 
 class _PointOfInterestListItem extends StatelessWidget {
   final PointOfInterest point;
+  final bool navigationActive;
   final ValueChanged<PointOfInterest> onTap;
   final ValueChanged<PointOfInterest> onEdit;
   final ValueChanged<PointOfInterest> onDelete;
@@ -1037,6 +1054,7 @@ class _PointOfInterestListItem extends StatelessWidget {
 
   const _PointOfInterestListItem({
     required this.point,
+    required this.navigationActive,
     required this.onTap,
     required this.onEdit,
     required this.onDelete,
@@ -1050,7 +1068,7 @@ class _PointOfInterestListItem extends StatelessWidget {
     return Card(
       margin: EdgeInsets.zero,
       child: InkWell(
-        onTap: () => onTap(point),
+        onTap: navigationActive ? null : () => onTap(point),
         child: Padding(
           padding: const EdgeInsets.all(12),
           child: Column(
@@ -1058,15 +1076,16 @@ class _PointOfInterestListItem extends StatelessWidget {
             children: [
               Row(
                 children: [
-                  Transform.translate(
-                    offset: const Offset(-6, -6),
-                    child: IconButton(
-                      tooltip: 'Editar punto de interés',
-                      color: AppColors.primary,
-                      onPressed: () => onEdit(point),
-                      icon: const Icon(Icons.edit_outlined),
+                  if (!navigationActive)
+                    Transform.translate(
+                      offset: const Offset(-6, -6),
+                      child: IconButton(
+                        tooltip: 'Editar punto de interés',
+                        color: AppColors.primary,
+                        onPressed: () => onEdit(point),
+                        icon: const Icon(Icons.edit_outlined),
+                      ),
                     ),
-                  ),
                   Expanded(
                     child: Text(
                       point.name,
@@ -1078,15 +1097,16 @@ class _PointOfInterestListItem extends StatelessWidget {
                       ),
                     ),
                   ),
-                  Transform.translate(
-                    offset: const Offset(6, -6),
-                    child: IconButton(
-                      tooltip: 'Eliminar punto de interés',
-                      color: AppColors.primary,
-                      onPressed: () => onDelete(point),
-                      icon: const Icon(Icons.delete_outline),
+                  if (!navigationActive)
+                    Transform.translate(
+                      offset: const Offset(6, -6),
+                      child: IconButton(
+                        tooltip: 'Eliminar punto de interés',
+                        color: AppColors.primary,
+                        onPressed: () => onDelete(point),
+                        icon: const Icon(Icons.delete_outline),
+                      ),
                     ),
-                  ),
                 ],
               ),
               Text(
@@ -1120,12 +1140,14 @@ class _PointOfInterestListItem extends StatelessWidget {
                   fontSize: 14,
                 ),
               ),
-              const SizedBox(height: 8),
-              OutlinedButton.icon(
-                onPressed: () => onDirections(point),
-                icon: const Icon(Icons.directions_rounded),
-                label: const Text('Cómo llegar'),
-              ),
+              if (!navigationActive) ...[
+                const SizedBox(height: 8),
+                OutlinedButton.icon(
+                  onPressed: () => onDirections(point),
+                  icon: const Icon(Icons.directions_rounded),
+                  label: const Text('Cómo llegar'),
+                ),
+              ],
             ],
           ),
         ),

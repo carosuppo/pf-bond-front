@@ -43,13 +43,16 @@ class NavigationProvider extends ChangeNotifier {
   int _routeRequestVersion = 0;
   int _routeRevision = 0;
   String? _notice;
-  int? _requestedGroupId;
-  int? _requestedPointId;
+  PointOfInterest? _requestedDestination;
+  RouteMode? _requestedMode;
+  LocationModel? _requestedOrigin;
+  Completer<bool>? _startCompleter;
 
   bool get active => destination != null;
   int get routeRevision => _routeRevision;
-  int? get targetGroupId => destination?.groupId ?? _requestedGroupId;
-  int? get targetPointId => destination?.id ?? _requestedPointId;
+  int? get targetGroupId =>
+      destination?.groupId ?? _requestedDestination?.groupId;
+  int? get targetPointId => destination?.id ?? _requestedDestination?.id;
 
   String? takeNotice() {
     final notice = _notice;
@@ -62,11 +65,14 @@ class NavigationProvider extends ChangeNotifier {
     required RouteMode selectedMode,
   }) async {
     final requestVersion = ++_requestVersion;
+    _completePendingStart(false);
     await _cancelSubscription();
     if (requestVersion != _requestVersion) return false;
     _resetRouteState();
-    _requestedGroupId = point.groupId;
-    _requestedPointId = point.id;
+    _requestedDestination = point;
+    _requestedMode = selectedMode;
+    final completion = Completer<bool>();
+    _startCompleter = completion;
     loading = true;
     errorMessage = null;
     notifyListeners();
@@ -76,34 +82,64 @@ class NavigationProvider extends ChangeNotifier {
       if (requestVersion != _requestVersion) return false;
       if (permission != LocationPermissionStatus.whileInUse &&
           permission != LocationPermissionStatus.always) {
-        errorMessage = _permissionMessage(permission);
-        return false;
+        _failInitialStart(requestVersion, _permissionMessage(permission));
+        return completion.future;
       }
 
       late final LocationModel location;
       try {
         location = await _locationService.getCurrentLocation();
       } catch (_) {
-        if (requestVersion == _requestVersion) {
-          errorMessage = 'No se pudo obtener tu ubicación actual.';
-        }
-        return false;
+        _failInitialStart(
+          requestVersion,
+          'No se pudo obtener tu ubicación actual.',
+        );
+        return completion.future;
       }
       if (requestVersion != _requestVersion) return false;
+      _requestedOrigin = location;
+      unawaited(_calculateInitialRoute(requestVersion));
+      return completion.future;
+    } catch (error) {
+      _failInitialStart(
+        requestVersion,
+        _message(error, 'No se pudo calcular la ruta.'),
+      );
+      return completion.future;
+    }
+  }
+
+  Future<void> _calculateInitialRoute(int requestVersion) async {
+    final point = _requestedDestination;
+    final selectedMode = _requestedMode;
+    final origin = _requestedOrigin;
+    if (requestVersion != _requestVersion ||
+        point == null ||
+        selectedMode == null ||
+        origin == null) {
+      return;
+    }
+
+    final routeRequestVersion = ++_routeRequestVersion;
+    try {
       final route = await _routeService.calculate(
         groupId: point.groupId,
         pointId: point.id,
-        origin: location,
+        origin: origin,
         mode: selectedMode,
       );
-      if (requestVersion != _requestVersion) return false;
+      if (!_isCurrentInitialRouteRequest(
+        requestVersion: requestVersion,
+        routeRequestVersion: routeRequestVersion,
+        point: point,
+      )) {
+        return;
+      }
 
-      destination = point;
-      _requestedGroupId = null;
-      _requestedPointId = null;
+      destination = _requestedDestination;
       mode = selectedMode;
-      currentLocation = location;
-      _applyRoute(route, location);
+      currentLocation = origin;
+      _applyRoute(route, origin);
       _locationSubscription = _locationService.getLocationStream().listen(
         _onLocation,
         onError: (Object _) {
@@ -112,21 +148,55 @@ class NavigationProvider extends ChangeNotifier {
           notifyListeners();
         },
       );
-      return true;
+      _requestedDestination = null;
+      _requestedMode = null;
+      _requestedOrigin = null;
+      loading = false;
+      _completePendingStart(true);
+      notifyListeners();
     } catch (error) {
-      if (requestVersion == _requestVersion) {
-        errorMessage = _message(error, 'No se pudo calcular la ruta.');
+      if (_isCurrentInitialRouteRequest(
+        requestVersion: requestVersion,
+        routeRequestVersion: routeRequestVersion,
+        point: point,
+      )) {
+        _failInitialStart(
+          requestVersion,
+          _message(error, 'No se pudo calcular la ruta.'),
+        );
       }
-      return false;
-    } finally {
-      if (requestVersion == _requestVersion) {
-        if (destination == null) {
-          _requestedGroupId = null;
-          _requestedPointId = null;
-        }
-        loading = false;
-        notifyListeners();
-      }
+    }
+  }
+
+  bool _isCurrentInitialRouteRequest({
+    required int requestVersion,
+    required int routeRequestVersion,
+    required PointOfInterest point,
+  }) {
+    final requestedDestination = _requestedDestination;
+    return requestVersion == _requestVersion &&
+        routeRequestVersion == _routeRequestVersion &&
+        requestedDestination != null &&
+        requestedDestination.id == point.id &&
+        requestedDestination.groupId == point.groupId;
+  }
+
+  void _failInitialStart(int requestVersion, String message) {
+    if (requestVersion != _requestVersion) return;
+    errorMessage = message;
+    loading = false;
+    _requestedDestination = null;
+    _requestedMode = null;
+    _requestedOrigin = null;
+    _completePendingStart(false);
+    notifyListeners();
+  }
+
+  void _completePendingStart(bool success) {
+    final completion = _startCompleter;
+    _startCompleter = null;
+    if (completion != null && !completion.isCompleted) {
+      completion.complete(success);
     }
   }
 
@@ -256,6 +326,7 @@ class NavigationProvider extends ChangeNotifier {
 
   Future<void> cancel() async {
     final requestVersion = ++_requestVersion;
+    _completePendingStart(false);
     await _cancelSubscription();
     if (requestVersion != _requestVersion) return;
     _resetRouteState();
@@ -271,8 +342,29 @@ class NavigationProvider extends ChangeNotifier {
 
   Future<void> handleDestinationUpdated(PointOfInterest updatedPoint) async {
     final currentDestination = destination;
-    if (currentDestination == null ||
-        currentDestination.id != updatedPoint.id ||
+    if (currentDestination == null) {
+      final requestedDestination = _requestedDestination;
+      if (requestedDestination == null ||
+          requestedDestination.id != updatedPoint.id ||
+          requestedDestination.groupId != updatedPoint.groupId) {
+        return;
+      }
+
+      final coordinatesChanged =
+          requestedDestination.latitude != updatedPoint.latitude ||
+          requestedDestination.longitude != updatedPoint.longitude;
+      _requestedDestination = updatedPoint;
+      notifyListeners();
+
+      if (coordinatesChanged &&
+          _requestedOrigin != null &&
+          _requestedMode != null) {
+        await _calculateInitialRoute(_requestVersion);
+      }
+      return;
+    }
+
+    if (currentDestination.id != updatedPoint.id ||
         currentDestination.groupId != updatedPoint.groupId) {
       return;
     }
@@ -297,6 +389,7 @@ class NavigationProvider extends ChangeNotifier {
 
   Future<void> _finishWithNotice(String message) async {
     _requestVersion++;
+    _completePendingStart(false);
     final subscription = _locationSubscription;
     _locationSubscription = null;
     final cancellation = subscription?.cancel();
@@ -325,8 +418,9 @@ class NavigationProvider extends ChangeNotifier {
     _tracker = null;
     _lastRecalculationAt = null;
     _offRouteReadings = 0;
-    _requestedGroupId = null;
-    _requestedPointId = null;
+    _requestedDestination = null;
+    _requestedMode = null;
+    _requestedOrigin = null;
   }
 
   String _permissionMessage(LocationPermissionStatus permission) =>
@@ -347,6 +441,7 @@ class NavigationProvider extends ChangeNotifier {
   @override
   void dispose() {
     _requestVersion++;
+    _completePendingStart(false);
     unawaited(_locationSubscription?.cancel());
     super.dispose();
   }

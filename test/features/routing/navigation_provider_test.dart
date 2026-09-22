@@ -222,6 +222,81 @@ void main() {
     expect(provider.remainingPoints, isEmpty);
   });
 
+  test('conserva metadata actualizada durante el cálculo inicial', () async {
+    final location = _LocationService();
+    final initialRequest = Completer<RouteResponse>();
+    final routes = _RouteService()..pendingResponses.add(initialRequest);
+    final provider = NavigationProvider(routes, location);
+    addTearDown(provider.dispose);
+    addTearDown(location.positions.close);
+
+    final starting = provider.start(
+      point: _destination(radius: 25),
+      selectedMode: RouteMode.walking,
+    );
+    await _flush();
+    expect(routes.calls, 1);
+
+    await provider.handleDestinationUpdated(
+      _destination(name: 'UTN', description: 'Campus', radius: 150),
+    );
+    initialRequest.complete(_route());
+
+    expect(await starting, isTrue);
+    expect(provider.destination?.name, 'UTN');
+    expect(provider.destination?.description, 'Campus');
+    expect(provider.destination?.radius, 150);
+    expect(routes.calls, 1);
+  });
+
+  test('una ruta inicial vieja no gana si cambian las coordenadas', () async {
+    final location = _LocationService();
+    final requestA = Completer<RouteResponse>();
+    final requestB = Completer<RouteResponse>();
+    final routes = _RouteService()
+      ..pendingResponses.addAll([requestA, requestB]);
+    final provider = NavigationProvider(routes, location);
+    addTearDown(provider.dispose);
+    addTearDown(location.positions.close);
+
+    final starting = provider.start(
+      point: _destination(),
+      selectedMode: RouteMode.driving,
+    );
+    await _flush();
+    expect(routes.calls, 1);
+
+    final destinationUpdate = provider.handleDestinationUpdated(
+      _destination(latitude: 0.005, longitude: 0.02),
+    );
+    await _flush();
+    expect(routes.calls, 2);
+
+    requestB.complete(
+      _route(
+        points: const [LatLng(0, 0), LatLng(0.005, 0.02)],
+        durationSeconds: 222,
+      ),
+    );
+    await destinationUpdate;
+    expect(await starting, isTrue);
+    final revisionForB = provider.routeRevision;
+
+    requestA.complete(
+      _route(
+        points: const [LatLng(0, 0), LatLng(0, 0.01)],
+        durationSeconds: 111,
+      ),
+    );
+    await _flush();
+
+    expect(provider.destination?.latitude, 0.005);
+    expect(provider.destination?.longitude, 0.02);
+    expect(provider.remainingPoints.last, const LatLng(0.005, 0.02));
+    expect(provider.durationSeconds, 222);
+    expect(provider.routeRevision, revisionForB);
+  });
+
   test('avance normal oculta camino y no solicita otra ruta', () async {
     final location = _LocationService();
     final routes = _RouteService();
