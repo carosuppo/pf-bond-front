@@ -201,10 +201,23 @@ class _EventsContentState extends State<EventsContent> {
                       ),
                     _EventCard(
                       event: todayEvents[i],
-                      onTap: () {
+                      onTap: () async {
                         final groupId = groupProvider.activeGroup!.id;
+                        final messenger = ScaffoldMessenger.of(context);
 
-                        showEventDetailsModal(context, todayEvents[i], groupId);
+                        final cancelled = await showEventDetailsModal(
+                          context,
+                          todayEvents[i],
+                          groupId,
+                        );
+
+                        if (!mounted || !cancelled) {
+                          return;
+                        }
+
+                        messenger.showSnackBar(
+                          const SnackBar(content: Text('Evento cancelado.')),
+                        );
                       },
                     ),
                   ],

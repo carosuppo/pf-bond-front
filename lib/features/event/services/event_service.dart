@@ -38,6 +38,10 @@ class EventService {
     return EventResponseModel.fromJson(response);
   }
 
+  Future<void> cancelEvent({required int groupId, required int eventId}) async {
+    await _apiClient.authenticatedDelete('/group/$groupId/event/$eventId');
+  }
+
   Future<EventResponseModel> setEventLocation({
     required int groupId,
     required int eventId,
