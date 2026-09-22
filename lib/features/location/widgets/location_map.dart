@@ -34,6 +34,8 @@ class LocationMap extends ConsumerStatefulWidget {
   final double indicatorBottomFraction;
   final bool showOffscreenPoints;
   final List<LatLng> routePoints;
+  final int routeFitRevision;
+  final EdgeInsets routeFitPadding;
   final LocationModel? navigationLocation;
   final int? destinationPointId;
   final ValueChanged<PointOfInterest>? onPointTap;
@@ -55,6 +57,8 @@ class LocationMap extends ConsumerStatefulWidget {
     this.indicatorBottomFraction = 0,
     this.showOffscreenPoints = false,
     this.routePoints = const [],
+    this.routeFitRevision = 0,
+    this.routeFitPadding = EdgeInsets.zero,
     this.navigationLocation,
     this.destinationPointId,
     this.onPointTap,
@@ -77,6 +81,7 @@ class _LocationMapState extends ConsumerState<LocationMap>
   bool _mapReady = false;
   bool _hasCenteredOnUser = false;
   LatLng? _ownLocationToCenter;
+  int? _scheduledRouteFitRevision;
 
   Timer? _freshnessTimer;
   late final AnimationController _memberMovementController;
@@ -124,6 +129,12 @@ class _LocationMapState extends ConsumerState<LocationMap>
   void didUpdateWidget(covariant LocationMap oldWidget) {
     super.didUpdateWidget(oldWidget);
 
+    if (widget.routePoints.length < 2) {
+      _scheduledRouteFitRevision = null;
+    } else if (widget.routeFitRevision != oldWidget.routeFitRevision) {
+      _scheduleRouteFit(widget.routeFitRevision);
+    }
+
     final oldPreviewPoint = oldWidget.previewPoint;
     final newPreviewPoint = widget.previewPoint;
 
@@ -146,6 +157,11 @@ class _LocationMapState extends ConsumerState<LocationMap>
       }
     });
 
+    if (widget.routeFitRevision > 0 && widget.routePoints.length >= 2) {
+      _scheduleRouteFit(widget.routeFitRevision);
+      return;
+    }
+
     final previewPoint = widget.previewPoint;
     if (previewPoint != null) {
       _mapController.move(previewPoint, defaultZoom);
@@ -163,6 +179,47 @@ class _LocationMapState extends ConsumerState<LocationMap>
   bool _samePoint(LatLng? first, LatLng? second) {
     return first?.latitude == second?.latitude &&
         first?.longitude == second?.longitude;
+  }
+
+  void _scheduleRouteFit(int revision) {
+    _scheduledRouteFitRevision = revision;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted ||
+          !_mapReady ||
+          _scheduledRouteFitRevision != revision ||
+          widget.routeFitRevision != revision ||
+          widget.routePoints.length < 2) {
+        return;
+      }
+
+      _scheduledRouteFitRevision = null;
+      final navigationLocation = widget.navigationLocation;
+      final destination = _destinationPoint;
+      final coordinates = <LatLng>[
+        if (navigationLocation != null)
+          LatLng(navigationLocation.latitude, navigationLocation.longitude),
+        ...widget.routePoints,
+        ?destination,
+      ];
+      _mapController.fitCamera(
+        CameraFit.bounds(
+          bounds: LatLngBounds.fromPoints(coordinates),
+          padding: widget.routeFitPadding,
+        ),
+      );
+      _hasCenteredOnUser = true;
+    });
+  }
+
+  LatLng? get _destinationPoint {
+    final destinationId = widget.destinationPointId;
+    if (destinationId == null) return null;
+    for (final point in widget.points) {
+      if (point.id == destinationId) {
+        return LatLng(point.latitude, point.longitude);
+      }
+    }
+    return null;
   }
 
   void _updateMemberMovement(Map<int, LatLng> targetLocations) {
@@ -308,7 +365,9 @@ class _LocationMapState extends ConsumerState<LocationMap>
 
     final colors = buildDistinctMarkerColors(markerIds);
 
-    if (!_hasCenteredOnUser && ownLocation != null) {
+    if (!_hasCenteredOnUser &&
+        ownLocation != null &&
+        widget.routePoints.length < 2) {
       _ownLocationToCenter = LatLng(
         ownLocation.latitude,
         ownLocation.longitude,

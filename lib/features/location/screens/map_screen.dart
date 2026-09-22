@@ -602,6 +602,15 @@ class _MapScreenState extends ConsumerState<MapScreen> {
     final authProvider = context.watch<AuthProvider>();
     final navigation = context.watch<NavigationProvider>();
     final topPadding = MediaQuery.paddingOf(context).top;
+    final screenHeight = MediaQuery.sizeOf(context).height;
+    final routeSheetFraction = groupProvider.groupDetails == null
+        ? 0.0
+        : _sheetController.isAttached
+        ? _sheetController.size
+        : (_sheetExpanded ? _maxChildSize : _minChildSize);
+    final routeBottomPadding = groupProvider.groupDetails == null
+        ? 32.0
+        : screenHeight * routeSheetFraction + 32;
 
     return PopScope(
       canPop: !_editing,
@@ -638,6 +647,13 @@ class _MapScreenState extends ConsumerState<MapScreen> {
                             : null,
                         showOffscreenPoints: _pointsExpanded,
                         routePoints: navigation.remainingPoints,
+                        routeFitRevision: navigation.routeRevision,
+                        routeFitPadding: EdgeInsets.fromLTRB(
+                          48,
+                          topPadding + 220,
+                          48,
+                          routeBottomPadding,
+                        ),
                         navigationLocation: navigation.currentLocation,
                         destinationPointId: navigation.destination?.id,
                         onPointTap: _editing ? null : _selectPoint,

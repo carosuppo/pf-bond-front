@@ -10,6 +10,7 @@ void main() {
       LatLng(0, 0.01),
     ]);
 
+    tracker.update(const LatLng(0, 0.004));
     final advanced = tracker.update(const LatLng(0, 0.006));
     final noisyBackward = tracker.update(const LatLng(0, 0.004));
 
@@ -27,10 +28,43 @@ void main() {
 
   test('proyecta sobre el segmento y mide distancia transversal', () {
     final tracker = RouteProgressTracker(const [LatLng(0, 0), LatLng(0, 0.01)]);
-    final progress = tracker.update(const LatLng(0.001, 0.005));
+    final progress = tracker.update(const LatLng(0.001, 0.004));
 
-    expect(progress.progressMeters, closeTo(556, 5));
+    expect(progress.progressMeters, closeTo(445, 5));
     expect(progress.distanceToRouteMeters, closeTo(111, 5));
     expect(progress.remainingPoints.first.latitude, closeTo(0, 0.00001));
+  });
+
+  test('no salta a un tramo lejano que cruza cerca de la posición actual', () {
+    final tracker = RouteProgressTracker(const [
+      LatLng(0, 0),
+      LatLng(0, 0.001),
+      LatLng(0.001, 0.001),
+      LatLng(0.001, -0.001),
+      LatLng(-0.001, -0.001),
+      LatLng(-0.001, 0.0005),
+      LatLng(0.001, 0.0005),
+      LatLng(0.001, 0.002),
+    ]);
+
+    final progress = tracker.update(const LatLng(0.00002, 0.0005));
+
+    expect(progress.progressMeters, lessThan(100));
+    expect(progress.distanceToRouteMeters, lessThan(3));
+    expect(progress.remainingPoints.first.longitude, closeTo(0.0005, 0.0001));
+  });
+
+  test('limita por distancia el avance incluso con geometría poco densa', () {
+    final tracker = RouteProgressTracker(const [LatLng(0, 0), LatLng(0, 0.02)]);
+
+    final distantReading = tracker.update(const LatLng(0, 0.01));
+    final localReading = tracker.update(const LatLng(0, 0.004));
+
+    expect(distantReading.progressMeters, 0);
+    expect(
+      localReading.progressMeters,
+      lessThanOrEqualTo(RouteProgressTracker.maxForwardSearchMeters),
+    );
+    expect(localReading.progressMeters, closeTo(445, 5));
   });
 }

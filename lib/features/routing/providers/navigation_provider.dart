@@ -40,11 +40,13 @@ class NavigationProvider extends ChangeNotifier {
   DateTime? _lastRecalculationAt;
   int _offRouteReadings = 0;
   int _requestVersion = 0;
+  int _routeRevision = 0;
   String? _notice;
   int? _requestedGroupId;
   int? _requestedPointId;
 
   bool get active => destination != null;
+  int get routeRevision => _routeRevision;
   int? get targetGroupId => destination?.groupId ?? _requestedGroupId;
   int? get targetPointId => destination?.id ?? _requestedPointId;
 
@@ -221,6 +223,7 @@ class NavigationProvider extends ChangeNotifier {
     durationSeconds = route.durationSeconds;
     errorMessage = null;
     _offRouteReadings = 0;
+    _routeRevision++;
   }
 
   Future<void> cancel() async {

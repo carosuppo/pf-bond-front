@@ -115,6 +115,7 @@ void main() {
     expect(routes.calls, 1);
     expect(routes.lastMode, RouteMode.walking);
     expect(provider.remainingPoints, hasLength(2));
+    expect(provider.routeRevision, 1);
 
     await provider.cancel();
     expect(provider.active, isFalse);
@@ -215,6 +216,7 @@ void main() {
       selectedMode: RouteMode.walking,
     );
 
+    location.positions.add(_location(0, 0.004));
     location.positions.add(_location(0, 0.006));
     final advanced = provider.remainingDistanceMeters;
     location.positions.add(_location(0, 0.004));
@@ -222,6 +224,7 @@ void main() {
     expect(provider.remainingDistanceMeters, advanced);
     expect(provider.remainingPoints.first.longitude, closeTo(0.006, 0.0001));
     expect(routes.calls, 1);
+    expect(provider.routeRevision, 1);
   });
 
   test('confirma desvío, recalcula una vez y respeta cooldown', () async {
@@ -255,6 +258,7 @@ void main() {
     await _flush();
     expect(routes.calls, 2);
     expect(routes.lastOrigin?.longitude, 0.0042);
+    expect(provider.routeRevision, 2);
 
     for (var index = 0; index < 3; index++) {
       location.positions.add(_location(0.003, 0.004 + index * 0.0001));
@@ -268,7 +272,40 @@ void main() {
     }
     await _flush();
     expect(routes.calls, 3);
+    expect(provider.routeRevision, 3);
   });
+
+  test(
+    'un recálculo cancelado no publica una nueva revisión de ruta',
+    () async {
+      final location = _LocationService();
+      final routes = _RouteService();
+      final provider = NavigationProvider(routes, location);
+      addTearDown(provider.dispose);
+      addTearDown(location.positions.close);
+      await provider.start(
+        point: _destination(),
+        selectedMode: RouteMode.driving,
+      );
+      final initialRevision = provider.routeRevision;
+      final pendingRecalculation = Completer<RouteResponse>();
+      routes.pending = pendingRecalculation;
+
+      for (var index = 0; index < 3; index++) {
+        location.positions.add(_location(0.002, 0.003 + index * 0.0001));
+      }
+      await _flush();
+      expect(provider.recalculating, isTrue);
+
+      await provider.cancel();
+      pendingRecalculation.complete(_route());
+      await _flush();
+
+      expect(provider.active, isFalse);
+      expect(provider.routeRevision, initialRevision);
+      expect(provider.remainingPoints, isEmpty);
+    },
+  );
 
   test(
     'fallo de recálculo conserva navegación y llegada la finaliza',

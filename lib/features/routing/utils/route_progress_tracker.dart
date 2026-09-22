@@ -29,6 +29,8 @@ class RouteProgressTracker {
   }
 
   static const _earthRadiusMeters = 6371000.0;
+  static const maxForwardSearchMeters = 500.0;
+  static const _backwardSearchSegments = 2;
 
   final List<LatLng> _points;
   late final List<double> _cumulativeMeters;
@@ -40,21 +42,34 @@ class RouteProgressTracker {
   RouteProgress update(LatLng location) {
     var bestDistance = double.infinity;
     var bestProgress = _progressMeters;
+    final maximumProgress = math.min(
+      totalDistanceMeters,
+      _progressMeters + maxForwardSearchMeters,
+    );
 
     for (
-      var index = math.max(0, _segmentIndex - 1);
+      var index = math.max(0, _segmentIndex - _backwardSearchSegments);
       index < _points.length - 1;
       index++
     ) {
+      if (_cumulativeMeters[index] > maximumProgress) break;
+
       final projection = _project(location, _points[index], _points[index + 1]);
       final segmentLength =
           _cumulativeMeters[index + 1] - _cumulativeMeters[index];
-      final candidateProgress =
+      final projectedProgress =
           _cumulativeMeters[index] + segmentLength * projection.fraction;
+      final projectionIsAheadOfWindow = projectedProgress > maximumProgress;
+      final candidateProgress =
+          projectedProgress < _progressMeters || projectionIsAheadOfWindow
+          ? _progressMeters
+          : projectedProgress;
+      final candidateDistance = projectionIsAheadOfWindow
+          ? distanceMeters(location, _pointAtProgress(index, maximumProgress))
+          : projection.distanceMeters;
 
-      if (candidateProgress + 1 < _progressMeters) continue;
-      if (projection.distanceMeters < bestDistance) {
-        bestDistance = projection.distanceMeters;
+      if (candidateDistance < bestDistance) {
+        bestDistance = candidateDistance;
         bestProgress = candidateProgress;
       }
     }
@@ -142,6 +157,22 @@ class RouteProgressTracker {
     return LatLng(
       start.latitude + (end.latitude - start.latitude) * fraction,
       start.longitude + (end.longitude - start.longitude) * fraction,
+    );
+  }
+
+  LatLng _pointAtProgress(int segmentIndex, double progressMeters) {
+    final segmentStart = _cumulativeMeters[segmentIndex];
+    final segmentEnd = _cumulativeMeters[segmentIndex + 1];
+    final fraction = segmentEnd == segmentStart
+        ? 1.0
+        : ((progressMeters - segmentStart) / (segmentEnd - segmentStart)).clamp(
+            0.0,
+            1.0,
+          );
+    return _interpolate(
+      _points[segmentIndex],
+      _points[segmentIndex + 1],
+      fraction,
     );
   }
 
