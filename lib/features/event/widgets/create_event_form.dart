@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../../../core/theme/app_colors.dart';
+import '../../../core/timezone/app_timezone.dart';
 import '../../../core/widgets/buttons/app_primary_button.dart';
 import '../../../core/widgets/buttons/app_secondary_button.dart';
 import '../../../core/widgets/discard_changes_dialog.dart';
@@ -9,11 +10,16 @@ import '../../../core/widgets/global_text_field.dart';
 import '../../auth/providers/auth_provider.dart';
 import '../../group/models/get_member_model.response.dart';
 import '../../group/providers/group_provider.dart';
+import '../models/event_model.response.dart';
+import '../models/update_event_model.request.dart';
 import '../providers/event_provider.dart';
 import 'event_date_time_picker.dart';
 
 class CreateEventForm extends StatefulWidget {
-  const CreateEventForm({super.key});
+  final EventResponseModel? initialEvent;
+  final int? groupId;
+
+  const CreateEventForm({super.key, this.initialEvent, this.groupId});
 
   @override
   State<CreateEventForm> createState() => _CreateEventFormState();
@@ -27,6 +33,55 @@ class _CreateEventFormState extends State<CreateEventForm> {
   DateTime? _endAt;
 
   final Set<int> _selectedMemberIds = {};
+
+  String _initialName = '';
+  String _initialDescription = '';
+  DateTime? _initialStartAt;
+  DateTime? _initialEndAt;
+  final Set<int> _initialMemberIds = {};
+
+  bool get _isEditing => widget.initialEvent != null;
+
+  @override
+  void initState() {
+    super.initState();
+
+    final initialEvent = widget.initialEvent;
+
+    if (initialEvent != null) {
+      _nameController.text = initialEvent.name;
+      _descriptionController.text = initialEvent.description ?? '';
+
+      _startAt = AppTimezone.fromUtc(initialEvent.startAt);
+      _endAt = initialEvent.endAt != null
+          ? AppTimezone.fromUtc(initialEvent.endAt!)
+          : null;
+
+      _initialName = initialEvent.name.trim();
+      _initialDescription = (initialEvent.description ?? '').trim();
+      _initialStartAt = _startAt;
+      _initialEndAt = _endAt;
+
+      final selfMemberId = _selfMemberId();
+      _selectedMemberIds.addAll(
+        initialEvent.memberIds.where((id) => id != selfMemberId),
+      );
+      _initialMemberIds.addAll(_selectedMemberIds);
+    }
+  }
+
+  int? _selfMemberId() {
+    final currentUserId = context.read<AuthProvider>().authResponse?.user.id;
+    final members = context.read<GroupProvider>().groupDetails?.members ?? [];
+
+    for (final member in members) {
+      if (member.idUser == currentUserId) {
+        return member.id;
+      }
+    }
+
+    return null;
+  }
 
   @override
   void dispose() {
@@ -89,7 +144,15 @@ class _CreateEventFormState extends State<CreateEventForm> {
     });
   }
 
-  Future<void> _createEvent() async {
+  void _clearEndDateTime() {
+    FocusScope.of(context).unfocus();
+
+    setState(() {
+      _endAt = null;
+    });
+  }
+
+  Future<void> _saveEvent() async {
     final name = _nameController.text.trim();
     final description = _descriptionController.text.trim();
 
@@ -111,7 +174,9 @@ class _CreateEventFormState extends State<CreateEventForm> {
       return;
     }
 
-    if (!_startAt!.isAfter(DateTime.now())) {
+    final startChanged = !_isEditing || _startAt != _initialStartAt;
+
+    if (startChanged && !_startAt!.isAfter(DateTime.now())) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           content: Text(
@@ -138,13 +203,18 @@ class _CreateEventFormState extends State<CreateEventForm> {
     final groupProvider = context.read<GroupProvider>();
     final eventProvider = context.read<EventProvider>();
 
-    final groupId = groupProvider.activeGroup?.id;
+    final groupId = widget.groupId ?? groupProvider.activeGroup?.id;
 
     if (groupId == null) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('No hay un grupo activo seleccionado.')),
       );
 
+      return;
+    }
+
+    if (_isEditing) {
+      await _updateEvent(groupId, eventProvider, name, description);
       return;
     }
 
@@ -174,6 +244,56 @@ class _CreateEventFormState extends State<CreateEventForm> {
     Navigator.of(context).pop(true);
   }
 
+  Future<void> _updateEvent(
+    int groupId,
+    EventProvider eventProvider,
+    String name,
+    String description,
+  ) async {
+    final request = UpdateEventRequestModel(
+      name: name == _initialName ? null : name,
+      description: description == _initialDescription ? null : description,
+      clearDescription: description.isEmpty && _initialDescription.isNotEmpty,
+      startAt: _startAt == _initialStartAt ? null : _startAt,
+      endAt: _endAt == _initialEndAt ? null : _endAt,
+      clearEndAt: _endAt == null && _initialEndAt != null,
+      memberIds: _sameMemberIds ? null : _selectedMemberIds.toList(),
+    );
+
+    if (request.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('No hay cambios para guardar.')),
+      );
+      return;
+    }
+
+    final success = await eventProvider.updateEvent(
+      groupId: groupId,
+      eventId: widget.initialEvent!.id,
+      request: request,
+    );
+
+    if (!mounted) {
+      return;
+    }
+
+    if (!success) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            eventProvider.errorMessage ?? 'Error al actualizar el evento.',
+          ),
+        ),
+      );
+      return;
+    }
+    Navigator.of(context).pop(true);
+  }
+
+  bool get _sameMemberIds =>
+      _selectedMemberIds.length == _initialMemberIds.length &&
+      _selectedMemberIds.containsAll(_initialMemberIds);
+
   String _formatDateTime(DateTime? dateTime) {
     if (dateTime == null) {
       return 'Seleccionar';
@@ -190,6 +310,14 @@ class _CreateEventFormState extends State<CreateEventForm> {
   }
 
   bool get _hasChanges {
+    if (_isEditing) {
+      return _nameController.text.trim() != _initialName ||
+          _descriptionController.text.trim() != _initialDescription ||
+          _startAt != _initialStartAt ||
+          _endAt != _initialEndAt ||
+          !_sameMemberIds;
+    }
+
     return _nameController.text.trim().isNotEmpty ||
         _descriptionController.text.trim().isNotEmpty ||
         _startAt != null ||
@@ -276,7 +404,7 @@ class _CreateEventFormState extends State<CreateEventForm> {
                             const SizedBox(height: 20),
 
                             Text(
-                              'Crear evento',
+                              _isEditing ? 'Editar evento' : 'Crear evento',
                               textAlign: TextAlign.center,
                               style: theme.textTheme.headlineMedium?.copyWith(
                                 color: AppColors.text,
@@ -312,6 +440,9 @@ class _CreateEventFormState extends State<CreateEventForm> {
                               label: 'Finaliza (opcional)',
                               value: _formatDateTime(_endAt),
                               onTap: isLoading ? null : _selectEndDateTime,
+                              onClear: isLoading || _endAt == null
+                                  ? null
+                                  : _clearEndDateTime,
                             ),
 
                             const SizedBox(height: 24),
@@ -409,9 +540,11 @@ class _CreateEventFormState extends State<CreateEventForm> {
                             const SizedBox(height: 24),
 
                             AppPrimaryButton(
-                              text: 'Crear evento',
+                              text: _isEditing
+                                  ? 'Guardar cambios'
+                                  : 'Crear evento',
                               loading: isLoading,
-                              onPressed: _createEvent,
+                              onPressed: _saveEvent,
                             ),
 
                             const SizedBox(height: 12),
@@ -446,11 +579,13 @@ class _DateTimeField extends StatelessWidget {
     required this.label,
     required this.value,
     required this.onTap,
+    this.onClear,
   });
 
   final String label;
   final String value;
   final VoidCallback? onTap;
+  final VoidCallback? onClear;
 
   @override
   Widget build(BuildContext context) {
@@ -490,6 +625,19 @@ class _DateTimeField extends StatelessWidget {
               ),
             ),
             const Icon(Icons.chevron_right, color: AppColors.mutedText),
+            if (onClear != null)
+              InkWell(
+                onTap: onTap == null ? null : onClear,
+                borderRadius: BorderRadius.circular(20),
+                child: const Padding(
+                  padding: EdgeInsets.all(4),
+                  child: Icon(
+                    Icons.close_rounded,
+                    color: AppColors.mutedText,
+                    size: 20,
+                  ),
+                ),
+              ),
           ],
         ),
       ),

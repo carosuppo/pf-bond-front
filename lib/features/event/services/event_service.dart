@@ -1,6 +1,7 @@
 import '../../../core/network/api_client.dart';
 import '../models/create_event_model.request.dart';
 import '../models/event_model.response.dart';
+import '../models/update_event_model.request.dart';
 
 class EventService {
   final ApiClient _apiClient;
@@ -37,6 +38,19 @@ class EventService {
       '/group/$groupId/event',
       request.toJson(),
     );
+    return EventResponseModel.fromJson(response);
+  }
+
+  Future<EventResponseModel> updateEvent({
+    required int groupId,
+    required int eventId,
+    required UpdateEventRequestModel request,
+  }) async {
+    final response = await _apiClient.authenticatedPatch(
+      '/group/$groupId/event/$eventId',
+      request.toJson(),
+    );
+
     return EventResponseModel.fromJson(response);
   }
 
