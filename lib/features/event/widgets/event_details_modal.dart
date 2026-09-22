@@ -5,6 +5,8 @@ import 'package:provider/provider.dart';
 import '../../../core/models/geocoding_result.dart';
 import '../../../core/services/geocoding_service.dart';
 import '../../../core/theme/app_colors.dart';
+import '../../../core/timezone/app_timezone.dart';
+import '../../../core/widgets/app_loading_indicator.dart';
 import '../../../core/widgets/user_avatar.dart';
 import '../../auth/providers/auth_provider.dart';
 import '../../group/models/get_member_model.response.dart';
@@ -14,39 +16,42 @@ import '../formatters/event_date_formatter.dart';
 import '../models/event_model.response.dart';
 import '../providers/event_provider.dart';
 import '../screens/edit_event_screen.dart';
+import 'cancel_event_dialog.dart';
 import 'event_location_editor.dart';
 
-Future<void> showEventDetailsModal(
+Future<bool> showEventDetailsModal(
   BuildContext context,
   EventResponseModel event,
   int groupId,
 ) {
-  return Navigator.of(context, rootNavigator: true).push(
-    PageRouteBuilder<void>(
-      opaque: false,
-      barrierDismissible: true,
-      barrierColor: Colors.black54,
-      barrierLabel: 'Cerrar',
-      transitionDuration: const Duration(milliseconds: 200),
-      reverseTransitionDuration: const Duration(milliseconds: 150),
-      pageBuilder: (_, _, _) =>
-          EventDetailsModal(event: event, groupId: groupId),
-      transitionsBuilder: (_, animation, _, child) {
-        final curved = CurvedAnimation(
-          parent: animation,
-          curve: Curves.easeOut,
-        );
+  return Navigator.of(context, rootNavigator: true)
+      .push<bool>(
+        PageRouteBuilder<bool>(
+          opaque: false,
+          barrierDismissible: true,
+          barrierColor: Colors.black54,
+          barrierLabel: 'Cerrar',
+          transitionDuration: const Duration(milliseconds: 200),
+          reverseTransitionDuration: const Duration(milliseconds: 150),
+          pageBuilder: (_, _, _) =>
+              EventDetailsModal(event: event, groupId: groupId),
+          transitionsBuilder: (_, animation, _, child) {
+            final curved = CurvedAnimation(
+              parent: animation,
+              curve: Curves.easeOut,
+            );
 
-        return FadeTransition(
-          opacity: curved,
-          child: ScaleTransition(
-            scale: Tween<double>(begin: 0.92, end: 1.0).animate(curved),
-            child: child,
-          ),
-        );
-      },
-    ),
-  );
+            return FadeTransition(
+              opacity: curved,
+              child: ScaleTransition(
+                scale: Tween<double>(begin: 0.92, end: 1.0).animate(curved),
+                child: child,
+              ),
+            );
+          },
+        ),
+      )
+      .then((value) => value ?? false);
 }
 
 class EventDetailsModal extends StatelessWidget {
@@ -86,6 +91,8 @@ class EventDetailsModal extends StatelessWidget {
     final currentEvent = _currentEvent(context);
     final eventMembers = _eventMembers(context, currentEvent);
     final canEdit = _canEdit(context, currentEvent);
+    final canCancel = _canCancel(context, currentEvent);
+    final isCancelling = context.watch<EventProvider>().isLoading;
     final hasEnd = currentEvent.endAt != null;
     final sameDay =
         hasEnd &&
@@ -296,6 +303,68 @@ class EventDetailsModal extends StatelessWidget {
                           ),
                         ),
                       ),
+                      if (canCancel) ...[
+                        const SizedBox(height: 12),
+                        SizedBox(
+                          width: double.infinity,
+                          child: OutlinedButton.icon(
+                            onPressed: isCancelling
+                                ? null
+                                : () async {
+                                    final confirmed =
+                                        await showCancelEventDialog(
+                                          context,
+                                          currentEvent.name,
+                                        );
+
+                                    if (!confirmed || !context.mounted) {
+                                      return;
+                                    }
+
+                                    final navigator = Navigator.of(context);
+                                    final messenger = ScaffoldMessenger.of(
+                                      context,
+                                    );
+                                    final eventProvider = context
+                                        .read<EventProvider>();
+                                    final success = await eventProvider
+                                        .cancelEvent(
+                                          groupId: groupId,
+                                          eventId: currentEvent.id,
+                                        );
+
+                                    if (!navigator.mounted) {
+                                      return;
+                                    }
+
+                                    if (!success) {
+                                      messenger.showSnackBar(
+                                        SnackBar(
+                                          content: Text(
+                                            eventProvider.errorMessage ??
+                                                'Error al cancelar el evento.',
+                                          ),
+                                        ),
+                                      );
+                                      return;
+                                    }
+
+                                    navigator.pop(true);
+                                  },
+                            style: OutlinedButton.styleFrom(
+                              foregroundColor: AppColors.error,
+                              side: const BorderSide(color: AppColors.error),
+                            ),
+                            icon: isCancelling
+                                ? const AppLoadingIndicator(
+                                    size: 18,
+                                    color: AppColors.error,
+                                  )
+                                : const Icon(Icons.event_busy_rounded),
+                            label: const Text('Cancelar evento'),
+                          ),
+                        ),
+                      ],
                     ],
                   ),
                 ),
@@ -333,6 +402,29 @@ class EventDetailsModal extends StatelessWidget {
 
     return false;
   }
+
+  bool _canCancel(BuildContext context, EventResponseModel currentEvent) {
+    final currentUserId = context.watch<AuthProvider>().authResponse?.user.id;
+    final members =
+        context.watch<GroupProvider>().groupDetails?.members ??
+        const <GetMemberResponseModel>[];
+
+    int? selfMemberId;
+    for (final member in members) {
+      if (member.idUser == currentUserId) {
+        selfMemberId = member.id;
+        break;
+      }
+    }
+
+    if (selfMemberId == null ||
+        !currentEvent.memberIds.contains(selfMemberId)) {
+      return false;
+    }
+
+    final end = currentEvent.endAt ?? currentEvent.startAt;
+    return AppTimezone.fromUtc(end).isAfter(AppTimezone.now());
+  }
 }
 
 class _SectionTitle extends StatelessWidget {
@@ -346,7 +438,7 @@ class _SectionTitle extends StatelessWidget {
       title,
       style: const TextStyle(
         color: AppColors.text,
-        fontSize: 14,
+        fontSize: 16,
         fontWeight: FontWeight.w600,
       ),
     );
@@ -368,7 +460,7 @@ class _InfoRow extends StatelessWidget {
         Expanded(
           child: Text(
             text,
-            style: const TextStyle(color: AppColors.mutedText, fontSize: 14),
+            style: const TextStyle(color: AppColors.mutedText, fontSize: 16),
           ),
         ),
       ],

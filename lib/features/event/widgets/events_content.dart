@@ -181,7 +181,7 @@ class _EventsContentState extends State<EventsContent> {
             )
           else
             Padding(
-              padding: const EdgeInsets.fromLTRB(24, 12, 24, 0),
+              padding: const EdgeInsets.fromLTRB(24, 12, 24, 16),
               child: Container(
                 decoration: BoxDecoration(
                   color: AppColors.cardColor,
@@ -204,13 +204,22 @@ class _EventsContentState extends State<EventsContent> {
                         ),
                       _EventCard(
                         event: todayEvents[i],
-                        onTap: () {
+                        onTap: () async {
                           final groupId = groupProvider.activeGroup!.id;
+                          final messenger = ScaffoldMessenger.of(context);
 
-                          showEventDetailsModal(
+                          final cancelled = await showEventDetailsModal(
                             context,
                             todayEvents[i],
                             groupId,
+                          );
+
+                          if (!mounted || !cancelled) {
+                            return;
+                          }
+
+                          messenger.showSnackBar(
+                            const SnackBar(content: Text('Evento cancelado.')),
                           );
                         },
                       ),

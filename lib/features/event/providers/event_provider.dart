@@ -240,6 +240,38 @@ class EventProvider extends ChangeNotifier {
     }
   }
 
+  Future<bool> cancelEvent({required int groupId, required int eventId}) async {
+    final sessionVersion = _sessionVersion;
+    isLoading = true;
+    errorMessage = null;
+
+    notifyListeners();
+
+    try {
+      await _eventService.cancelEvent(groupId: groupId, eventId: eventId);
+      if (sessionVersion != _sessionVersion) return false;
+
+      events = events
+          .where((event) => event.id != eventId)
+          .toList(growable: false);
+
+      if (event?.id == eventId) {
+        event = null;
+      }
+
+      return true;
+    } catch (error) {
+      if (sessionVersion != _sessionVersion) return false;
+      errorMessage = error.toString().replaceFirst('Exception: ', '');
+      return false;
+    } finally {
+      if (sessionVersion == _sessionVersion) {
+        isLoading = false;
+        notifyListeners();
+      }
+    }
+  }
+
   Future<EventResponseModel?> setEventLocation({
     required int groupId,
     required int eventId,
