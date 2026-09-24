@@ -257,4 +257,14 @@ void main() {
     expect(find.text('Confirmar cambio de rol'), findsNothing);
     expect(service.updateCalls, 0);
   });
+
+  testWidgets('offers WhatsApp invitation to every group member', (
+    tester,
+  ) async {
+    final service = _FakeGroupService();
+    await _pumpGroupInfo(tester, group: _groupWithMember, service: service);
+
+    expect(find.text('Invitar por WhatsApp'), findsOneWidget);
+    expect(find.byTooltip('Copiar código'), findsOneWidget);
+  });
 }

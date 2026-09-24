@@ -44,19 +44,22 @@ class _JoinGroupFormState extends State<JoinGroupForm> {
     }
 
     if (success) {
-      final message =
-          groupProvider.joinResponse?.message ??
-          'Ingresaste al grupo correctamente.';
+      final response = groupProvider.joinResponse;
+      final message = response?.alreadyMember == true
+          ? 'Ya pertenecés al grupo ${response!.group.name}.'
+          : response?.message ?? 'Ingresaste al grupo correctamente.';
 
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text(message)));
-
-      await groupProvider.getGroups();
+      if (response != null) {
+        await groupProvider.refreshAndSelectGroup(groupId: response.group.id);
+      }
 
       if (!mounted) {
         return;
       }
+
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(message)));
 
       Navigator.of(context).pop();
     } else {

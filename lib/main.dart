@@ -1,14 +1,18 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:provider/provider.dart' as provider;
 
+import 'core/deep_links/app_link_service.dart';
 import 'core/network/api_client.dart';
 import 'core/preferences/app_preferences_service.dart';
-import 'core/routes/app_navigator.dart';
+import 'core/routes/app_navigation.dart';
 import 'core/routes/app_router.dart';
 import 'core/routes/app_routes.dart';
+import 'core/routes/navigation/post_auth_navigator.dart';
 import 'core/storage/session_storage_service.dart';
 import 'core/theme/app_colors.dart';
 import 'core/timezone/app_timezone.dart';
@@ -20,7 +24,10 @@ import 'features/event/services/event_reminder_service.dart';
 import 'features/event/services/event_service.dart';
 import 'features/event/utils/event_reminder_navigation.dart';
 import 'features/group/providers/group_provider.dart';
+import 'features/group/services/group_invitation_coordinator.dart';
+import 'features/group/services/group_invitation_share_service.dart';
 import 'features/group/services/group_service.dart';
+import 'features/location/providers/location_provider.dart';
 import 'features/location/services/background_location_service.dart';
 import 'features/notification/services/notification_api_service.dart';
 import 'features/notification/services/push_notification_service.dart';
@@ -32,17 +39,35 @@ import 'features/profile/services/profile_service.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  final preferencesService = AppPreferencesService();
+  final appLinkService = AppLinkService(preferencesService);
+  await appLinkService.initialize();
+
   BackgroundLocationService.initialize();
 
   await dotenv.load(fileName: '.env');
 
   AppTimezone.initialize();
 
-  runApp(const ProviderScope(child: MyApp()));
+  runApp(
+    ProviderScope(
+      child: MyApp(
+        preferencesService: preferencesService,
+        appLinkService: appLinkService,
+      ),
+    ),
+  );
 }
 
 class MyApp extends StatelessWidget {
-  const MyApp({super.key});
+  const MyApp({
+    super.key,
+    required this.preferencesService,
+    required this.appLinkService,
+  });
+
+  final AppPreferencesService preferencesService;
+  final AppLinkService appLinkService;
 
   @override
   Widget build(BuildContext context) {
@@ -51,9 +76,10 @@ class MyApp extends StatelessWidget {
         provider.Provider<SessionStorageService>(
           create: (_) => SessionStorageService(),
         ),
-        provider.Provider<AppPreferencesService>(
-          create: (_) => AppPreferencesService(),
+        provider.Provider<AppPreferencesService>.value(
+          value: preferencesService,
         ),
+        provider.Provider<AppLinkService>.value(value: appLinkService),
         provider.Provider<BackgroundLocationService>(
           create: (_) => BackgroundLocationService(),
         ),
@@ -95,6 +121,13 @@ class MyApp extends StatelessWidget {
         ),
         provider.Provider<GroupService>(
           create: (context) => GroupService(context.read<ApiClient>()),
+        ),
+        provider.Provider<GroupInvitationShareService>(
+          create: (_) => GroupInvitationShareService(),
+        ),
+        provider.Provider<GroupInvitationCoordinator>(
+          create: (context) =>
+              GroupInvitationCoordinator(context.read<AppPreferencesService>()),
         ),
         provider.ChangeNotifierProvider<ProfileProvider>(
           create: (context) => ProfileProvider(
@@ -149,53 +182,132 @@ class MyApp extends StatelessWidget {
           ),
         ),
       ],
-      child: MaterialApp(
-        title: 'Bond',
-        debugShowCheckedModeBanner: false,
-        navigatorKey: appNavigatorKey,
-        theme: ThemeData(
-          scaffoldBackgroundColor: AppColors.background,
+      child: const _BondMaterialApp(),
+    );
+  }
+}
 
-          colorScheme: const ColorScheme.dark(
-            primary: AppColors.primary,
-            surface: AppColors.surface,
-            error: AppColors.error,
-          ),
+class _BondMaterialApp extends ConsumerStatefulWidget {
+  const _BondMaterialApp();
 
-          appBarTheme: const AppBarTheme(
-            backgroundColor: AppColors.surface,
-            foregroundColor: AppColors.text,
-          ),
+  @override
+  ConsumerState<_BondMaterialApp> createState() => _BondMaterialAppState();
+}
 
-          inputDecorationTheme: const InputDecorationTheme(
-            labelStyle: TextStyle(color: AppColors.hint),
-            enabledBorder: OutlineInputBorder(
-              borderSide: BorderSide(color: AppColors.border),
-            ),
-            focusedBorder: OutlineInputBorder(
-              borderSide: BorderSide(color: AppColors.primary),
-            ),
-          ),
+class _BondMaterialAppState extends ConsumerState<_BondMaterialApp> {
+  StreamSubscription<String>? _invitationSubscription;
+  bool _isHandlingInvitation = false;
+  bool _handleAgain = false;
 
-          elevatedButtonTheme: ElevatedButtonThemeData(
-            style: ElevatedButton.styleFrom(
-              backgroundColor: AppColors.primary,
-              foregroundColor: Colors.black,
-            ),
-          ),
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    _invitationSubscription ??= context
+        .read<AppLinkService>()
+        .invitationCodes
+        .listen(_handleInvitation);
+  }
 
-          useMaterial3: true,
+  void _handleInvitation(String _) {
+    if (_isHandlingInvitation) {
+      _handleAgain = true;
+      return;
+    }
+
+    _processInvitation();
+  }
+
+  Future<void> _processInvitation() async {
+    _isHandlingInvitation = true;
+    try {
+      do {
+        _handleAgain = false;
+        await WidgetsBinding.instance.endOfFrame;
+        if (!mounted) return;
+
+        final authProvider = context.read<AuthProvider>();
+        final navigator = AppNavigation.navigatorKey.currentState;
+        if (navigator == null) {
+          _handleAgain = true;
+          continue;
+        }
+
+        if (authProvider.authResponse == null) {
+          if (!authProvider.isLoading) {
+            navigator.pushNamedAndRemoveUntil(AppRoutes.login, (_) => false);
+          }
+          continue;
+        }
+
+        await const PostAuthNavigator().navigate(
+          context: context,
+          groupProvider: context.read<GroupProvider>(),
+          locationNotifier: ref.read(locationProvider.notifier),
+          invitationCoordinator: context.read<GroupInvitationCoordinator>(),
+          authProvider: authProvider,
+          navigator: navigator,
+        );
+      } while (_handleAgain && mounted);
+    } finally {
+      _isHandlingInvitation = false;
+    }
+  }
+
+  @override
+  void dispose() {
+    _invitationSubscription?.cancel();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return MaterialApp(
+      navigatorKey: AppNavigation.navigatorKey,
+      scaffoldMessengerKey: AppNavigation.scaffoldMessengerKey,
+      title: 'Bond',
+      debugShowCheckedModeBanner: false,
+      theme: ThemeData(
+        scaffoldBackgroundColor: AppColors.background,
+
+        colorScheme: const ColorScheme.dark(
+          primary: AppColors.primary,
+          surface: AppColors.surface,
+          error: AppColors.error,
         ),
-        initialRoute: AppRoutes.splash,
-        onGenerateRoute: AppRouter.onGenerateRoute,
-        builder: (_, child) => AnnotatedRegion<SystemUiOverlayStyle>(
-          value: const SystemUiOverlayStyle(
-            statusBarColor: AppColors.background,
-            statusBarIconBrightness: Brightness.light,
-            statusBarBrightness: Brightness.dark,
-          ),
-          child: child ?? const SizedBox.shrink(),
+
+        appBarTheme: const AppBarTheme(
+          backgroundColor: AppColors.surface,
+          foregroundColor: AppColors.text,
         ),
+
+        inputDecorationTheme: const InputDecorationTheme(
+          labelStyle: TextStyle(color: AppColors.hint),
+          enabledBorder: OutlineInputBorder(
+            borderSide: BorderSide(color: AppColors.border),
+          ),
+          focusedBorder: OutlineInputBorder(
+            borderSide: BorderSide(color: AppColors.primary),
+          ),
+        ),
+
+        elevatedButtonTheme: ElevatedButtonThemeData(
+          style: ElevatedButton.styleFrom(
+            backgroundColor: AppColors.primary,
+            foregroundColor: Colors.black,
+          ),
+        ),
+
+        useMaterial3: true,
+      ),
+      initialRoute: AppRoutes.splash,
+      onGenerateRoute: AppRouter.onGenerateRoute,
+      builder: (_, child) => AnnotatedRegion<SystemUiOverlayStyle>(
+        value: const SystemUiOverlayStyle(
+          statusBarColor: AppColors.background,
+          statusBarIconBrightness: Brightness.light,
+          statusBarBrightness: Brightness.dark,
+        ),
+        child: child ?? const SizedBox.shrink(),
       ),
     );
   }

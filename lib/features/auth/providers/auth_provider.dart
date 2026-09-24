@@ -89,6 +89,11 @@ class AuthProvider extends ChangeNotifier {
     }
   }
 
+  Future<void> invalidateExpiredSession() async {
+    errorMessage = null;
+    await _finishSession();
+  }
+
   Future<bool> logout() async {
     isLoading = true;
     errorMessage = null;

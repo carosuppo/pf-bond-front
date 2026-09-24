@@ -1,11 +1,13 @@
-import '../../../core/network/api_client.dart';
 import 'package:http/http.dart' as http;
 import 'package:http_parser/http_parser.dart';
+
+import '../../../core/network/api_client.dart';
+import '../../../core/network/api_exception.dart';
 import '../models/create_group_model.request.dart';
 import '../models/create_group_model.response.dart';
 import '../models/get_group_model.response.dart';
-import '../models/get_member_info_model.response.dart';
 import '../models/get_groups_model.response.dart';
+import '../models/get_member_info_model.response.dart';
 import '../models/get_member_model.response.dart';
 import '../models/group_model.response.dart';
 import '../models/join_group_model.request.dart';
@@ -31,12 +33,26 @@ class GroupService {
   Future<JoinGroupResponseModel> joinGroup({
     required JoinGroupRequest request,
   }) async {
-    final response = await _apiClient.authenticatedPost(
-      '/group/join',
-      request.toJson(),
-    );
+    try {
+      final response = await _apiClient.authenticatedPost(
+        '/group/join',
+        request.toJson(),
+      );
 
-    return JoinGroupResponseModel.fromJson(response);
+      return JoinGroupResponseModel.fromJson(response);
+    } on ApiException catch (error) {
+      final responseBody = error.responseBody;
+      if (error.statusCode == 409 &&
+          responseBody != null &&
+          responseBody['group'] is Map<String, dynamic>) {
+        return JoinGroupResponseModel.fromJson(
+          responseBody,
+          alreadyMember: true,
+        );
+      }
+
+      rethrow;
+    }
   }
 
   Future<GroupResponseModel> updateGroup({
