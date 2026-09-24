@@ -12,9 +12,7 @@ import '../../auth/providers/auth_provider.dart';
 import '../../group/models/get_member_info_model.response.dart';
 import '../../group/providers/group_provider.dart';
 import '../../group/services/group_service.dart';
-import '../../group/widgets/group_info_bottom_sheet.dart';
 import '../../group/widgets/group_selector_button.dart';
-import '../../group/widgets/member_info_bottom_sheet.dart';
 import '../../point_of_interest/models/point_of_interest.dart';
 import '../../point_of_interest/models/point_of_interest_color.dart';
 import '../../point_of_interest/providers/point_of_interest_provider.dart';
@@ -22,7 +20,9 @@ import '../../point_of_interest/services/point_of_interest_realtime_sync.dart';
 import '../../point_of_interest/widgets/point_of_interest_editor.dart';
 import '../models/location_socket_event.dart';
 import '../providers/location_provider.dart';
+import '../widgets/group_info_sheet.dart';
 import '../widgets/location_map.dart';
+import '../widgets/point_of_interest_sheet.dart';
 
 class MapScreen extends ConsumerStatefulWidget {
   const MapScreen({super.key});
@@ -32,11 +32,6 @@ class MapScreen extends ConsumerStatefulWidget {
 }
 
 class _MapScreenState extends ConsumerState<MapScreen> {
-  static const _minChildSize = 0.2;
-  static const _maxChildSize = 0.5;
-  static const _poiMinChildSize = 0.12;
-  static const _poiMaxChildSize = 0.58;
-
   late final GroupProvider _groupProvider;
   late final LocationProvider _locationNotifier;
   late final DraggableScrollableController _sheetController;
@@ -96,7 +91,8 @@ class _MapScreenState extends ConsumerState<MapScreen> {
   }
 
   void _onSheetSizeChanged() {
-    final expanded = _sheetController.size >= _maxChildSize - 0.001;
+    final expanded =
+        _sheetController.size >= GroupInfoSheet.maxChildSize - 0.001;
 
     if (expanded == _sheetExpanded) {
       return;
@@ -119,7 +115,7 @@ class _MapScreenState extends ConsumerState<MapScreen> {
     }
 
     _sheetController.animateTo(
-      _minChildSize,
+      GroupInfoSheet.minChildSize,
       duration: const Duration(milliseconds: 250),
       curve: Curves.easeOut,
     );
@@ -139,7 +135,7 @@ class _MapScreenState extends ConsumerState<MapScreen> {
     }
 
     _sheetController.animateTo(
-      _maxChildSize,
+      GroupInfoSheet.maxChildSize,
       duration: const Duration(milliseconds: 250),
       curve: Curves.easeOut,
     );
@@ -231,9 +227,13 @@ class _MapScreenState extends ConsumerState<MapScreen> {
 
     final delta = details.primaryDelta ?? 0;
 
-    final minPixels = _sheetController.sizeToPixels(_minChildSize);
+    final minPixels = _sheetController.sizeToPixels(
+      GroupInfoSheet.minChildSize,
+    );
 
-    final maxPixels = _sheetController.sizeToPixels(_maxChildSize);
+    final maxPixels = _sheetController.sizeToPixels(
+      GroupInfoSheet.maxChildSize,
+    );
 
     final nextPixels = (_sheetController.pixels - delta)
         .clamp(minPixels, maxPixels)
@@ -261,7 +261,8 @@ class _MapScreenState extends ConsumerState<MapScreen> {
       return;
     }
 
-    final middleSize = (_minChildSize + _maxChildSize) / 2;
+    final middleSize =
+        (GroupInfoSheet.minChildSize + GroupInfoSheet.maxChildSize) / 2;
 
     if (_sheetController.size < middleSize) {
       _collapseSheet();
@@ -274,7 +275,7 @@ class _MapScreenState extends ConsumerState<MapScreen> {
     if (!_poiSheetController.isAttached) return;
 
     _poiSheetController.animateTo(
-      _poiMinChildSize,
+      PointOfInterestSheet.minChildSize,
       duration: const Duration(milliseconds: 250),
       curve: Curves.easeOut,
     );
@@ -292,7 +293,7 @@ class _MapScreenState extends ConsumerState<MapScreen> {
     if (!_poiSheetController.isAttached) return;
 
     _poiSheetController.animateTo(
-      _poiMaxChildSize,
+      PointOfInterestSheet.maxChildSize,
       duration: const Duration(milliseconds: 250),
       curve: Curves.easeOut,
     );
@@ -302,8 +303,12 @@ class _MapScreenState extends ConsumerState<MapScreen> {
     if (!_poiSheetController.isAttached) return;
 
     final delta = details.primaryDelta ?? 0;
-    final minPixels = _poiSheetController.sizeToPixels(_poiMinChildSize);
-    final maxPixels = _poiSheetController.sizeToPixels(_poiMaxChildSize);
+    final minPixels = _poiSheetController.sizeToPixels(
+      PointOfInterestSheet.minChildSize,
+    );
+    final maxPixels = _poiSheetController.sizeToPixels(
+      PointOfInterestSheet.maxChildSize,
+    );
     final nextPixels = (_poiSheetController.pixels - delta)
         .clamp(minPixels, maxPixels)
         .toDouble();
@@ -326,7 +331,10 @@ class _MapScreenState extends ConsumerState<MapScreen> {
       return;
     }
 
-    final middleSize = (_poiMinChildSize + _poiMaxChildSize) / 2;
+    final middleSize =
+        (PointOfInterestSheet.minChildSize +
+            PointOfInterestSheet.maxChildSize) /
+        2;
 
     if (_poiSheetController.size < middleSize) {
       _collapsePoiSheet();
@@ -519,12 +527,12 @@ class _MapScreenState extends ConsumerState<MapScreen> {
                             : null,
                         showOffscreenPoints: _pointsExpanded,
                         indicatorBottomFraction: _editing
-                            ? _poiMaxChildSize
+                            ? PointOfInterestSheet.maxChildSize
                             : groupProvider.groupDetails == null
                             ? 0
                             : _sheetExpanded
-                            ? _maxChildSize
-                            : _minChildSize,
+                            ? GroupInfoSheet.maxChildSize
+                            : GroupInfoSheet.minChildSize,
                         controller: _mapController,
                         onMapTap: _editing ? null : _handleMapTap,
                         onMemberTap: _editing ? null : _handleMemberTap,
@@ -547,197 +555,92 @@ class _MapScreenState extends ConsumerState<MapScreen> {
                 child: const GroupSelectorButton(),
               ),
               if (groupProvider.groupDetails != null && !_editing)
-                Positioned.fill(
-                  child: DraggableScrollableSheet(
-                    controller: _sheetController,
-                    initialChildSize: _minChildSize,
-                    minChildSize: _minChildSize,
-                    maxChildSize: _maxChildSize,
-                    snap: true,
-                    snapSizes: const [_minChildSize, _maxChildSize],
-                    builder: (context, scrollController) {
-                      _sheetScrollController = scrollController;
+                GroupInfoSheet(
+                  controller: _sheetController,
+                  group: groupProvider.groupDetails!,
+                  memberInfo: _memberInfo,
+                  memberInfoLoading: _memberInfoLoading,
+                  pointsContent: _buildPointOfInterestContent(pointProvider),
+                  pointsCount: pointProvider.points.length,
+                  onScrollControllerChanged: (controller) {
+                    _sheetScrollController = controller;
+                  },
+                  onDragUpdate: _handleSheetDragUpdate,
+                  onDragEnd: _handleSheetDragEnd,
+                  onPointsSectionChanged: (visible) {
+                    if (_pointsExpanded == visible) {
+                      return;
+                    }
 
-                      return Material(
-                        color: AppColors.background,
-                        elevation: 8,
-                        borderRadius: const BorderRadius.vertical(
-                          top: Radius.circular(20),
-                        ),
-                        clipBehavior: Clip.antiAlias,
-                        child: Column(
-                          children: [
-                            GestureDetector(
-                              behavior: HitTestBehavior.opaque,
-                              onVerticalDragUpdate: _handleSheetDragUpdate,
-                              onVerticalDragEnd: _handleSheetDragEnd,
-                              child: Padding(
-                                padding: const EdgeInsets.only(
-                                  top: 10,
-                                  bottom: 14,
-                                ),
-                                child: Center(
-                                  child: Container(
-                                    width: 36,
-                                    height: 4,
-                                    decoration: BoxDecoration(
-                                      color: AppColors.mutedText,
-                                      borderRadius: BorderRadius.circular(2),
-                                    ),
-                                  ),
-                                ),
-                              ),
-                            ),
-                            Expanded(
-                              child: _memberInfoLoading
-                                  ? MemberInfoLoading(
-                                      scrollController: scrollController,
-                                      bottomContent:
-                                          _buildPointOfInterestContent(
-                                            pointProvider,
-                                          ),
-                                    )
-                                  : _memberInfo != null
-                                  ? MemberInfoBottomSheet(
-                                      memberInfo: _memberInfo!,
-                                      scrollController: scrollController,
-                                      bottomContent:
-                                          _buildPointOfInterestContent(
-                                            pointProvider,
-                                          ),
-                                    )
-                                  : GroupInfoBottomSheet(
-                                      group: groupProvider.groupDetails!,
-                                      scrollController: scrollController,
-                                      bottomContent:
-                                          _buildPointOfInterestContent(
-                                            pointProvider,
-                                          ),
-                                    ),
-                            ),
-                          ],
-                        ),
-                      );
-                    },
-                  ),
+                    setState(() {
+                      _pointsExpanded = visible;
+                    });
+                  },
                 ),
               if (_editing)
-                Positioned.fill(
-                  child: DraggableScrollableSheet(
-                    controller: _poiSheetController,
-                    initialChildSize: _poiMaxChildSize,
-                    minChildSize: _poiMinChildSize,
-                    maxChildSize: _poiMaxChildSize,
-                    snap: true,
-                    snapSizes: const [_poiMinChildSize, _poiMaxChildSize],
-                    builder: (context, scrollController) {
-                      _poiSheetScrollController = scrollController;
+                PointOfInterestSheet(
+                  controller: _poiSheetController,
+                  editorKey: _editorKey,
+                  editingPoint: _editingPoint,
+                  draftLocation: _draftLocation,
+                  draftRadius: _draftRadius,
+                  draftColor: _draftColor,
+                  title: _editingPoint == null
+                      ? 'Creando punto de interés'
+                      : 'Editando punto de interés',
+                  onScrollControllerChanged: (controller) {
+                    _poiSheetScrollController = controller;
+                  },
+                  onDragUpdate: _handlePoiSheetDragUpdate,
+                  onDragEnd: _handlePoiSheetDragEnd,
+                  onLocationChanged: (point) {
+                    setState(() {
+                      _draftLocation = point;
+                    });
 
-                      return Material(
-                        elevation: 12,
-                        borderRadius: const BorderRadius.vertical(
-                          top: Radius.circular(20),
-                        ),
-                        clipBehavior: Clip.antiAlias,
-                        child: Column(
-                          children: [
-                            GestureDetector(
-                              behavior: HitTestBehavior.opaque,
-                              onVerticalDragUpdate: _handlePoiSheetDragUpdate,
-                              onVerticalDragEnd: _handlePoiSheetDragEnd,
-                              child: Padding(
-                                padding: const EdgeInsets.only(
-                                  top: 10,
-                                  bottom: 8,
-                                ),
-                                child: Column(
-                                  children: [
-                                    Container(
-                                      width: 36,
-                                      height: 4,
-                                      decoration: BoxDecoration(
-                                        color: AppColors.mutedText,
-                                        borderRadius: BorderRadius.circular(2),
-                                      ),
-                                    ),
-                                    const SizedBox(height: 6),
-                                    Text(
-                                      _editingPoint == null
-                                          ? 'Creando punto de interés'
-                                          : 'Editando punto de interés',
-                                      style: Theme.of(
-                                        context,
-                                      ).textTheme.labelLarge,
-                                    ),
-                                  ],
-                                ),
-                              ),
-                            ),
-                            Expanded(
-                              child: PointOfInterestEditor(
-                                key: _editorKey,
-                                scrollController: scrollController,
-                                initial: _editingPoint,
-                                selectedLocation: _draftLocation,
-                                onLocationChanged: (point) {
-                                  setState(() {
-                                    _draftLocation = point;
-                                  });
+                    _mapController.move(point, 16);
+                  },
+                  onColorChanged: (color) =>
+                      setState(() => _draftColor = color),
+                  onRadiusChanged: (radius) {
+                    setState(() {
+                      _draftRadius = radius;
+                    });
+                  },
+                  onCreate: (request) async {
+                    final groupId = groupProvider.activeGroup!.id;
+                    final success = await pointProvider.create(
+                      groupId,
+                      request,
+                    );
 
-                                  _mapController.move(point, 16);
-                                },
-                                onColorChanged: (color) =>
-                                    setState(() => _draftColor = color),
-                                onRadiusChanged: (radius) {
-                                  setState(() {
-                                    _draftRadius = radius;
-                                  });
-                                },
-                                onCreate: (request) async {
-                                  final groupId = groupProvider.activeGroup!.id;
-
-                                  final success = await pointProvider.create(
-                                    groupId,
-                                    request,
-                                  );
-
-                                  if (!success) {
-                                    throw Exception(
-                                      pointProvider.errorMessage ??
-                                          'No se pudo registrar '
-                                              'el punto de interés.',
-                                    );
-                                  }
-
-                                  return true;
-                                },
-                                onUpdate: (request) async {
-                                  final point = _editingPoint!;
-
-                                  final success = await pointProvider.update(
-                                    point.groupId,
-                                    point.id,
-                                    request,
-                                  );
-
-                                  if (!success) {
-                                    throw Exception(
-                                      pointProvider.errorMessage ??
-                                          'No se pudo actualizar '
-                                              'el punto de interés.',
-                                    );
-                                  }
-
-                                  return true;
-                                },
-                                onClosed: _closeEditor,
-                              ),
-                            ),
-                          ],
-                        ),
+                    if (!success) {
+                      throw Exception(
+                        pointProvider.errorMessage ??
+                            'No se pudo registrar el punto de interés.',
                       );
-                    },
-                  ),
+                    }
+
+                    return true;
+                  },
+                  onUpdate: (request) async {
+                    final point = _editingPoint!;
+                    final success = await pointProvider.update(
+                      point.groupId,
+                      point.id,
+                      request,
+                    );
+
+                    if (!success) {
+                      throw Exception(
+                        pointProvider.errorMessage ??
+                            'No se pudo actualizar el punto de interés.',
+                      );
+                    }
+
+                    return true;
+                  },
+                  onClosed: _closeEditor,
                 ),
             ],
           ),
@@ -764,82 +667,31 @@ class _MapScreenState extends ConsumerState<MapScreen> {
     return ListTileTheme.merge(
       minLeadingWidth: 22,
       horizontalTitleGap: 8,
-      child: ExpansionTile(
-        initiallyExpanded: _pointsExpanded,
-        onExpansionChanged: (expanded) {
-          if (_pointsExpanded == expanded) {
-            return;
-          }
-
-          setState(() {
-            _pointsExpanded = expanded;
-          });
-        },
-        tilePadding: EdgeInsets.zero,
-        childrenPadding: EdgeInsets.zero,
-        shape: const Border(),
-        collapsedShape: const Border(),
-        leading: const Icon(
-          Icons.flag_rounded,
-          color: AppColors.primary,
-          size: 22,
-        ),
-        title: Row(
-          children: [
-            const Text(
-              'Puntos de interés',
-              style: TextStyle(
-                color: AppColors.text,
-                fontSize: 19,
-                fontWeight: FontWeight.w600,
-              ),
-            ),
-            const SizedBox(width: 8),
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-              decoration: BoxDecoration(
-                color: AppColors.cardColor,
-                borderRadius: BorderRadius.circular(10),
-              ),
-              child: Text(
-                '${pointProvider.points.length}',
-                style: const TextStyle(
-                  color: AppColors.mutedText,
-                  fontSize: 12,
-                  fontWeight: FontWeight.w600,
-                ),
-              ),
-            ),
-          ],
-        ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           if (pointProvider.loading) const LinearProgressIndicator(),
           if (!pointProvider.loading && pointProvider.points.isNotEmpty)
-            Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                for (
-                  int index = 0;
-                  index < pointProvider.points.length;
-                  index++
-                ) ...[
-                  FractionallySizedBox(
-                    widthFactor: 0.6,
-                    alignment: Alignment.center,
-                    child: _PointOfInterestListItem(
-                      point: pointProvider.points[index],
-                      onTap: _selectPoint,
-                      onEdit: _startEdit,
-                      onDelete: (point) {
-                        unawaited(_confirmDelete(point));
-                      },
-                    ),
-                  ),
-                  if (index < pointProvider.points.length - 1)
-                    const SizedBox(height: 8),
-                ],
-              ],
-            ),
+            for (
+              int index = 0;
+              index < pointProvider.points.length;
+              index++
+            ) ...[
+              FractionallySizedBox(
+                widthFactor: 0.6,
+                alignment: Alignment.center,
+                child: _PointOfInterestListItem(
+                  point: pointProvider.points[index],
+                  onTap: _selectPoint,
+                  onEdit: _startEdit,
+                  onDelete: (point) {
+                    unawaited(_confirmDelete(point));
+                  },
+                ),
+              ),
+              if (index < pointProvider.points.length - 1)
+                const SizedBox(height: 8),
+            ],
         ],
       ),
     );

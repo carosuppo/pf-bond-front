@@ -1,4 +1,6 @@
 import '../../../core/network/api_client.dart';
+import 'package:http/http.dart' as http;
+import 'package:http_parser/http_parser.dart';
 import '../models/create_group_model.request.dart';
 import '../models/create_group_model.response.dart';
 import '../models/get_group_model.response.dart';
@@ -48,6 +50,24 @@ class GroupService {
     return GroupResponseModel.fromJson(response);
   }
 
+  Future<GroupResponseModel> updateGroupImage({
+    required int groupId,
+    required String filePath,
+    String? mimeType,
+  }) async {
+    final file = await http.MultipartFile.fromPath(
+      'file',
+      filePath,
+      contentType: _imageMediaType(filePath, mimeType),
+    );
+    final response = await _apiClient.authenticatedMultipartPatch(
+      '/group/$groupId/image',
+      file: file,
+    );
+
+    return GroupResponseModel.fromJson(response);
+  }
+
   Future<void> updateMemberRole({
     required int memberId,
     required RoleEnum role,
@@ -58,6 +78,10 @@ class GroupService {
       '/member/$memberId/role',
       request.toJson(),
     );
+  }
+
+  Future<void> removeMember({required int memberId}) async {
+    await _apiClient.authenticatedDelete('/member/$memberId');
   }
 
   Future<List<GetGroupsResponseModel>> getGroups() async {
@@ -78,5 +102,29 @@ class GroupService {
     final response = await _apiClient.authenticatedGet('/member/$memberId');
 
     return GetMemberInfoResponseModel.fromJson(response);
+  }
+
+  MediaType _imageMediaType(String filePath, String? mimeType) {
+    final normalizedMimeType = mimeType?.toLowerCase();
+
+    if (normalizedMimeType == 'image/jpg' ||
+        normalizedMimeType == 'image/jpeg') {
+      return MediaType('image', 'jpeg');
+    }
+
+    if (normalizedMimeType == 'image/png') {
+      return MediaType('image', 'png');
+    }
+
+    if (normalizedMimeType == 'image/webp') {
+      return MediaType('image', 'webp');
+    }
+
+    return switch (filePath.toLowerCase().split('.').last) {
+      'jpg' || 'jpeg' => MediaType('image', 'jpeg'),
+      'png' => MediaType('image', 'png'),
+      'webp' => MediaType('image', 'webp'),
+      _ => MediaType('application', 'octet-stream'),
+    };
   }
 }

@@ -148,9 +148,9 @@ void main() {
     );
     await tester.pumpAndSettle();
     Future<void> expandPoints() async {
-      final tile = find.byType(ExpansionTile);
-      await tester.ensureVisible(tile);
-      await tester.tap(tile);
+      final pointsButton = find.text('Puntos de interés').first;
+      await tester.ensureVisible(pointsButton);
+      await tester.tap(pointsButton);
       await tester.pumpAndSettle();
     }
 
@@ -168,6 +168,8 @@ void main() {
     expect(api.deleted, isTrue);
     expect(points.points, isEmpty);
     expect(find.text('Punto de encuentro'), findsNothing);
+    await tester.tap(find.byIcon(Icons.arrow_back_rounded));
+    await tester.pumpAndSettle();
 
     // Expanded group panel must not intercept the offscreen member's tap.
     final sheet = tester
@@ -181,7 +183,7 @@ void main() {
         .widget<LocationMap>(find.byType(LocationMap))
         .controller!;
     final zoom = controller.camera.zoom;
-    await tester.tap(find.byIcon(Icons.navigation));
+    await tester.tapAt(const Offset(760, 330));
     await tester.pumpAndSettle();
     expect(
       controller.camera.center.longitude,

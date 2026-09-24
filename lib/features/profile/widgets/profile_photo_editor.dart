@@ -14,6 +14,7 @@ class ProfilePhotoEditor extends StatelessWidget {
     required this.currentPhotoUrl,
     required this.selectedPhoto,
     required this.isSaving,
+    this.selectionDescription = 'Elegí una foto para personalizar tu perfil',
     this.previewRadius = 54,
     required this.onGallery,
     required this.onCamera,
@@ -25,6 +26,7 @@ class ProfilePhotoEditor extends StatelessWidget {
   final String? currentPhotoUrl;
   final XFile? selectedPhoto;
   final bool isSaving;
+  final String selectionDescription;
   final double previewRadius;
   final VoidCallback onGallery;
   final VoidCallback onCamera;
@@ -42,8 +44,8 @@ class ProfilePhotoEditor extends StatelessWidget {
           radius: previewRadius,
         ),
         const SizedBox(height: 12),
-        const Text(
-          'Elegí una foto para personalizar tu perfil',
+        Text(
+          selectionDescription,
           textAlign: TextAlign.center,
           style: TextStyle(color: AppColors.mutedText, fontSize: 14),
         ),
@@ -81,6 +83,135 @@ class ProfilePhotoEditor extends StatelessWidget {
           ),
         ],
       ],
+    );
+  }
+}
+
+class PhotoEditButton extends StatelessWidget {
+  const PhotoEditButton({
+    super.key,
+    required this.onPressed,
+    required this.tooltip,
+  });
+
+  final VoidCallback onPressed;
+  final String tooltip;
+
+  @override
+  Widget build(BuildContext context) {
+    return Tooltip(
+      message: tooltip,
+      child: Material(
+        color: Colors.white,
+        shape: const CircleBorder(),
+        child: InkWell(
+          onTap: onPressed,
+          customBorder: const CircleBorder(),
+          child: const SizedBox(
+            width: 26,
+            height: 26,
+            child: Icon(Icons.add, color: Colors.black, size: 18),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class PhotoEditorModal extends StatefulWidget {
+  const PhotoEditorModal({
+    super.key,
+    required this.title,
+    required this.name,
+    required this.currentPhotoUrl,
+    required this.selectedPhoto,
+    required this.isSaving,
+    required this.errorMessage,
+    required this.onGallery,
+    required this.onCamera,
+    required this.onConfirm,
+    required this.onCancel,
+    this.selectionDescription = 'Elegí una foto para personalizar tu perfil',
+  });
+
+  final String title;
+  final String name;
+  final String? currentPhotoUrl;
+  final XFile? selectedPhoto;
+  final bool isSaving;
+  final String? errorMessage;
+  final Future<bool> Function() onGallery;
+  final Future<bool> Function() onCamera;
+  final Future<bool> Function() onConfirm;
+  final VoidCallback onCancel;
+  final String selectionDescription;
+
+  @override
+  State<PhotoEditorModal> createState() => _PhotoEditorModalState();
+}
+
+class _PhotoEditorModalState extends State<PhotoEditorModal> {
+  Future<void> _pick(Future<bool> Function() picker) async {
+    final success = await picker();
+
+    if (!mounted || success || widget.errorMessage == null) {
+      return;
+    }
+
+    _showMessage(widget.errorMessage!);
+  }
+
+  Future<void> _save() async {
+    final success = await widget.onConfirm();
+
+    if (!mounted) {
+      return;
+    }
+
+    if (success) {
+      Navigator.of(context).pop(true);
+      return;
+    }
+
+    _showMessage(widget.errorMessage ?? 'No se pudo actualizar la imagen.');
+  }
+
+  void _showMessage(String message) {
+    ScaffoldMessenger.of(context)
+      ..hideCurrentSnackBar()
+      ..showSnackBar(SnackBar(content: Text(message)));
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return SafeArea(
+      child: SingleChildScrollView(
+        padding: const EdgeInsets.fromLTRB(24, 20, 24, 24),
+        child: Column(
+          children: [
+            Text(
+              widget.title,
+              style: const TextStyle(
+                color: AppColors.text,
+                fontSize: 20,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+            const SizedBox(height: 20),
+            ProfilePhotoEditor(
+              name: widget.name,
+              currentPhotoUrl: widget.currentPhotoUrl,
+              selectedPhoto: widget.selectedPhoto,
+              isSaving: widget.isSaving,
+              selectionDescription: widget.selectionDescription,
+              onGallery: () => _pick(widget.onGallery),
+              onCamera: () => _pick(widget.onCamera),
+              onConfirm: _save,
+              onCancel: widget.onCancel,
+            ),
+          ],
+        ),
+      ),
     );
   }
 }

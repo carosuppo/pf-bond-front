@@ -27,7 +27,33 @@ class _SettingsScreenState extends State<SettingsScreen> {
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
       ),
-      builder: (_) => const _ProfilePhotoEditorModal(),
+      builder: (_) => Consumer<ProfileProvider>(
+        builder: (context, profileProvider, child) {
+          final user = context.watch<AuthProvider>().authResponse?.user;
+
+          return PhotoEditorModal(
+            title: 'Editar foto de perfil',
+            name: user?.name ?? 'Usuario',
+            currentPhotoUrl: user?.profilePhoto,
+            selectedPhoto: profileProvider.selectedPhoto,
+            isSaving: profileProvider.isSavingPhoto,
+            errorMessage: profileProvider.errorMessage,
+            onGallery: profileProvider.pickProfilePhotoFromGallery,
+            onCamera: profileProvider.pickProfilePhotoFromCamera,
+            onConfirm: () async {
+              final success = await profileProvider.saveProfilePhoto();
+              final updatedUser = profileProvider.user;
+
+              if (success && updatedUser != null && context.mounted) {
+                context.read<AuthProvider>().updateUser(updatedUser);
+              }
+
+              return success;
+            },
+            onCancel: profileProvider.clearSelectedPhoto,
+          );
+        },
+      ),
     );
 
     if (updated == true && context.mounted) {
@@ -278,18 +304,9 @@ class _ProfileSummary extends StatelessWidget {
                 right: 2,
                 child: Tooltip(
                   message: 'Editar foto de perfil',
-                  child: Material(
-                    color: Colors.white,
-                    shape: const CircleBorder(),
-                    child: InkWell(
-                      onTap: onEditPhoto,
-                      customBorder: const CircleBorder(),
-                      child: const SizedBox(
-                        width: 26,
-                        height: 26,
-                        child: Icon(Icons.add, color: Colors.black, size: 18),
-                      ),
-                    ),
+                  child: PhotoEditButton(
+                    onPressed: onEditPhoto,
+                    tooltip: 'Editar foto de perfil',
                   ),
                 ),
               ),
@@ -356,102 +373,6 @@ class _ProfilePhotoViewer extends StatelessWidget {
                   ),
                 ],
               ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-class _ProfilePhotoEditorModal extends StatefulWidget {
-  const _ProfilePhotoEditorModal();
-
-  @override
-  State<_ProfilePhotoEditorModal> createState() =>
-      _ProfilePhotoEditorModalState();
-}
-
-class _ProfilePhotoEditorModalState extends State<_ProfilePhotoEditorModal> {
-  Future<void> _pickFromGallery() async {
-    final profileProvider = context.read<ProfileProvider>();
-    final success = await profileProvider.pickProfilePhotoFromGallery();
-
-    if (!mounted || success || profileProvider.errorMessage == null) {
-      return;
-    }
-
-    _showMessage(profileProvider.errorMessage!);
-  }
-
-  Future<void> _pickFromCamera() async {
-    final profileProvider = context.read<ProfileProvider>();
-    final success = await profileProvider.pickProfilePhotoFromCamera();
-
-    if (!mounted || success || profileProvider.errorMessage == null) {
-      return;
-    }
-
-    _showMessage(profileProvider.errorMessage!);
-  }
-
-  Future<void> _savePhoto() async {
-    final profileProvider = context.read<ProfileProvider>();
-    final success = await profileProvider.saveProfilePhoto();
-
-    if (!mounted) {
-      return;
-    }
-
-    if (!success) {
-      _showMessage(
-        profileProvider.errorMessage ?? 'No se pudo actualizar la foto.',
-      );
-      return;
-    }
-
-    final updatedUser = profileProvider.user;
-    if (updatedUser != null) {
-      context.read<AuthProvider>().updateUser(updatedUser);
-    }
-
-    Navigator.of(context).pop(true);
-  }
-
-  void _showMessage(String message) {
-    ScaffoldMessenger.of(context)
-      ..hideCurrentSnackBar()
-      ..showSnackBar(SnackBar(content: Text(message)));
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final profileProvider = context.watch<ProfileProvider>();
-    final user = context.watch<AuthProvider>().authResponse?.user;
-
-    return SafeArea(
-      child: SingleChildScrollView(
-        padding: const EdgeInsets.fromLTRB(24, 20, 24, 24),
-        child: Column(
-          children: [
-            const Text(
-              'Editar foto de perfil',
-              style: TextStyle(
-                color: AppColors.text,
-                fontSize: 20,
-                fontWeight: FontWeight.w700,
-              ),
-            ),
-            const SizedBox(height: 20),
-            ProfilePhotoEditor(
-              name: user?.name ?? 'Usuario',
-              currentPhotoUrl: user?.profilePhoto,
-              selectedPhoto: profileProvider.selectedPhoto,
-              isSaving: profileProvider.isSavingPhoto,
-              onGallery: _pickFromGallery,
-              onCamera: _pickFromCamera,
-              onConfirm: _savePhoto,
-              onCancel: profileProvider.clearSelectedPhoto,
             ),
           ],
         ),

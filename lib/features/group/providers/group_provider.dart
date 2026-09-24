@@ -1,6 +1,7 @@
 import 'dart:math';
 
 import 'package:flutter/material.dart';
+import 'package:image_picker/image_picker.dart';
 
 import '../../../core/preferences/app_preferences_service.dart';
 import '../models/create_group_model.request.dart';
@@ -13,12 +14,18 @@ import '../models/join_group_model.request.dart';
 import '../models/join_group_model.response.dart';
 import '../models/update_group_model.request.dart';
 import '../services/group_service.dart';
+import '../../profile/services/profile_photo_picker_service.dart';
 
 class GroupProvider extends ChangeNotifier {
   final GroupService _groupService;
   final AppPreferencesService _preferencesService;
+  final ProfilePhotoPickerService _photoPickerService;
 
-  GroupProvider(this._groupService, this._preferencesService);
+  GroupProvider(
+    this._groupService,
+    this._preferencesService, [
+    ProfilePhotoPickerService? photoPickerService,
+  ]) : _photoPickerService = photoPickerService ?? ProfilePhotoPickerService();
 
   bool isLoading = false;
   bool _isInitialized = false;
@@ -32,6 +39,8 @@ class GroupProvider extends ChangeNotifier {
   GetGroupResponseModel? groupDetails;
   List<GetGroupsResponseModel> groups = [];
   JoinGroupResponseModel? joinResponse;
+  XFile? selectedGroupImage;
+  bool isSavingGroupImage = false;
 
   Future<void> resetSessionState() async {
     _sessionVersion++;
@@ -44,6 +53,8 @@ class GroupProvider extends ChangeNotifier {
     groupDetails = null;
     groups = [];
     joinResponse = null;
+    selectedGroupImage = null;
+    isSavingGroupImage = false;
     notifyListeners();
     await _pendingPreferenceWrite;
   }
@@ -183,6 +194,101 @@ class GroupProvider extends ChangeNotifier {
     }
   }
 
+  Future<bool> pickGroupImageFromGallery() async {
+    return _pickGroupImage(_photoPickerService.pickFromGallery);
+  }
+
+  Future<bool> pickGroupImageFromCamera() async {
+    return _pickGroupImage(_photoPickerService.pickFromCamera);
+  }
+
+  Future<bool> _pickGroupImage(Future<XFile?> Function() picker) async {
+    errorMessage = null;
+
+    try {
+      final image = await picker();
+      if (image == null) return false;
+      selectedGroupImage = image;
+      return true;
+    } catch (error) {
+      errorMessage = error.toString().replaceFirst('Exception: ', '');
+      return false;
+    } finally {
+      notifyListeners();
+    }
+  }
+
+  Future<bool> saveGroupImage({
+    required int groupId,
+    required bool isCurrentUserAdmin,
+  }) async {
+    if (!isCurrentUserAdmin || selectedGroupImage == null) return false;
+
+    isSavingGroupImage = true;
+    errorMessage = null;
+    notifyListeners();
+
+    try {
+      final updated = await _groupService.updateGroupImage(
+        groupId: groupId,
+        filePath: selectedGroupImage!.path,
+        mimeType: selectedGroupImage!.mimeType,
+      );
+      _applyUpdatedGroup(updated);
+      selectedGroupImage = null;
+      return true;
+    } catch (error) {
+      errorMessage = error.toString().replaceFirst('Exception: ', '');
+      return false;
+    } finally {
+      isSavingGroupImage = false;
+      notifyListeners();
+    }
+  }
+
+  void clearSelectedGroupImage() {
+    if (selectedGroupImage == null) return;
+    selectedGroupImage = null;
+    errorMessage = null;
+    notifyListeners();
+  }
+
+  Future<bool> removeMember({
+    required int memberId,
+    required bool isCurrentUserAdmin,
+  }) async {
+    if (!isCurrentUserAdmin) {
+      errorMessage = 'Solo los administradores pueden expulsar miembros.';
+      notifyListeners();
+
+      return false;
+    }
+
+    final sessionVersion = _sessionVersion;
+    isLoading = true;
+    errorMessage = null;
+
+    notifyListeners();
+
+    try {
+      await _groupService.removeMember(memberId: memberId);
+      if (sessionVersion != _sessionVersion) return false;
+      _applyRemovedMember(memberId);
+
+      return true;
+    } catch (error) {
+      if (sessionVersion != _sessionVersion) return false;
+      errorMessage = error.toString().replaceFirst('Exception: ', '');
+
+      return false;
+    } finally {
+      if (sessionVersion == _sessionVersion) {
+        isLoading = false;
+        notifyListeners();
+      }
+    }
+  }
+
   Future<bool> updateGroup({
     required int groupId,
     required String name,
@@ -238,6 +344,7 @@ class GroupProvider extends ChangeNotifier {
       groupDetails = GetGroupResponseModel(
         id: updated.id,
         name: updated.name,
+        image: updated.image,
         description: updated.description,
         shareLocationMandatorily: updated.shareLocationMandatorily,
         invitationCode: groupDetails!.invitationCode,
@@ -250,11 +357,16 @@ class GroupProvider extends ChangeNotifier {
       groups[index] = GetGroupsResponseModel(
         id: updated.id,
         name: updated.name,
+        image: updated.image,
       );
     }
 
     if (activeGroup != null && activeGroup!.id == updated.id) {
-      activeGroup = GetGroupsResponseModel(id: updated.id, name: updated.name);
+      activeGroup = GetGroupsResponseModel(
+        id: updated.id,
+        name: updated.name,
+        image: updated.image,
+      );
     }
   }
 
@@ -282,10 +394,31 @@ class GroupProvider extends ChangeNotifier {
     groupDetails = GetGroupResponseModel(
       id: currentGroup.id,
       name: currentGroup.name,
+      image: currentGroup.image,
       description: currentGroup.description,
       shareLocationMandatorily: currentGroup.shareLocationMandatorily,
       invitationCode: currentGroup.invitationCode,
       members: members,
+    );
+  }
+
+  void _applyRemovedMember(int memberId) {
+    final currentGroup = groupDetails;
+
+    if (currentGroup == null) {
+      return;
+    }
+
+    groupDetails = GetGroupResponseModel(
+      id: currentGroup.id,
+      name: currentGroup.name,
+      image: currentGroup.image,
+      description: currentGroup.description,
+      shareLocationMandatorily: currentGroup.shareLocationMandatorily,
+      invitationCode: currentGroup.invitationCode,
+      members: currentGroup.members
+          .where((member) => member.id != memberId)
+          .toList(),
     );
   }
 
