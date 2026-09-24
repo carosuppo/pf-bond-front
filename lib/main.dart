@@ -6,6 +6,7 @@ import 'package:provider/provider.dart' as provider;
 
 import 'core/network/api_client.dart';
 import 'core/preferences/app_preferences_service.dart';
+import 'core/routes/app_navigator.dart';
 import 'core/routes/app_router.dart';
 import 'core/routes/app_routes.dart';
 import 'core/storage/session_storage_service.dart';
@@ -15,7 +16,9 @@ import 'features/auth/providers/auth_provider.dart';
 import 'features/auth/services/auth_service.dart';
 import 'features/auth/services/session_state_cleanup.dart';
 import 'features/event/providers/event_provider.dart';
+import 'features/event/services/event_reminder_service.dart';
 import 'features/event/services/event_service.dart';
+import 'features/event/utils/event_reminder_navigation.dart';
 import 'features/group/providers/group_provider.dart';
 import 'features/group/services/group_service.dart';
 import 'features/location/services/background_location_service.dart';
@@ -66,6 +69,13 @@ class MyApp extends StatelessWidget {
           create: (context) => PushNotificationService(
             context.read<NotificationApiService>(),
             context.read<AppPreferencesService>(),
+            onOpened: (data) async {
+              if (data.type != 'EVENT_REMINDER') return;
+              final groupId = int.tryParse(data.groupId ?? '');
+              final eventId = int.tryParse(data.eventId ?? '');
+              if (groupId == null || eventId == null) return;
+              await handleEventReminderTap(groupId: groupId, eventId: eventId);
+            },
           ),
           dispose: (_, service) => service.dispose(),
         ),
@@ -110,6 +120,9 @@ class MyApp extends StatelessWidget {
         provider.Provider<EventService>(
           create: (context) => EventService(context.read<ApiClient>()),
         ),
+        provider.Provider<EventReminderService>(
+          create: (context) => EventReminderService(context.read<ApiClient>()),
+        ),
         provider.ChangeNotifierProvider<EventProvider>(
           create: (context) => EventProvider(context.read<EventService>()),
         ),
@@ -139,6 +152,7 @@ class MyApp extends StatelessWidget {
       child: MaterialApp(
         title: 'Bond',
         debugShowCheckedModeBanner: false,
+        navigatorKey: appNavigatorKey,
         theme: ThemeData(
           scaffoldBackgroundColor: AppColors.background,
 

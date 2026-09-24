@@ -18,6 +18,7 @@ import '../providers/event_provider.dart';
 import '../screens/edit_event_screen.dart';
 import 'cancel_event_dialog.dart';
 import 'event_location_editor.dart';
+import 'event_reminder_button.dart';
 
 Future<bool> showEventDetailsModal(
   BuildContext context,
@@ -303,6 +304,15 @@ class EventDetailsModal extends StatelessWidget {
                           ),
                         ),
                       ),
+                      if (canCancel) ...[
+                        const SizedBox(height: 20),
+                        const _SectionTitle('Recordatorio'),
+                        const SizedBox(height: 10),
+                        EventReminderButton(
+                          event: currentEvent,
+                          groupId: groupId,
+                        ),
+                      ],
                       if (canCancel) ...[
                         const SizedBox(height: 12),
                         SizedBox(
