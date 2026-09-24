@@ -15,10 +15,7 @@ class GeocodingService {
     });
 
     final response = await http
-        .get(
-          uri,
-          headers: const {'User-Agent': 'Bond/1.0 (event-location-search)'},
-        )
+        .get(uri, headers: const {'User-Agent': 'Bond/1.0 (geocoding)'})
         .timeout(const Duration(seconds: 15));
 
     if (response.statusCode < 200 || response.statusCode >= 300) {
@@ -44,10 +41,7 @@ class GeocodingService {
     });
 
     final response = await http
-        .get(
-          uri,
-          headers: const {'User-Agent': 'Bond/1.0 (event-location-search)'},
-        )
+        .get(uri, headers: const {'User-Agent': 'Bond/1.0 (geocoding)'})
         .timeout(const Duration(seconds: 15));
 
     if (response.statusCode < 200 || response.statusCode >= 300) {

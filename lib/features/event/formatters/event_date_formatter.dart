@@ -28,6 +28,31 @@ class EventDateFormatter {
     'Dic',
   ];
 
+  static const List<String> _daysFull = [
+    'lunes',
+    'martes',
+    'miércoles',
+    'jueves',
+    'viernes',
+    'sábado',
+    'domingo',
+  ];
+
+  static const List<String> _monthsFull = [
+    'enero',
+    'febrero',
+    'marzo',
+    'abril',
+    'mayo',
+    'junio',
+    'julio',
+    'agosto',
+    'septiembre',
+    'octubre',
+    'noviembre',
+    'diciembre',
+  ];
+
   static String _pad(int value) => value.toString().padLeft(2, '0');
 
   static DateTime _toLocal(DateTime value) => AppTimezone.fromUtc(value);
@@ -48,6 +73,20 @@ class EventDateFormatter {
   static String dayMonthYear(DateTime value) {
     final local = _toLocal(value);
     return '${local.day} ${_monthsShort[local.month - 1]} ${local.year}';
+  }
+
+  static String fullDayDateTime(DateTime value) {
+    final local = _toLocal(value);
+    final day = _daysFull[local.weekday - 1];
+    final capitalizedDay = '${day[0].toUpperCase()}${day.substring(1)}';
+    return '$capitalizedDay ${local.day} de '
+        '${_monthsFull[local.month - 1]}, ${time(value)}';
+  }
+
+  static String weekdayTime(DateTime value) {
+    final local = _toLocal(value);
+    return '${_daysFull[local.weekday - 1]} '
+        '${_pad(local.hour)}:${_pad(local.minute)}';
   }
 
   static String dayOfMonth(DateTime value) {

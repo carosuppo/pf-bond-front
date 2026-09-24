@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../../../core/theme/app_colors.dart';
+import '../../../core/widgets/app_screen_header.dart';
 import '../models/notification_preferences.dart';
 import '../providers/notification_preferences_provider.dart';
 
@@ -16,27 +17,9 @@ class NotificationPreferencesScreen extends StatelessWidget {
       body: SafeArea(
         child: Column(
           children: [
-            Padding(
-              padding: const EdgeInsets.fromLTRB(8, 8, 16, 8),
-              child: Row(
-                children: [
-                  IconButton(
-                    onPressed: () => Navigator.of(context).maybePop(),
-                    tooltip: 'Volver',
-                    icon: const Icon(Icons.arrow_back_rounded),
-                  ),
-                  const Expanded(
-                    child: Text(
-                      'Notificaciones',
-                      style: TextStyle(
-                        color: AppColors.text,
-                        fontSize: 22,
-                        fontWeight: FontWeight.w700,
-                      ),
-                    ),
-                  ),
-                ],
-              ),
+            AppScreenHeader(
+              title: 'Notificaciones',
+              onBack: () => Navigator.of(context).maybePop(),
             ),
             Expanded(
               child: state.isLoading
@@ -145,45 +128,58 @@ class GroupNotificationPreferencesScreen extends StatelessWidget {
         !state.isSaving &&
         !state.isLoading;
     return Scaffold(
-      appBar: AppBar(
-        title: Text(group?.groupName ?? 'Notificaciones del grupo'),
-      ),
-      body: group == null
-          ? const Center(child: Text('Este grupo ya no está disponible.'))
-          : ListView(
-              children: [
-                if (state.isSaving) const LinearProgressIndicator(),
-                if (state.errorMessage != null)
-                  Padding(
-                    padding: const EdgeInsets.all(16),
-                    child: Text(
-                      state.errorMessage!,
-                      style: TextStyle(
-                        color: Theme.of(context).colorScheme.error,
-                      ),
-                    ),
-                  ),
-                SwitchListTile(
-                  title: const Text('Notificaciones de este grupo'),
-                  value: group.enabled,
-                  onChanged: enabled
-                      ? (value) => state.setGroup(group, value)
-                      : null,
-                ),
-                const Padding(
-                  padding: EdgeInsets.all(16),
-                  child: Text('Tipos de notificación'),
-                ),
-                for (final entry in notificationTypeLabels.entries)
-                  SwitchListTile(
-                    title: Text(entry.value),
-                    value: group.types[entry.key] ?? true,
-                    onChanged: enabled && group.enabled
-                        ? (value) => state.setType(group, entry.key, value)
-                        : null,
-                  ),
-              ],
+      backgroundColor: AppColors.background,
+      body: SafeArea(
+        child: Column(
+          children: [
+            AppScreenHeader(
+              title: group?.groupName ?? 'Notificaciones del grupo',
+              onBack: () => Navigator.of(context).maybePop(),
             ),
+            Expanded(
+              child: group == null
+                  ? const Center(
+                      child: Text('Este grupo ya no está disponible.'),
+                    )
+                  : ListView(
+                      children: [
+                        if (state.isSaving) const LinearProgressIndicator(),
+                        if (state.errorMessage != null)
+                          Padding(
+                            padding: const EdgeInsets.all(16),
+                            child: Text(
+                              state.errorMessage!,
+                              style: TextStyle(
+                                color: Theme.of(context).colorScheme.error,
+                              ),
+                            ),
+                          ),
+                        SwitchListTile(
+                          title: const Text('Notificaciones de este grupo'),
+                          value: group.enabled,
+                          onChanged: enabled
+                              ? (value) => state.setGroup(group, value)
+                              : null,
+                        ),
+                        const Padding(
+                          padding: EdgeInsets.all(16),
+                          child: Text('Tipos de notificación'),
+                        ),
+                        for (final entry in notificationTypeLabels.entries)
+                          SwitchListTile(
+                            title: Text(entry.value),
+                            value: group.types[entry.key] ?? true,
+                            onChanged: enabled && group.enabled
+                                ? (value) =>
+                                      state.setType(group, entry.key, value)
+                                : null,
+                          ),
+                      ],
+                    ),
+            ),
+          ],
+        ),
+      ),
     );
   }
 }

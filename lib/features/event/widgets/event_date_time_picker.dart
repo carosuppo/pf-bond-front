@@ -221,69 +221,74 @@ class _EventDateTimeDialogState extends State<_EventDateTimeDialog> {
       backgroundColor: colorScheme.surface,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(28)),
       child: ConstrainedBox(
-        constraints: const BoxConstraints(maxWidth: 500),
-        child: Padding(
-          padding: const EdgeInsets.fromLTRB(24, 20, 24, 16),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              _DateTimeHeader(
-                type: widget.type,
-                selectedDate: _selectedDate,
-                selectedTime: _selectedTime,
-                startDateTime: widget.startDateTime,
-                step: _step,
-                formatDate: _formatDate,
-                formatTime: _formatTime,
-                onDateTap: () {
-                  setState(() {
-                    _step = _PickerStep.date;
-                    _errorMessage = null;
-                  });
-                },
-                onTimeTap: () {
-                  setState(() {
-                    _step = _PickerStep.time;
-                    _errorMessage = null;
-                  });
-                },
-              ),
+        constraints: BoxConstraints(
+          maxWidth: 500,
+          maxHeight: MediaQuery.of(context).size.height * 0.85,
+        ),
+        child: SingleChildScrollView(
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(24, 20, 24, 16),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                _DateTimeHeader(
+                  type: widget.type,
+                  selectedDate: _selectedDate,
+                  selectedTime: _selectedTime,
+                  startDateTime: widget.startDateTime,
+                  step: _step,
+                  formatDate: _formatDate,
+                  formatTime: _formatTime,
+                  onDateTap: () {
+                    setState(() {
+                      _step = _PickerStep.date;
+                      _errorMessage = null;
+                    });
+                  },
+                  onTimeTap: () {
+                    setState(() {
+                      _step = _PickerStep.time;
+                      _errorMessage = null;
+                    });
+                  },
+                ),
 
-              const SizedBox(height: 20),
+                const SizedBox(height: 20),
 
-              Divider(color: colorScheme.outlineVariant, height: 1),
+                Divider(color: colorScheme.outlineVariant, height: 1),
 
-              const SizedBox(height: 16),
+                const SizedBox(height: 16),
 
-              if (_step == _PickerStep.date)
-                _buildDatePicker()
-              else
-                _buildTimePicker(),
+                if (_step == _PickerStep.date)
+                  _buildDatePicker()
+                else
+                  _buildTimePicker(),
 
-              if (_errorMessage != null) ...[
-                const SizedBox(height: 12),
-                _ErrorMessage(message: _errorMessage!),
-              ],
-
-              const SizedBox(height: 12),
-
-              Row(
-                mainAxisAlignment: MainAxisAlignment.end,
-                children: [
-                  TextButton(
-                    onPressed: () {
-                      Navigator.of(context).pop();
-                    },
-                    child: const Text('Cancelar'),
-                  ),
-                  const SizedBox(width: 8),
-                  FilledButton(
-                    onPressed: _step == _PickerStep.time ? _confirm : null,
-                    child: const Text('Aceptar'),
-                  ),
+                if (_errorMessage != null) ...[
+                  const SizedBox(height: 12),
+                  _ErrorMessage(message: _errorMessage!),
                 ],
-              ),
-            ],
+
+                const SizedBox(height: 12),
+
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.end,
+                  children: [
+                    TextButton(
+                      onPressed: () {
+                        Navigator.of(context).pop();
+                      },
+                      child: const Text('Cancelar'),
+                    ),
+                    const SizedBox(width: 8),
+                    FilledButton(
+                      onPressed: _step == _PickerStep.time ? _confirm : null,
+                      child: const Text('Aceptar'),
+                    ),
+                  ],
+                ),
+              ],
+            ),
           ),
         ),
       ),

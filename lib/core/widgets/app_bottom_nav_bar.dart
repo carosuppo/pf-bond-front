@@ -31,8 +31,8 @@ class AppBottomNavBar extends StatelessWidget {
   static const _items = [
     _BottomNavItem(
       destination: AppBottomDestination.map,
-      icon: Icons.location_on_outlined,
-      selectedIcon: Icons.location_on,
+      icon: Icons.person_pin_circle_outlined,
+      selectedIcon: Icons.person_pin_circle_rounded,
       tooltip: 'Ubicación',
     ),
     _BottomNavItem(

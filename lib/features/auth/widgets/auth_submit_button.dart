@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../../core/theme/app_colors.dart';
+import '../../../core/widgets/app_loading_indicator.dart';
 
 class AuthSubmitButton extends StatelessWidget {
   final String text;
@@ -30,14 +31,7 @@ class AuthSubmitButton extends StatelessWidget {
           ),
         ),
         child: isLoading
-            ? const SizedBox(
-                width: 22,
-                height: 22,
-                child: CircularProgressIndicator(
-                  strokeWidth: 2,
-                  color: Colors.black,
-                ),
-              )
+            ? const AppLoadingIndicator(size: 22, color: Colors.black)
             : Text(text, style: const TextStyle(fontWeight: FontWeight.w600)),
       ),
     );

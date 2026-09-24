@@ -98,7 +98,11 @@ class _SplashScreenState extends ConsumerState<SplashScreen>
                 ),
               );
             },
-            child: Image.asset('assets/logo_bond.png', width: 160, height: 160),
+            child: Image.asset(
+              'assets/logo_bond_splash.png',
+              width: 256,
+              height: 256,
+            ),
           ),
         ),
       ),

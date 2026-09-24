@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:ui';
 
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
@@ -26,6 +27,7 @@ class PushNotificationService {
   final NotificationApiService _notificationApiService;
   final AppPreferencesService _preferencesService;
   final FlutterLocalNotificationsPlugin _localNotifications;
+  final Future<void> Function(PushNotificationData data)? onOpened;
 
   StreamSubscription<String>? _tokenRefreshSubscription;
   StreamSubscription<RemoteMessage>? _foregroundSubscription;
@@ -37,6 +39,7 @@ class PushNotificationService {
     this._notificationApiService,
     this._preferencesService, {
     FlutterLocalNotificationsPlugin? localNotifications,
+    this.onOpened,
   }) : _localNotifications =
            localNotifications ?? FlutterLocalNotificationsPlugin();
 
@@ -79,7 +82,7 @@ class PushNotificationService {
 
     await _localNotifications.initialize(
       settings: const InitializationSettings(
-        android: AndroidInitializationSettings('@mipmap/ic_launcher'),
+        android: AndroidInitializationSettings('ic_notification'),
         iOS: DarwinInitializationSettings(),
       ),
       onDidReceiveNotificationResponse: (response) {
@@ -141,6 +144,8 @@ class PushNotificationService {
           'bond_default',
           'Notificaciones de Bond',
           channelDescription: 'Notificaciones generales de Bond.',
+          icon: 'ic_notification',
+          color: Color(0xFFFFFFFF),
           importance: Importance.high,
           priority: Priority.high,
         ),
@@ -150,11 +155,23 @@ class PushNotificationService {
     );
   }
 
+  Future<AuthorizationStatus> getPermissionStatus() async {
+    final settings = await FirebaseMessaging.instance.getNotificationSettings();
+    return settings.authorizationStatus;
+  }
+
+  Future<AuthorizationStatus> requestPermission() async {
+    final settings = await FirebaseMessaging.instance.requestPermission();
+    return settings.authorizationStatus;
+  }
+
   void _handleOpenedData(PushNotificationData data) {
     if (data.type.isEmpty) return;
     debugPrint('Notificación abierta: ${data.type}');
-    // Punto único de extensión para navegación futura usando groupId y
-    // pointOfInterestId, sin acoplar el servicio a BuildContext.
+    final handler = onOpened;
+    if (handler != null) {
+      unawaited(handler(data));
+    }
   }
 
   void dispose() {

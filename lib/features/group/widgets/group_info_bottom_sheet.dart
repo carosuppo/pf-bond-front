@@ -180,7 +180,7 @@ class _GroupInfoBottomSheetState extends State<GroupInfoBottomSheet> {
                     width: 42,
                     height: 42,
                     decoration: BoxDecoration(
-                      color: AppColors.fieldColor,
+                      color: AppColors.surface,
                       borderRadius: BorderRadius.circular(12),
                     ),
                     child: Icon(
@@ -740,7 +740,7 @@ class _RoleBadge extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 5),
       decoration: BoxDecoration(
-        color: AppColors.fieldColor,
+        color: AppColors.surface,
         borderRadius: BorderRadius.circular(10),
         border: Border.all(color: AppColors.border),
       ),

@@ -1,15 +1,16 @@
 import 'package:flutter/material.dart';
 import 'package:latlong2/latlong.dart';
 
+import '../../../core/models/geocoding_result.dart';
+import '../../../core/services/geocoding_service.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/widgets/discard_changes_dialog.dart';
+import '../../../core/widgets/global_text_field.dart';
 import '../../location/models/location_permission_status.dart';
 import '../../location/services/location_service.dart';
-import '../models/geocoding_result.dart';
 import '../models/point_of_interest.dart';
 import '../models/point_of_interest_color.dart';
 import '../models/point_of_interest_request.dart';
-import '../services/geocoding_service.dart';
 
 class PointOfInterestEditor extends StatefulWidget {
   final PointOfInterest? initial;
@@ -49,6 +50,7 @@ class PointOfInterestEditorState extends State<PointOfInterestEditor> {
 
   final _locationService = LocationService();
   final _geocodingService = GeocodingService();
+  final _colorScrollController = ScrollController();
 
   List<GeocodingResult> _results = [];
 
@@ -100,8 +102,27 @@ class PointOfInterestEditorState extends State<PointOfInterestEditor> {
     _descriptionController.dispose();
     _radiusController.dispose();
     _addressController.dispose();
+    _colorScrollController.dispose();
 
     super.dispose();
+  }
+
+  void _scrollColors(int direction) {
+    if (!_colorScrollController.hasClients) {
+      return;
+    }
+
+    final position = _colorScrollController.position;
+    final target = (position.pixels + direction * 144).clamp(
+      position.minScrollExtent,
+      position.maxScrollExtent,
+    );
+
+    _colorScrollController.animateTo(
+      target,
+      duration: const Duration(milliseconds: 300),
+      curve: Curves.easeOut,
+    );
   }
 
   void _notifyRadius() {
@@ -291,6 +312,7 @@ class PointOfInterestEditorState extends State<PointOfInterestEditor> {
   @override
   Widget build(BuildContext context) {
     return Material(
+      color: AppColors.background,
       elevation: 12,
       borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
       child: SingleChildScrollView(
@@ -307,49 +329,118 @@ class PointOfInterestEditorState extends State<PointOfInterestEditor> {
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              Text(
-                widget.initial == null
-                    ? 'Registrar punto de interés'
-                    : 'Editar punto de interés',
-              ),
-              const SizedBox(height: 12),
-              const Align(
-                alignment: Alignment.centerLeft,
-                child: Text('Color'),
-              ),
-              Wrap(
-                spacing: 8,
-                runSpacing: 4,
+              Row(
                 children: [
-                  for (final color in PointOfInterestColor.values)
-                    ChoiceChip(
-                      label: Text(color.label),
-                      avatar: Container(
-                        width: 20,
-                        height: 20,
-                        decoration: BoxDecoration(
-                          color: color.visualColor,
-                          shape: BoxShape.circle,
-                          border: Border.all(
-                            color: Theme.of(context).colorScheme.outline,
+                  Text(
+                    'Color',
+                    style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                      color: AppColors.text,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                  const Spacer(),
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 10,
+                      vertical: 5,
+                    ),
+                    decoration: BoxDecoration(
+                      color: AppColors.fieldColor,
+                      borderRadius: BorderRadius.circular(10),
+                      border: Border.all(color: AppColors.border),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Container(
+                          width: 12,
+                          height: 12,
+                          decoration: BoxDecoration(
+                            color: _color.visualColor,
+                            shape: BoxShape.circle,
+                            border: Border.all(color: AppColors.border),
                           ),
                         ),
-                      ),
-                      selected: _color == color,
-                      showCheckmark: true,
-                      onSelected: _submitting
-                          ? null
-                          : (_) {
-                              setState(() => _color = color);
-                              widget.onColorChanged(color);
-                            },
+                        const SizedBox(width: 6),
+                        Text(
+                          _color.label,
+                          style: const TextStyle(
+                            color: AppColors.mutedText,
+                            fontSize: 13,
+                            fontWeight: FontWeight.w500,
+                          ),
+                        ),
+                      ],
                     ),
+                  ),
                 ],
               ),
               const SizedBox(height: 12),
-              TextFormField(
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 4,
+                  vertical: 12,
+                ),
+                decoration: BoxDecoration(
+                  color: AppColors.cardColor,
+                  borderRadius: BorderRadius.circular(14),
+                  border: Border.all(color: AppColors.border),
+                ),
+                child: Row(
+                  children: [
+                    _CarouselArrow(
+                      icon: Icons.chevron_left_rounded,
+                      tooltip: 'Ver colores anteriores',
+                      onTap: () => _scrollColors(-1),
+                    ),
+                    Expanded(
+                      child: SingleChildScrollView(
+                        controller: _colorScrollController,
+                        scrollDirection: Axis.horizontal,
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 4,
+                          vertical: 4,
+                        ),
+                        child: Row(
+                          children: [
+                            for (
+                              int i = 0;
+                              i < PointOfInterestColor.values.length;
+                              i++
+                            ) ...[
+                              _ColorSwatch(
+                                color:
+                                    PointOfInterestColor.values[i].visualColor,
+                                label: PointOfInterestColor.values[i].label,
+                                selected:
+                                    _color == PointOfInterestColor.values[i],
+                                enabled: !_submitting,
+                                onTap: () {
+                                  final color = PointOfInterestColor.values[i];
+                                  setState(() => _color = color);
+                                  widget.onColorChanged(color);
+                                },
+                              ),
+                              if (i < PointOfInterestColor.values.length - 1)
+                                const SizedBox(width: 12),
+                            ],
+                          ],
+                        ),
+                      ),
+                    ),
+                    _CarouselArrow(
+                      icon: Icons.chevron_right_rounded,
+                      tooltip: 'Ver más colores',
+                      onTap: () => _scrollColors(1),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 16),
+              GlobalTextField(
                 controller: _nameController,
-                decoration: const InputDecoration(labelText: 'Nombre *'),
+                label: 'Nombre *',
                 validator: (value) {
                   if (value == null || value.trim().isEmpty) {
                     return 'Ingresá un nombre.';
@@ -358,21 +449,17 @@ class PointOfInterestEditorState extends State<PointOfInterestEditor> {
                   return null;
                 },
               ),
-              const SizedBox(height: 8),
-              TextFormField(
+              const SizedBox(height: 16),
+              GlobalTextField(
                 controller: _descriptionController,
-                decoration: const InputDecoration(
-                  labelText: 'Descripción opcional',
-                ),
+                label: 'Descripción opcional',
               ),
-              const SizedBox(height: 8),
-              TextFormField(
+              const SizedBox(height: 16),
+              GlobalTextField(
                 controller: _radiusController,
+                label: 'Radio en metros *',
                 keyboardType: const TextInputType.numberWithOptions(
                   decimal: true,
-                ),
-                decoration: const InputDecoration(
-                  labelText: 'Radio en metros *',
                 ),
                 validator: (value) {
                   final radius = double.tryParse(value ?? '');
@@ -384,14 +471,14 @@ class PointOfInterestEditorState extends State<PointOfInterestEditor> {
                   return null;
                 },
               ),
-              const SizedBox(height: 8),
+              const SizedBox(height: 16),
               Row(
                 children: [
                   Expanded(
-                    child: TextField(
+                    child: GlobalTextField(
                       controller: _addressController,
+                      label: 'Dirección',
                       onSubmitted: (_) => _searchAddress(),
-                      decoration: const InputDecoration(labelText: 'Dirección'),
                     ),
                   ),
                   IconButton(
@@ -406,7 +493,7 @@ class PointOfInterestEditorState extends State<PointOfInterestEditor> {
                 ],
               ),
               for (final result in _results) ...[
-                const SizedBox(height: 8),
+                const SizedBox(height: 12),
                 Card(
                   margin: EdgeInsets.zero,
                   color: AppColors.cardColor,
@@ -455,7 +542,7 @@ class PointOfInterestEditorState extends State<PointOfInterestEditor> {
                     : '${widget.selectedLocation!.latitude.toStringAsFixed(5)}, '
                           '${widget.selectedLocation!.longitude.toStringAsFixed(5)}',
               ),
-              const SizedBox(height: 8),
+              const SizedBox(height: 16),
               Row(
                 mainAxisAlignment: MainAxisAlignment.end,
                 children: [
@@ -477,6 +564,93 @@ class PointOfInterestEditorState extends State<PointOfInterestEditor> {
                 ],
               ),
             ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _CarouselArrow extends StatelessWidget {
+  final IconData icon;
+  final String tooltip;
+  final VoidCallback onTap;
+
+  const _CarouselArrow({
+    required this.icon,
+    required this.tooltip,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: onTap,
+        customBorder: const CircleBorder(),
+        child: Container(
+          width: 36,
+          height: 36,
+          decoration: BoxDecoration(
+            color: AppColors.fieldColor,
+            shape: BoxShape.circle,
+            border: Border.all(color: AppColors.border),
+          ),
+          child: Icon(icon, color: AppColors.mutedText, size: 22),
+        ),
+      ),
+    );
+  }
+}
+
+class _ColorSwatch extends StatelessWidget {
+  final Color color;
+  final String label;
+  final bool selected;
+  final bool enabled;
+  final VoidCallback onTap;
+
+  const _ColorSwatch({
+    required this.color,
+    required this.label,
+    required this.selected,
+    required this.enabled,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Tooltip(
+      message: label,
+      child: GestureDetector(
+        onTap: enabled ? onTap : null,
+        child: Opacity(
+          opacity: enabled ? 1 : 0.5,
+          child: AnimatedContainer(
+            duration: const Duration(milliseconds: 150),
+            width: 44,
+            height: 44,
+            decoration: BoxDecoration(
+              color: color,
+              shape: BoxShape.circle,
+              border: Border.all(
+                color: selected ? AppColors.primary : AppColors.border,
+                width: selected ? 3 : 1,
+              ),
+              boxShadow: selected
+                  ? [
+                      BoxShadow(
+                        color: AppColors.primary.withValues(alpha: 0.4),
+                        blurRadius: 8,
+                        spreadRadius: 1,
+                      ),
+                    ]
+                  : null,
+            ),
+            child: selected
+                ? const Icon(Icons.check_rounded, color: Colors.white, size: 22)
+                : null,
           ),
         ),
       ),

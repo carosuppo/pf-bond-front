@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
 
+import '../../../features/event/utils/event_reminder_navigation.dart';
 import '../../../features/group/providers/group_provider.dart';
 import '../../../features/location/providers/location_provider.dart';
 import '../app_routes.dart';
+import 'pending_navigation.dart';
 
 class PostAuthNavigator {
   const PostAuthNavigator();
@@ -18,6 +20,8 @@ class PostAuthNavigator {
 
     if (groupProvider.errorMessage != null || groupProvider.groups.isEmpty) {
       Navigator.of(context).pushReplacementNamed(AppRoutes.groups);
+      markAppReady();
+      await openPendingEventReminder();
       return;
     }
 
@@ -26,5 +30,7 @@ class PostAuthNavigator {
     if (!context.mounted) return;
 
     Navigator.of(context).pushReplacementNamed(AppRoutes.map);
+    markAppReady();
+    await openPendingEventReminder();
   }
 }

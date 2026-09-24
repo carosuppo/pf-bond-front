@@ -9,13 +9,13 @@ import 'package:latlong2/latlong.dart';
 
 import '../../../core/theme/app_colors.dart';
 import '../../../core/widgets/user_avatar.dart';
-import '../constants/default_location.dart';
+import '../../point_of_interest/models/point_of_interest.dart';
 import '../../point_of_interest/models/point_of_interest_color.dart';
+import '../constants/default_location.dart';
 import '../constants/location_tracking_config.dart';
 import '../models/member_location_model.dart';
 import '../providers/location_provider.dart';
 import '../utils/marker_colors.dart';
-import '../../point_of_interest/models/point_of_interest.dart';
 
 class LocationMap extends ConsumerStatefulWidget {
   final int? groupId;
@@ -676,6 +676,7 @@ class _LocationMapState extends ConsumerState<LocationMap>
 
     return Marker(
       point: cluster.center,
+      rotate: true,
       width: width,
       height: height,
       child: Container(

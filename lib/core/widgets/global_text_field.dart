@@ -48,7 +48,7 @@ class GlobalTextField extends StatelessWidget {
               null,
       decoration: InputDecoration(
         labelText: label,
-        labelStyle: const TextStyle(color: AppColors.mutedText),
+        labelStyle: const TextStyle(color: AppColors.placeholder),
         filled: true,
         fillColor: AppColors.fieldColor,
         enabledBorder: OutlineInputBorder(
