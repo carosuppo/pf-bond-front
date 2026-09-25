@@ -22,7 +22,6 @@ class PointOfInterestEditor extends StatefulWidget {
   final Future<bool> Function(CreatePointOfInterestRequest request)? onCreate;
   final Future<bool> Function(UpdatePointOfInterestRequest request)? onUpdate;
   final VoidCallback onClosed;
-  final bool createTemporary;
 
   const PointOfInterestEditor({
     super.key,
@@ -35,7 +34,6 @@ class PointOfInterestEditor extends StatefulWidget {
     this.onCreate,
     this.onUpdate,
     required this.onClosed,
-    this.createTemporary = false,
   });
 
   @override
@@ -47,8 +45,7 @@ class PointOfInterestEditorState extends State<PointOfInterestEditor> {
   final _addressController = TextEditingController();
 
   late final TextEditingController _nameController;
-  late final TextEditingController _descriptionController;
-  late final TextEditingController _radiusController;
+  late double _radius;
 
   final _locationService = LocationService();
   final _geocodingService = GeocodingService();
@@ -59,7 +56,7 @@ class PointOfInterestEditorState extends State<PointOfInterestEditor> {
   late PointOfInterestColor _color;
   bool _searching = false;
   bool _submitting = false;
-  int? _durationMinutes;
+  late PointOfInterestValidity _validity;
 
   bool get _dirty {
     final initial = widget.initial;
@@ -68,17 +65,16 @@ class PointOfInterestEditorState extends State<PointOfInterestEditor> {
     if (initial == null) {
       return _color != PointOfInterestColor.blue ||
           _nameController.text.isNotEmpty ||
-          _descriptionController.text.isNotEmpty ||
-          _radiusController.text != '100' ||
+          _radius != 100 ||
           widget.selectedLocation != null ||
-          _durationMinutes != null ||
+          _validity != PointOfInterestValidity.permanent ||
           hasAddressInput;
     }
 
     return _color != initial.color ||
         _nameController.text != initial.name ||
-        _descriptionController.text != (initial.description ?? '') ||
-        double.tryParse(_radiusController.text) != initial.radius ||
+        _validity != initial.validity ||
+        _radius != initial.radius ||
         widget.selectedLocation?.latitude != initial.latitude ||
         widget.selectedLocation?.longitude != initial.longitude ||
         hasAddressInput;
@@ -88,23 +84,16 @@ class PointOfInterestEditorState extends State<PointOfInterestEditor> {
   void initState() {
     super.initState();
     _color = widget.initial?.color ?? PointOfInterestColor.blue;
+    _validity = widget.initial?.validity ?? PointOfInterestValidity.permanent;
 
     _nameController = TextEditingController(text: widget.initial?.name ?? '');
 
-    _descriptionController = TextEditingController(
-      text: widget.initial?.description ?? '',
-    );
-
-    _radiusController = TextEditingController(
-      text: widget.initial?.radius.toString() ?? '100',
-    )..addListener(_notifyRadius);
+    _radius = (widget.initial?.radius ?? 100).clamp(10, 500).toDouble();
   }
 
   @override
   void dispose() {
     _nameController.dispose();
-    _descriptionController.dispose();
-    _radiusController.dispose();
     _addressController.dispose();
     _colorScrollController.dispose();
 
@@ -127,14 +116,6 @@ class PointOfInterestEditorState extends State<PointOfInterestEditor> {
       duration: const Duration(milliseconds: 300),
       curve: Curves.easeOut,
     );
-  }
-
-  void _notifyRadius() {
-    final radius = double.tryParse(_radiusController.text);
-
-    if (radius != null && radius > 0) {
-      widget.onRadiusChanged(radius);
-    }
   }
 
   Future<void> requestClose() async {
@@ -228,8 +209,7 @@ class PointOfInterestEditorState extends State<PointOfInterestEditor> {
       _submitting = true;
     });
 
-    final description = _descriptionController.text;
-    final radius = double.parse(_radiusController.text);
+    final radius = _radius;
 
     bool success = false;
     String? submitError;
@@ -240,12 +220,10 @@ class PointOfInterestEditorState extends State<PointOfInterestEditor> {
           CreatePointOfInterestRequest(
             color: _color,
             name: _nameController.text,
-            description: description,
             radius: radius,
             latitude: location.latitude,
             longitude: location.longitude,
-            isTemporary: widget.createTemporary,
-            durationMinutes: widget.createTemporary ? _durationMinutes : null,
+            validity: _validity,
           ),
         );
       } else {
@@ -253,7 +231,7 @@ class PointOfInterestEditorState extends State<PointOfInterestEditor> {
           UpdatePointOfInterestRequest(
             color: _color,
             name: _nameController.text,
-            description: description,
+            validity: _validity,
             radius: radius,
             latitude: location.latitude,
             longitude: location.longitude,
@@ -335,63 +313,163 @@ class PointOfInterestEditorState extends State<PointOfInterestEditor> {
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              Row(
-                children: [
-                  Text(
-                    'Color',
-                    style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                      color: AppColors.text,
-                      fontWeight: FontWeight.w600,
+              GlobalTextField(
+                controller: _nameController,
+                label: 'Nombre *',
+                floatingLabelBehavior: FloatingLabelBehavior.always,
+                labelStyle: const TextStyle(color: AppColors.hint),
+                fillColor: AppColors.background,
+                floatingLabelStyle: const TextStyle(
+                  color: AppColors.hint,
+                  backgroundColor: AppColors.background,
+                ),
+                validator: (value) {
+                  if (_validity == PointOfInterestValidity.permanent &&
+                      (value == null || value.trim().isEmpty)) {
+                    return 'Ingresá un nombre.';
+                  }
+
+                  return null;
+                },
+              ),
+              const SizedBox(height: 16),
+              DropdownButtonFormField<PointOfInterestValidity>(
+                key: const ValueKey('poi-validity'),
+                initialValue: _validity,
+                decoration: InputDecoration(
+                  labelText: 'Vigencia',
+                  enabledBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(14),
+                    borderSide: const BorderSide(color: AppColors.border),
+                  ),
+                  focusedBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(14),
+                    borderSide: const BorderSide(
+                      color: AppColors.primary,
+                      width: 1.5,
                     ),
                   ),
-                  const Spacer(),
-                  Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 10,
-                      vertical: 5,
+                ),
+                dropdownColor: AppColors.cardColor,
+                items: [
+                  for (final validity in PointOfInterestValidity.values)
+                    DropdownMenuItem(
+                      value: validity,
+                      child: Text(validity.label),
                     ),
-                    decoration: BoxDecoration(
-                      color: AppColors.fieldColor,
-                      borderRadius: BorderRadius.circular(10),
-                      border: Border.all(color: AppColors.border),
-                    ),
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Container(
-                          width: 12,
-                          height: 12,
-                          decoration: BoxDecoration(
-                            color: _color.visualColor,
-                            shape: BoxShape.circle,
-                            border: Border.all(color: AppColors.border),
-                          ),
-                        ),
-                        const SizedBox(width: 6),
-                        Text(
-                          _color.label,
-                          style: const TextStyle(
-                            color: AppColors.mutedText,
-                            fontSize: 13,
-                            fontWeight: FontWeight.w500,
-                          ),
-                        ),
-                      ],
+                ],
+                onChanged: _submitting
+                    ? null
+                    : (value) {
+                        if (value != null) {
+                          setState(() => _validity = value);
+                        }
+                      },
+              ),
+              const SizedBox(height: 16),
+              Row(
+                children: [
+                  Expanded(
+                    child: GlobalTextField(
+                      controller: _addressController,
+                      label: 'Dirección',
+                      floatingLabelBehavior: FloatingLabelBehavior.always,
+                      labelStyle: const TextStyle(color: AppColors.hint),
+                      fillColor: AppColors.background,
+                      floatingLabelStyle: const TextStyle(
+                        color: AppColors.hint,
+                        backgroundColor: AppColors.background,
+                      ),
+                      onSubmitted: (_) => _searchAddress(),
+                      suffixIcon: IconButton(
+                        onPressed: _searching ? null : _searchAddress,
+                        icon: _searching
+                            ? const SizedBox.square(
+                                dimension: 20,
+                                child: CircularProgressIndicator(),
+                              )
+                            : const Icon(Icons.search),
+                      ),
                     ),
                   ),
                 ],
               ),
-              const SizedBox(height: 12),
-              Container(
-                width: double.infinity,
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 4,
-                  vertical: 12,
+              TextButton.icon(
+                onPressed: _useCurrentLocation,
+                icon: const Icon(Icons.my_location),
+                label: const Text('Usar mi ubicación actual'),
+              ),
+              const SizedBox(height: 16),
+              InputDecorator(
+                decoration: InputDecoration(
+                  labelText: 'Radio en metros',
+                  floatingLabelBehavior: FloatingLabelBehavior.always,
+                  labelStyle: const TextStyle(color: AppColors.hint),
+                  floatingLabelStyle: const TextStyle(
+                    color: AppColors.hint,
+                    backgroundColor: AppColors.background,
+                  ),
+                  filled: true,
+                  fillColor: AppColors.background,
+                  contentPadding: const EdgeInsets.symmetric(
+                    horizontal: 12,
+                    vertical: 4,
+                  ),
+                  enabledBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(14),
+                    borderSide: const BorderSide(color: AppColors.border),
+                  ),
                 ),
-                decoration: BoxDecoration(
-                  color: AppColors.cardColor,
-                  borderRadius: BorderRadius.circular(14),
-                  border: Border.all(color: AppColors.border),
+                child: Column(
+                  children: [
+                    Align(
+                      alignment: Alignment.center,
+                      child: Text(
+                        '${_radius.round()} m',
+                        style: const TextStyle(fontSize: 16),
+                      ),
+                    ),
+                    SliderTheme(
+                      data: SliderTheme.of(
+                        context,
+                      ).copyWith(tickMarkShape: SliderTickMarkShape.noTickMark),
+                      child: Slider(
+                        min: 10,
+                        max: 500,
+                        divisions: 49,
+                        value: _radius,
+                        label: '${_radius.round()} m',
+                        onChanged: _submitting
+                            ? null
+                            : (value) {
+                                setState(() => _radius = value);
+                                widget.onRadiusChanged(value);
+                              },
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 16),
+              InputDecorator(
+                decoration: InputDecoration(
+                  labelText: 'Color',
+                  floatingLabelBehavior: FloatingLabelBehavior.always,
+                  labelStyle: const TextStyle(color: AppColors.hint),
+                  floatingLabelStyle: const TextStyle(
+                    color: AppColors.hint,
+                    backgroundColor: AppColors.background,
+                  ),
+                  filled: true,
+                  fillColor: AppColors.background,
+                  contentPadding: const EdgeInsets.symmetric(
+                    horizontal: 4,
+                    vertical: 12,
+                  ),
+                  enabledBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(14),
+                    borderSide: const BorderSide(color: AppColors.border),
+                  ),
                 ),
                 child: Row(
                   children: [
@@ -443,85 +521,6 @@ class PointOfInterestEditorState extends State<PointOfInterestEditor> {
                   ],
                 ),
               ),
-              const SizedBox(height: 16),
-              GlobalTextField(
-                controller: _nameController,
-                label: widget.createTemporary ? 'Nombre opcional' : 'Nombre *',
-                validator: (value) {
-                  if (!widget.createTemporary &&
-                      (value == null || value.trim().isEmpty)) {
-                    return 'Ingresá un nombre.';
-                  }
-
-                  return null;
-                },
-              ),
-              if (widget.createTemporary) ...[
-                const SizedBox(height: 16),
-                DropdownButtonFormField<int>(
-                  key: const ValueKey('temporary-duration'),
-                  initialValue: _durationMinutes,
-                  decoration: const InputDecoration(labelText: 'Vigencia *'),
-                  dropdownColor: AppColors.cardColor,
-                  items: const [
-                    DropdownMenuItem(value: 15, child: Text('15 minutos')),
-                    DropdownMenuItem(value: 30, child: Text('30 minutos')),
-                    DropdownMenuItem(value: 60, child: Text('1 hora')),
-                    DropdownMenuItem(value: 120, child: Text('2 horas')),
-                    DropdownMenuItem(value: 480, child: Text('8 horas')),
-                    DropdownMenuItem(value: 1440, child: Text('1 día')),
-                  ],
-                  onChanged: _submitting
-                      ? null
-                      : (value) => setState(() => _durationMinutes = value),
-                  validator: (value) => value == null || value <= 0
-                      ? 'Elegí cuánto tiempo estará disponible.'
-                      : null,
-                ),
-              ],
-              const SizedBox(height: 16),
-              GlobalTextField(
-                controller: _descriptionController,
-                label: 'Descripción opcional',
-              ),
-              const SizedBox(height: 16),
-              GlobalTextField(
-                controller: _radiusController,
-                label: 'Radio en metros *',
-                keyboardType: const TextInputType.numberWithOptions(
-                  decimal: true,
-                ),
-                validator: (value) {
-                  final radius = double.tryParse(value ?? '');
-
-                  if (radius == null || radius <= 0) {
-                    return 'Ingresá un radio mayor a 0.';
-                  }
-
-                  return null;
-                },
-              ),
-              const SizedBox(height: 16),
-              Row(
-                children: [
-                  Expanded(
-                    child: GlobalTextField(
-                      controller: _addressController,
-                      label: 'Dirección',
-                      onSubmitted: (_) => _searchAddress(),
-                    ),
-                  ),
-                  IconButton(
-                    onPressed: _searching ? null : _searchAddress,
-                    icon: _searching
-                        ? const SizedBox.square(
-                            dimension: 20,
-                            child: CircularProgressIndicator(),
-                          )
-                        : const Icon(Icons.search),
-                  ),
-                ],
-              ),
               for (final result in _results) ...[
                 const SizedBox(height: 12),
                 Card(
@@ -561,27 +560,11 @@ class PointOfInterestEditorState extends State<PointOfInterestEditor> {
                   ),
                 ),
               ],
-              TextButton.icon(
-                onPressed: _useCurrentLocation,
-                icon: const Icon(Icons.my_location),
-                label: const Text('Usar mi ubicación actual'),
-              ),
-              Text(
-                widget.selectedLocation == null
-                    ? 'Tocá el mapa para elegir la ubicación.'
-                    : '${widget.selectedLocation!.latitude.toStringAsFixed(5)}, '
-                          '${widget.selectedLocation!.longitude.toStringAsFixed(5)}',
-              ),
               const SizedBox(height: 16),
-              Row(
-                mainAxisAlignment: MainAxisAlignment.end,
-                children: [
-                  TextButton(
-                    onPressed: _submitting ? null : requestClose,
-                    child: const Text('Cancelar'),
-                  ),
-                  const SizedBox(width: 8),
-                  FilledButton(
+              Center(
+                child: SizedBox(
+                  width: 180,
+                  child: FilledButton(
                     onPressed: _submitting ? null : _submit,
                     child: Text(
                       _submitting
@@ -591,7 +574,7 @@ class PointOfInterestEditorState extends State<PointOfInterestEditor> {
                           : 'Guardar',
                     ),
                   ),
-                ],
+                ),
               ),
             ],
           ),

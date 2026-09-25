@@ -85,7 +85,7 @@ PointOfInterest _point({
   double radius = 150,
   double latitude = -34,
   double longitude = -58,
-  bool isTemporary = false,
+  PointOfInterestValidity validity = PointOfInterestValidity.permanent,
   DateTime? endTime,
 }) => PointOfInterest(
   id: id,
@@ -95,7 +95,7 @@ PointOfInterest _point({
   longitude: longitude,
   groupId: groupId,
   createdAt: DateTime(2026),
-  isTemporary: isTemporary,
+  validity: validity,
   endTime: endTime,
 );
 
@@ -184,7 +184,7 @@ void main() {
       final service = _FakeService()
         ..stored = [
           _point(
-            isTemporary: true,
+            validity: PointOfInterestValidity.twelveHours,
             endTime: DateTime.now().toUtc().add(
               const Duration(milliseconds: 80),
             ),

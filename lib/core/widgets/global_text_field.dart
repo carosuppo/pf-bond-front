@@ -16,6 +16,11 @@ class GlobalTextField extends StatelessWidget {
   final TextStyle? style;
   final TextAlign textAlign;
   final ValueChanged<String>? onSubmitted;
+  final Widget? suffixIcon;
+  final FloatingLabelBehavior? floatingLabelBehavior;
+  final TextStyle? labelStyle;
+  final TextStyle? floatingLabelStyle;
+  final Color? fillColor;
 
   const GlobalTextField({
     super.key,
@@ -31,6 +36,11 @@ class GlobalTextField extends StatelessWidget {
     this.style,
     this.textAlign = TextAlign.start,
     this.onSubmitted,
+    this.suffixIcon,
+    this.floatingLabelBehavior,
+    this.labelStyle,
+    this.floatingLabelStyle,
+    this.fillColor,
   });
 
   @override
@@ -48,9 +58,12 @@ class GlobalTextField extends StatelessWidget {
               null,
       decoration: InputDecoration(
         labelText: label,
-        labelStyle: const TextStyle(color: AppColors.placeholder),
+        suffixIcon: suffixIcon,
+        floatingLabelBehavior: floatingLabelBehavior,
+        labelStyle: labelStyle ?? const TextStyle(color: AppColors.placeholder),
+        floatingLabelStyle: floatingLabelStyle,
         filled: true,
-        fillColor: AppColors.fieldColor,
+        fillColor: fillColor ?? AppColors.fieldColor,
         enabledBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(14),
           borderSide: const BorderSide(color: Color(0xFF555555)),

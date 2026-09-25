@@ -17,8 +17,6 @@ class PointOfInterestSheet extends StatelessWidget {
   final LatLng? draftLocation;
   final double draftRadius;
   final PointOfInterestColor draftColor;
-  final bool createTemporary;
-  final String title;
   final Future<bool> Function(CreatePointOfInterestRequest request) onCreate;
   final Future<bool> Function(UpdatePointOfInterestRequest request) onUpdate;
   final ValueChanged<LatLng> onLocationChanged;
@@ -37,8 +35,6 @@ class PointOfInterestSheet extends StatelessWidget {
     required this.draftLocation,
     required this.draftRadius,
     required this.draftColor,
-    this.createTemporary = false,
-    required this.title,
     required this.onCreate,
     required this.onUpdate,
     required this.onLocationChanged,
@@ -64,6 +60,7 @@ class PointOfInterestSheet extends StatelessWidget {
           onScrollControllerChanged(scrollController);
 
           return Material(
+            color: AppColors.background,
             elevation: 12,
             borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
             clipBehavior: Clip.antiAlias,
@@ -74,24 +71,38 @@ class PointOfInterestSheet extends StatelessWidget {
                   onVerticalDragUpdate: onDragUpdate,
                   onVerticalDragEnd: onDragEnd,
                   child: Padding(
-                    padding: const EdgeInsets.only(top: 10, bottom: 8),
-                    child: Column(
-                      children: [
-                        Container(
-                          width: 36,
-                          height: 4,
-                          decoration: BoxDecoration(
-                            color: AppColors.mutedText,
-                            borderRadius: BorderRadius.circular(2),
-                          ),
+                    padding: const EdgeInsets.only(top: 10, bottom: 14),
+                    child: Center(
+                      child: Container(
+                        width: 36,
+                        height: 4,
+                        decoration: BoxDecoration(
+                          color: AppColors.mutedText,
+                          borderRadius: BorderRadius.circular(2),
                         ),
-                        const SizedBox(height: 6),
-                        Text(
-                          title,
-                          style: Theme.of(context).textTheme.labelLarge,
-                        ),
-                      ],
+                      ),
                     ),
+                  ),
+                ),
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(12, 4, 20, 4),
+                  child: Row(
+                    children: [
+                      IconButton(
+                        onPressed: () => editorKey.currentState?.requestClose(),
+                        icon: const Icon(Icons.arrow_back_rounded),
+                      ),
+                      const Icon(Icons.flag_rounded, color: AppColors.primary),
+                      const SizedBox(width: 8),
+                      const Text(
+                        'Punto de interés',
+                        style: TextStyle(
+                          color: AppColors.text,
+                          fontSize: 19,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ],
                   ),
                 ),
                 Expanded(
@@ -100,7 +111,6 @@ class PointOfInterestSheet extends StatelessWidget {
                     scrollController: scrollController,
                     initial: editingPoint,
                     selectedLocation: draftLocation,
-                    createTemporary: createTemporary,
                     onLocationChanged: onLocationChanged,
                     onColorChanged: onColorChanged,
                     onRadiusChanged: onRadiusChanged,

@@ -224,11 +224,8 @@ void main() {
       await tester.pumpAndSettle();
       await tester.tap(find.byTooltip('Agregar punto de interés'));
       await tester.pumpAndSettle();
-      expect(find.text('Punto de encuentro temporal'), findsOneWidget);
-      await tester.tap(find.text('Punto de encuentro temporal'));
-      await tester.pumpAndSettle();
-      expect(find.text('Crear punto de encuentro'), findsOneWidget);
-      expect(find.text('Vigencia *'), findsOneWidget);
+      expect(find.text('Crear punto de interés'), findsOneWidget);
+      expect(find.text('Vigencia'), findsOneWidget);
       await tester.tap(find.text('Cancelar'));
       await tester.pumpAndSettle();
 
@@ -242,7 +239,6 @@ void main() {
       await expandPoints();
       expect(find.text('Colegio'), findsNWidgets(2));
       expect(find.text('Parque'), findsNWidgets(2));
-      expect(find.text('Punto de encuentro'), findsOneWidget);
       expect(find.text('Radio: 100 m'), findsOneWidget);
       expect(find.text('Cómo llegar'), findsNWidgets(2));
       expect(find.byTooltip('Editar punto de interés'), findsNWidgets(2));
@@ -341,7 +337,7 @@ void main() {
 
       api.point = {
         ...api.point,
-        'isTemporary': true,
+        'validity': 'TWELVE_HOURS',
         'endTime': now.add(const Duration(milliseconds: 250)).toIso8601String(),
       };
       await points.loadPoints(20);

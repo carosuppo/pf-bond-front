@@ -7,7 +7,6 @@ void main() {
     final point = PointOfInterest.fromJson({
       'id': 1,
       'name': 'Facultad',
-      'description': null,
       'radius': 150,
       'latitude': -34.6,
       'longitude': -58.3,
@@ -19,17 +18,16 @@ void main() {
     expect(point.groupId, 3);
   });
 
-  test('normaliza nombre y descripción al crear', () {
+  test('normaliza nombre al crear', () {
     const request = CreatePointOfInterestRequest(
       name: ' Facultad ',
-      description: '   ',
       radius: 100,
       latitude: -34,
       longitude: -58,
     );
 
     expect(request.toJson()['name'], 'Facultad');
-    expect(request.toJson()['description'], isNull);
+    expect(request.toJson()['validity'], 'PERMANENT');
   });
 
   test('PATCH sólo serializa los campos provistos', () {
@@ -41,13 +39,12 @@ void main() {
     final point = PointOfInterest.fromJson({
       'id': 2,
       'name': 'Encuentro',
-      'description': null,
       'radius': 50,
       'latitude': -34.6,
       'longitude': -58.3,
       'groupId': 3,
       'createdAt': '2026-09-22T10:00:00.000Z',
-      'isTemporary': true,
+      'validity': 'TWELVE_HOURS',
       'endTime': '2026-09-22T11:00:00.000Z',
     });
     const request = CreatePointOfInterestRequest(
@@ -55,13 +52,11 @@ void main() {
       radius: 50,
       latitude: -34.6,
       longitude: -58.3,
-      isTemporary: true,
-      durationMinutes: 60,
+      validity: PointOfInterestValidity.twelveHours,
     );
 
     expect(point.isTemporary, isTrue);
     expect(point.endTime?.isUtc, isTrue);
-    expect(request.toJson(), containsPair('durationMinutes', 60));
-    expect(request.toJson(), containsPair('isTemporary', true));
+    expect(request.toJson(), containsPair('validity', 'TWELVE_HOURS'));
   });
 }

@@ -59,7 +59,6 @@ class _MapScreenState extends ConsumerState<MapScreen> {
   PointOfInterest? _editingPoint;
   PointOfInterest? _selectedPoint;
   bool _editing = false;
-  bool _creatingTemporary = false;
   LatLng? _draftLocation;
   double _draftRadius = 100;
   PointOfInterestColor _draftColor = PointOfInterestColor.blue;
@@ -438,12 +437,11 @@ class _MapScreenState extends ConsumerState<MapScreen> {
     }
   }
 
-  void _startCreate({bool temporary = false}) {
+  void _startCreate() {
     if (_navigation.active) return;
     setState(() {
       _editing = true;
       _editingPoint = null;
-      _creatingTemporary = temporary;
       _selectedPoint = null;
       _draftLocation = null;
       _draftRadius = 100;
@@ -458,7 +456,6 @@ class _MapScreenState extends ConsumerState<MapScreen> {
     setState(() {
       _editing = true;
       _editingPoint = point;
-      _creatingTemporary = false;
       _draftLocation = LatLng(point.latitude, point.longitude);
       _draftRadius = point.radius;
       _draftColor = point.color;
@@ -475,7 +472,6 @@ class _MapScreenState extends ConsumerState<MapScreen> {
     setState(() {
       _editing = false;
       _editingPoint = null;
-      _creatingTemporary = false;
       _draftLocation = null;
       _draftRadius = 100;
       _draftColor = PointOfInterestColor.blue;
@@ -488,33 +484,6 @@ class _MapScreenState extends ConsumerState<MapScreen> {
     _mapController.move(LatLng(point.latitude, point.longitude), 16);
 
     _collapseSheet();
-  }
-
-  Future<void> _chooseCreationType() async {
-    if (_navigation.active) return;
-    final temporary = await showModalBottomSheet<bool>(
-      context: context,
-      builder: (sheetContext) => SafeArea(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            ListTile(
-              leading: const Icon(Icons.flag_rounded),
-              title: const Text('Punto de interés permanente'),
-              onTap: () => Navigator.pop(sheetContext, false),
-            ),
-            ListTile(
-              leading: const Icon(Icons.timer_rounded),
-              title: const Text('Punto de encuentro temporal'),
-              subtitle: const Text('Se retirará del mapa al vencer.'),
-              onTap: () => Navigator.pop(sheetContext, true),
-            ),
-          ],
-        ),
-      ),
-    );
-    if (!mounted || temporary == null || _navigation.active) return;
-    _startCreate(temporary: temporary);
   }
 
   Future<void> _startNavigation(PointOfInterest point) async {
@@ -713,7 +682,40 @@ class _MapScreenState extends ConsumerState<MapScreen> {
                 top: topPadding + 12,
                 left: 0,
                 right: 0,
-                child: const GroupSelectorButton(),
+                child: Center(
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const GroupSelectorButton(),
+                      if (groupProvider.activeGroup != null &&
+                          !_editing &&
+                          !navigation.active) ...[
+                        const SizedBox(width: 8),
+                        DecoratedBox(
+                          decoration: BoxDecoration(
+                            color: AppColors.cardColor,
+                            borderRadius: BorderRadius.circular(14),
+                            border: Border.all(color: AppColors.border),
+                          ),
+                          child: SizedBox(
+                            width: 40,
+                            height: 40,
+                            child: IconButton(
+                              onPressed: _startCreate,
+                              tooltip: 'Agregar punto de interés',
+                              color: AppColors.primary,
+                              constraints: const BoxConstraints.tightFor(
+                                width: 48,
+                                height: 40,
+                              ),
+                              icon: const Icon(Icons.add_location_alt_rounded),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ],
+                  ),
+                ),
               ),
               if (!_editing && navigation.active)
                 Positioned(
@@ -770,12 +772,6 @@ class _MapScreenState extends ConsumerState<MapScreen> {
                   draftLocation: _draftLocation,
                   draftRadius: _draftRadius,
                   draftColor: _draftColor,
-                  createTemporary: _creatingTemporary,
-                  title: _editingPoint == null
-                      ? _creatingTemporary
-                            ? 'Crear punto de encuentro'
-                            : 'Crear punto de interés'
-                      : 'Editando punto de interés',
                   onScrollControllerChanged: (controller) {
                     _poiSheetScrollController = controller;
                   },
@@ -833,21 +829,6 @@ class _MapScreenState extends ConsumerState<MapScreen> {
             ],
           ),
         ),
-        floatingActionButton:
-            groupProvider.activeGroup != null && !_editing && !navigation.active
-            ? FloatingActionButton(
-                backgroundColor: AppColors.primary,
-                foregroundColor: AppColors.onPrimary,
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(16),
-                ),
-                elevation: 6,
-                highlightElevation: 12,
-                onPressed: _chooseCreationType,
-                tooltip: 'Agregar punto de interés',
-                child: const Icon(Icons.add_location_alt_rounded),
-              )
-            : null,
       ),
     );
   }
@@ -918,8 +899,6 @@ class _PointOfInterestListItem extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final description = point.description?.trim();
-
     return Card(
       margin: EdgeInsets.zero,
       child: InkWell(
@@ -963,16 +942,6 @@ class _PointOfInterestListItem extends StatelessWidget {
                       ),
                     ),
                 ],
-              ),
-              Text(
-                description == null || description.isEmpty
-                    ? 'Sin descripción'
-                    : description,
-                textAlign: TextAlign.center,
-                style: const TextStyle(
-                  color: AppColors.mutedText,
-                  fontSize: 14,
-                ),
               ),
               if (point.isTemporary) ...[
                 const SizedBox(height: 4),

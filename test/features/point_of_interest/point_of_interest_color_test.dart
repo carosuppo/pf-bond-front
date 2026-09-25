@@ -120,14 +120,6 @@ void main() {
             ),
           ),
         );
-        expect(
-          find.text(
-            editing
-                ? PointOfInterestColor.red.label
-                : PointOfInterestColor.blue.label,
-          ),
-          findsOneWidget,
-        );
         for (final color in PointOfInterestColor.values) {
           expect(find.byTooltip(color.label), findsOneWidget);
         }
@@ -181,10 +173,7 @@ void main() {
       await tester.pump();
       await tester.tap(find.byTooltip(PointOfInterestColor.purple.label));
       await tester.pump();
-      expect(
-        find.text(PointOfInterestColor.purple.label),
-        findsOneWidget,
-      );
+      expect(find.byTooltip(PointOfInterestColor.purple.label), findsOneWidget);
       final close = key.currentState!.requestClose();
       await tester.pumpAndSettle();
       expect(find.text('¿Descartar cambios?'), findsOneWidget);

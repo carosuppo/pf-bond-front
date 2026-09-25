@@ -5,7 +5,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:latlong2/latlong.dart';
 
 void main() {
-  testWidgets('temporal exige vigencia, permite nombre opcional y cancela', (
+  testWidgets('el formulario permite seleccionar vigencia y registrar', (
     tester,
   ) async {
     CreatePointOfInterestRequest? submitted;
@@ -19,7 +19,6 @@ void main() {
           body: PointOfInterestEditor(
             scrollController: scrollController,
             selectedLocation: const LatLng(-34.6, -58.4),
-            createTemporary: true,
             onLocationChanged: (_) {},
             onRadiusChanged: (_) {},
             onColorChanged: (_) {},
@@ -33,22 +32,14 @@ void main() {
       ),
     );
 
-    await tester.ensureVisible(find.text('Registrar'));
-    await tester.tap(find.text('Registrar'));
-    await tester.pump();
-    expect(find.text('Elegí cuánto tiempo estará disponible.'), findsOneWidget);
-    expect(submitted, isNull);
-
-    await tester.tap(find.byKey(const ValueKey('temporary-duration')));
+    await tester.tap(find.byKey(const ValueKey('poi-validity')));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('1 hora').last);
+    await tester.tap(find.text('12 horas').last);
     await tester.pumpAndSettle();
     await tester.tap(find.text('Registrar'));
     await tester.pumpAndSettle();
 
-    expect(submitted?.name, isEmpty);
-    expect(submitted?.isTemporary, isTrue);
-    expect(submitted?.durationMinutes, 60);
+    expect(submitted?.validity, PointOfInterestValidity.twelveHours);
     expect(closed, isTrue);
   });
 
@@ -57,6 +48,7 @@ void main() {
   ) async {
     var createCalls = 0;
     var closed = false;
+    final editorKey = GlobalKey<PointOfInterestEditorState>();
     final scrollController = ScrollController();
     addTearDown(scrollController.dispose);
 
@@ -64,9 +56,9 @@ void main() {
       MaterialApp(
         home: Scaffold(
           body: PointOfInterestEditor(
+            key: editorKey,
             scrollController: scrollController,
             selectedLocation: const LatLng(-34.6, -58.4),
-            createTemporary: true,
             onLocationChanged: (_) {},
             onRadiusChanged: (_) {},
             onColorChanged: (_) {},
@@ -81,11 +73,11 @@ void main() {
     );
 
     await tester.enterText(find.byType(TextFormField).first, 'Borrador');
-    await tester.ensureVisible(find.text('Cancelar'));
-    await tester.tap(find.text('Cancelar'));
+    final close = editorKey.currentState!.requestClose();
     await tester.pumpAndSettle();
     await tester.tap(find.text('Descartar'));
     await tester.pumpAndSettle();
+    await close;
 
     expect(closed, isTrue);
     expect(createCalls, 0);

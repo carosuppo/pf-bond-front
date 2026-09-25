@@ -98,14 +98,12 @@ PointOfInterest _destination({
   int id = 5,
   int groupId = 3,
   String name = 'Universidad',
-  String? description,
   double radius = 15,
   double latitude = 0,
   double longitude = 0.01,
 }) => PointOfInterest(
   id: id,
   name: name,
-  description: description,
   radius: radius,
   latitude: latitude,
   longitude: longitude,
@@ -240,13 +238,12 @@ void main() {
     expect(routes.calls, 1);
 
     await provider.handleDestinationUpdated(
-      _destination(name: 'UTN', description: 'Campus', radius: 150),
+      _destination(name: 'UTN', radius: 150),
     );
     initialRequest.complete(_route());
 
     expect(await starting, isTrue);
     expect(provider.destination?.name, 'UTN');
-    expect(provider.destination?.description, 'Campus');
     expect(provider.destination?.radius, 150);
     expect(routes.calls, 1);
   });
@@ -332,9 +329,7 @@ void main() {
       selectedMode: RouteMode.walking,
     );
 
-    await provider.handleDestinationUpdated(
-      _destination(name: 'UTN', description: 'Campus actualizado'),
-    );
+    await provider.handleDestinationUpdated(_destination(name: 'UTN'));
     await provider.handleDestinationUpdated(
       _destination(id: 8, name: 'Otro punto'),
     );
@@ -343,7 +338,6 @@ void main() {
     );
 
     expect(provider.destination?.name, 'UTN');
-    expect(provider.destination?.description, 'Campus actualizado');
     expect(routes.calls, 1);
     expect(provider.routeRevision, 1);
   });
