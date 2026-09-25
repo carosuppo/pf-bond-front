@@ -7,6 +7,8 @@ class CreatePointOfInterestRequest {
   final double radius;
   final double latitude;
   final double longitude;
+  final bool isTemporary;
+  final int? durationMinutes;
 
   const CreatePointOfInterestRequest({
     this.color = PointOfInterestColor.blue,
@@ -15,6 +17,8 @@ class CreatePointOfInterestRequest {
     required this.radius,
     required this.latitude,
     required this.longitude,
+    this.isTemporary = false,
+    this.durationMinutes,
   });
 
   Map<String, dynamic> toJson() => {
@@ -24,6 +28,8 @@ class CreatePointOfInterestRequest {
     'radius': radius,
     'latitude': latitude,
     'longitude': longitude,
+    'isTemporary': isTemporary,
+    if (isTemporary) 'durationMinutes': durationMinutes,
   };
 }
 

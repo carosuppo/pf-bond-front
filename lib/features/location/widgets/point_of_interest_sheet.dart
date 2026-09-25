@@ -17,6 +17,7 @@ class PointOfInterestSheet extends StatelessWidget {
   final LatLng? draftLocation;
   final double draftRadius;
   final PointOfInterestColor draftColor;
+  final bool createTemporary;
   final String title;
   final Future<bool> Function(CreatePointOfInterestRequest request) onCreate;
   final Future<bool> Function(UpdatePointOfInterestRequest request) onUpdate;
@@ -36,6 +37,7 @@ class PointOfInterestSheet extends StatelessWidget {
     required this.draftLocation,
     required this.draftRadius,
     required this.draftColor,
+    this.createTemporary = false,
     required this.title,
     required this.onCreate,
     required this.onUpdate,
@@ -98,6 +100,7 @@ class PointOfInterestSheet extends StatelessWidget {
                     scrollController: scrollController,
                     initial: editingPoint,
                     selectedLocation: draftLocation,
+                    createTemporary: createTemporary,
                     onLocationChanged: onLocationChanged,
                     onColorChanged: onColorChanged,
                     onRadiusChanged: onRadiusChanged,

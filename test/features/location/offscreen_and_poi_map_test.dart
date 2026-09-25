@@ -36,6 +36,11 @@ Future<void> pumpMap(
   PointOfInterestColor previewColor = PointOfInterestColor.blue,
   bool showOffscreenPoints = false,
   String? ownProfileName,
+  List<LatLng> routePoints = const [],
+  int routeFitRevision = 0,
+  EdgeInsets routeFitPadding = EdgeInsets.zero,
+  LocationModel? navigationLocation,
+  int? destinationPointId,
 }) async {
   await tester.pumpWidget(
     ProviderScope(
@@ -60,6 +65,11 @@ Future<void> pumpMap(
               previewPoint: previewPoint,
               previewRadius: 100,
               previewColor: previewColor,
+              routePoints: routePoints,
+              routeFitRevision: routeFitRevision,
+              routeFitPadding: routeFitPadding,
+              navigationLocation: navigationLocation,
+              destinationPointId: destinationPointId,
             ),
           ),
         ),
@@ -76,6 +86,113 @@ Future<void> disposeMap(WidgetTester tester, MapController controller) async {
 }
 
 void main() {
+  testWidgets('dibuja la ruta restante dentro del mapa', (tester) async {
+    final controller = MapController();
+    await pumpMap(
+      tester,
+      controller,
+      routePoints: const [LatLng(-34.6, -58.4), LatLng(-34.61, -58.41)],
+    );
+    expect(find.byType(PolylineLayer), findsOneWidget);
+    await disposeMap(tester, controller);
+  });
+
+  testWidgets(
+    'ajusta la cámara al cambiar la ruta y preserva movimientos manuales',
+    (tester) async {
+      final controller = MapController();
+      const origin = LatLng(-34.50, -58.55);
+      const middle = LatLng(-34.60, -58.45);
+      const destination = LatLng(-34.70, -58.35);
+      final point = PointOfInterest(
+        id: 7,
+        name: 'Destino',
+        radius: 50,
+        latitude: destination.latitude,
+        longitude: destination.longitude,
+        groupId: 20,
+        createdAt: DateTime(2026),
+      );
+      final location = LocationModel(
+        latitude: origin.latitude,
+        longitude: origin.longitude,
+        accuracy: 5,
+        timestamp: DateTime(2026),
+      );
+
+      await pumpMap(
+        tester,
+        controller,
+        points: [point],
+        routePoints: const [origin, middle, destination],
+        routeFitRevision: 1,
+        routeFitPadding: const EdgeInsets.fromLTRB(40, 140, 40, 100),
+        navigationLocation: location,
+        destinationPointId: point.id,
+      );
+      await tester.pump();
+
+      final initialBounds = controller.camera.visibleBounds;
+      expect(
+        initialBounds.contains(origin),
+        isTrue,
+        reason: 'La cámara $initialBounds no contiene el origen.',
+      );
+      expect(
+        initialBounds.contains(middle),
+        isTrue,
+        reason: 'La cámara $initialBounds no contiene el recorrido.',
+      );
+      expect(
+        initialBounds.contains(destination),
+        isTrue,
+        reason: 'La cámara $initialBounds no contiene el destino.',
+      );
+
+      controller.move(defaultLocation, 15);
+      await tester.pump();
+      final manualCenter = controller.camera.center;
+      final manualZoom = controller.camera.zoom;
+      await pumpMap(
+        tester,
+        controller,
+        points: [point],
+        routePoints: const [middle, destination],
+        routeFitRevision: 1,
+        routeFitPadding: const EdgeInsets.fromLTRB(40, 140, 40, 100),
+        navigationLocation: location.copyWith(
+          latitude: middle.latitude,
+          longitude: middle.longitude,
+        ),
+        destinationPointId: point.id,
+      );
+      await tester.pump();
+
+      expect(controller.camera.center, manualCenter);
+      expect(controller.camera.zoom, manualZoom);
+
+      await pumpMap(
+        tester,
+        controller,
+        points: [point],
+        routePoints: const [middle, destination],
+        routeFitRevision: 2,
+        routeFitPadding: const EdgeInsets.fromLTRB(40, 140, 40, 100),
+        navigationLocation: location.copyWith(
+          latitude: middle.latitude,
+          longitude: middle.longitude,
+        ),
+        destinationPointId: point.id,
+      );
+      await tester.pump();
+
+      expect(controller.camera.center, isNot(manualCenter));
+      expect(controller.camera.visibleBounds.contains(middle), isTrue);
+      expect(controller.camera.visibleBounds.contains(destination), isTrue);
+      await disposeMap(tester, controller);
+    },
+  );
+
   for (final stale in [false, true]) {
     testWidgets(
       'offscreen member is tappable, preserves zoom and direction/color (stale=$stale)',

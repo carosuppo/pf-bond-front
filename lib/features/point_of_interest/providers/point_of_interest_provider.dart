@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/foundation.dart';
 
 import '../models/point_of_interest.dart';
@@ -6,8 +8,10 @@ import '../services/point_of_interest_service.dart';
 
 class PointOfInterestProvider extends ChangeNotifier {
   final PointOfInterestService _service;
+  final DateTime Function() _clock;
 
-  PointOfInterestProvider(this._service);
+  PointOfInterestProvider(this._service, {DateTime Function()? clock})
+    : _clock = clock ?? DateTime.now;
 
   List<PointOfInterest> points = [];
   bool loading = false;
@@ -18,8 +22,11 @@ class PointOfInterestProvider extends ChangeNotifier {
   int? _groupId;
   int _loadVersion = 0;
   int _sessionVersion = 0;
+  Timer? _expirationTimer;
 
   Future<void> loadPoints(int groupId) async {
+    _expirationTimer?.cancel();
+    _expirationTimer = null;
     final loadVersion = ++_loadVersion;
     _groupId = groupId;
     points = [];
@@ -28,7 +35,10 @@ class PointOfInterestProvider extends ChangeNotifier {
     notifyListeners();
     try {
       final loaded = await _service.getAll(groupId);
-      if (_groupId == groupId && _loadVersion == loadVersion) points = loaded;
+      if (_groupId == groupId && _loadVersion == loadVersion) {
+        points = _activePoints(loaded);
+        _scheduleExpiration();
+      }
     } catch (error) {
       if (_groupId == groupId && _loadVersion == loadVersion) {
         errorMessage = _message(error);
@@ -42,6 +52,8 @@ class PointOfInterestProvider extends ChangeNotifier {
   }
 
   void clear() {
+    _expirationTimer?.cancel();
+    _expirationTimer = null;
     _sessionVersion++;
     _loadVersion++;
     _groupId = null;
@@ -64,7 +76,10 @@ class PointOfInterestProvider extends ChangeNotifier {
     try {
       final point = await _service.create(groupId, request);
       if (sessionVersion != _sessionVersion) return false;
-      if (_groupId == groupId) points = [...points, point];
+      if (_groupId == groupId && point.isActiveAt(_clock())) {
+        points = [...points, point];
+        _scheduleExpiration();
+      }
       return true;
     } catch (error) {
       if (sessionVersion != _sessionVersion) return false;
@@ -93,7 +108,9 @@ class PointOfInterestProvider extends ChangeNotifier {
       if (_groupId == groupId) {
         points = points
             .map((point) => point.id == pointId ? updated : point)
+            .where((point) => point.isActiveAt(_clock()))
             .toList();
+        _scheduleExpiration();
       }
       return true;
     } catch (error) {
@@ -134,4 +151,39 @@ class PointOfInterestProvider extends ChangeNotifier {
 
   String _message(Object error) =>
       error.toString().replaceFirst('Exception: ', '');
+
+  List<PointOfInterest> _activePoints(List<PointOfInterest> source) {
+    final now = _clock();
+    return source.where((point) => point.isActiveAt(now)).toList();
+  }
+
+  void _scheduleExpiration() {
+    _expirationTimer?.cancel();
+    _expirationTimer = null;
+
+    DateTime? nextExpiration;
+    for (final point in points) {
+      final endTime = point.isTemporary ? point.endTime : null;
+      if (endTime != null &&
+          (nextExpiration == null || endTime.isBefore(nextExpiration))) {
+        nextExpiration = endTime;
+      }
+    }
+
+    if (nextExpiration == null) return;
+    final delay = nextExpiration.difference(_clock().toUtc());
+    _expirationTimer = Timer(delay.isNegative ? Duration.zero : delay, () {
+      final active = _activePoints(points);
+      final changed = active.length != points.length;
+      points = active;
+      _scheduleExpiration();
+      if (changed) notifyListeners();
+    });
+  }
+
+  @override
+  void dispose() {
+    _expirationTimer?.cancel();
+    super.dispose();
+  }
 }

@@ -14,6 +14,7 @@ import '../../point_of_interest/models/point_of_interest_color.dart';
 import '../constants/default_location.dart';
 import '../constants/location_tracking_config.dart';
 import '../models/member_location_model.dart';
+import '../models/location_model.dart';
 import '../providers/location_provider.dart';
 import '../utils/marker_colors.dart';
 
@@ -32,6 +33,12 @@ class LocationMap extends ConsumerStatefulWidget {
   final String? ownProfileName;
   final double indicatorBottomFraction;
   final bool showOffscreenPoints;
+  final List<LatLng> routePoints;
+  final int routeFitRevision;
+  final EdgeInsets routeFitPadding;
+  final LocationModel? navigationLocation;
+  final int? destinationPointId;
+  final ValueChanged<PointOfInterest>? onPointTap;
 
   const LocationMap({
     super.key,
@@ -49,6 +56,12 @@ class LocationMap extends ConsumerStatefulWidget {
     this.ownProfileName,
     this.indicatorBottomFraction = 0,
     this.showOffscreenPoints = false,
+    this.routePoints = const [],
+    this.routeFitRevision = 0,
+    this.routeFitPadding = EdgeInsets.zero,
+    this.navigationLocation,
+    this.destinationPointId,
+    this.onPointTap,
   });
 
   @override
@@ -68,6 +81,7 @@ class _LocationMapState extends ConsumerState<LocationMap>
   bool _mapReady = false;
   bool _hasCenteredOnUser = false;
   LatLng? _ownLocationToCenter;
+  int? _scheduledRouteFitRevision;
 
   Timer? _freshnessTimer;
   late final AnimationController _memberMovementController;
@@ -115,6 +129,12 @@ class _LocationMapState extends ConsumerState<LocationMap>
   void didUpdateWidget(covariant LocationMap oldWidget) {
     super.didUpdateWidget(oldWidget);
 
+    if (widget.routePoints.length < 2) {
+      _scheduledRouteFitRevision = null;
+    } else if (widget.routeFitRevision != oldWidget.routeFitRevision) {
+      _scheduleRouteFit(widget.routeFitRevision);
+    }
+
     final oldPreviewPoint = oldWidget.previewPoint;
     final newPreviewPoint = widget.previewPoint;
 
@@ -137,6 +157,11 @@ class _LocationMapState extends ConsumerState<LocationMap>
       }
     });
 
+    if (widget.routeFitRevision > 0 && widget.routePoints.length >= 2) {
+      _scheduleRouteFit(widget.routeFitRevision);
+      return;
+    }
+
     final previewPoint = widget.previewPoint;
     if (previewPoint != null) {
       _mapController.move(previewPoint, defaultZoom);
@@ -154,6 +179,47 @@ class _LocationMapState extends ConsumerState<LocationMap>
   bool _samePoint(LatLng? first, LatLng? second) {
     return first?.latitude == second?.latitude &&
         first?.longitude == second?.longitude;
+  }
+
+  void _scheduleRouteFit(int revision) {
+    _scheduledRouteFitRevision = revision;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted ||
+          !_mapReady ||
+          _scheduledRouteFitRevision != revision ||
+          widget.routeFitRevision != revision ||
+          widget.routePoints.length < 2) {
+        return;
+      }
+
+      _scheduledRouteFitRevision = null;
+      final navigationLocation = widget.navigationLocation;
+      final destination = _destinationPoint;
+      final coordinates = <LatLng>[
+        if (navigationLocation != null)
+          LatLng(navigationLocation.latitude, navigationLocation.longitude),
+        ...widget.routePoints,
+        ?destination,
+      ];
+      _mapController.fitCamera(
+        CameraFit.bounds(
+          bounds: LatLngBounds.fromPoints(coordinates),
+          padding: widget.routeFitPadding,
+        ),
+      );
+      _hasCenteredOnUser = true;
+    });
+  }
+
+  LatLng? get _destinationPoint {
+    final destinationId = widget.destinationPointId;
+    if (destinationId == null) return null;
+    for (final point in widget.points) {
+      if (point.id == destinationId) {
+        return LatLng(point.latitude, point.longitude);
+      }
+    }
+    return null;
   }
 
   void _updateMemberMovement(Map<int, LatLng> targetLocations) {
@@ -240,7 +306,9 @@ class _LocationMapState extends ConsumerState<LocationMap>
         state.sharingForGroup(widget.groupId!)?.effectiveLocationSharing ==
             true;
 
-    final ownLocation = ownSharing ? state.currentLocation : null;
+    final ownLocation =
+        widget.navigationLocation ??
+        (ownSharing ? state.currentLocation : null);
 
     final allMembers = state.visibleMembers.values.toList();
 
@@ -297,7 +365,9 @@ class _LocationMapState extends ConsumerState<LocationMap>
 
     final colors = buildDistinctMarkerColors(markerIds);
 
-    if (!_hasCenteredOnUser && ownLocation != null) {
+    if (!_hasCenteredOnUser &&
+        ownLocation != null &&
+        widget.routePoints.length < 2) {
       _ownLocationToCenter = LatLng(
         ownLocation.latitude,
         ownLocation.longitude,
@@ -350,6 +420,16 @@ class _LocationMapState extends ConsumerState<LocationMap>
           subdomains: const ['a', 'b', 'c', 'd'],
           userAgentPackageName: 'com.example.bond_front',
         ),
+        if (widget.routePoints.length >= 2)
+          PolylineLayer(
+            polylines: [
+              Polyline(
+                points: widget.routePoints,
+                strokeWidth: 6,
+                color: AppColors.primary,
+              ),
+            ],
+          ),
         RichAttributionWidget(
           attributions: [
             TextSourceAttribution('OpenStreetMap contributors'),
@@ -387,6 +467,11 @@ class _LocationMapState extends ConsumerState<LocationMap>
                 point: LatLng(point.latitude, point.longitude),
                 name: point.name,
                 color: point.color.visualColor,
+                isTemporary: point.isTemporary,
+                isDestination: point.id == widget.destinationPointId,
+                onTap: widget.onPointTap == null
+                    ? null
+                    : () => widget.onPointTap!(point),
               ),
             if (widget.previewPoint != null && widget.previewRadius != null)
               _pointOfInterestMarker(
@@ -507,29 +592,47 @@ class _LocationMapState extends ConsumerState<LocationMap>
     required LatLng point,
     required String name,
     required Color color,
+    bool isTemporary = false,
+    bool isDestination = false,
+    VoidCallback? onTap,
   }) {
+    final content = Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Icon(
+          isDestination
+              ? Icons.location_on_rounded
+              : isTemporary
+              ? Icons.timer_rounded
+              : Icons.flag_rounded,
+          size: 42,
+          color: color,
+        ),
+        Text(
+          name,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+          textAlign: TextAlign.center,
+          style: const TextStyle(
+            color: Colors.black87,
+            fontSize: 13,
+            fontWeight: FontWeight.w600,
+          ),
+        ),
+      ],
+    );
     return Marker(
       point: point,
       rotate: true,
       width: 150,
       height: 66,
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(Icons.flag_rounded, size: 42, color: color),
-          Text(
-            name,
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-            textAlign: TextAlign.center,
-            style: const TextStyle(
-              color: Colors.black87,
-              fontSize: 13,
-              fontWeight: FontWeight.w600,
+      child: onTap == null
+          ? content
+          : GestureDetector(
+              behavior: HitTestBehavior.opaque,
+              onTap: onTap,
+              child: content,
             ),
-          ),
-        ],
-      ),
     );
   }
 

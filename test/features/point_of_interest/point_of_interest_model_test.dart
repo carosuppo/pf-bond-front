@@ -36,4 +36,32 @@ void main() {
     const request = UpdatePointOfInterestRequest(name: 'Nuevo nombre');
     expect(request.toJson(), {'name': 'Nuevo nombre'});
   });
+
+  test('parsea temporalidad y serializa una duración explícita', () {
+    final point = PointOfInterest.fromJson({
+      'id': 2,
+      'name': 'Encuentro',
+      'description': null,
+      'radius': 50,
+      'latitude': -34.6,
+      'longitude': -58.3,
+      'groupId': 3,
+      'createdAt': '2026-09-22T10:00:00.000Z',
+      'isTemporary': true,
+      'endTime': '2026-09-22T11:00:00.000Z',
+    });
+    const request = CreatePointOfInterestRequest(
+      name: '',
+      radius: 50,
+      latitude: -34.6,
+      longitude: -58.3,
+      isTemporary: true,
+      durationMinutes: 60,
+    );
+
+    expect(point.isTemporary, isTrue);
+    expect(point.endTime?.isUtc, isTrue);
+    expect(request.toJson(), containsPair('durationMinutes', 60));
+    expect(request.toJson(), containsPair('isTemporary', true));
+  });
 }
