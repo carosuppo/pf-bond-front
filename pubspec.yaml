@@ -81,6 +81,10 @@ flutter:
   assets:
     - .env
     - assets/
+  fonts:
+    - family: MyFlutterApp
+      fonts:
+        - asset: assets/flutter_icons/MyFlutterApp.ttf
 
   # To add assets to your application, add an assets section, like this:
   # assets:

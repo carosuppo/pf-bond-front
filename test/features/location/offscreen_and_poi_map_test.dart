@@ -1,5 +1,6 @@
 import 'dart:math' as math;
 import 'package:bond_front/core/theme/app_colors.dart';
+import 'package:bond_front/core/theme/location_icons.dart';
 import 'package:bond_front/core/widgets/user_avatar.dart';
 import 'package:bond_front/features/location/constants/default_location.dart';
 import 'package:bond_front/features/location/constants/location_tracking_config.dart';
@@ -32,6 +33,7 @@ Future<void> pumpMap(
   ValueChanged<LatLng>? onTap,
   void Function(int memberId)? onMemberTap,
   List<PointOfInterest> points = const [],
+  bool showPointOfInterestAreas = false,
   LatLng? previewPoint,
   PointOfInterestColor previewColor = PointOfInterestColor.blue,
   bool showOffscreenPoints = false,
@@ -62,6 +64,7 @@ Future<void> pumpMap(
               onMemberTap: onMemberTap,
               points: points,
               showOffscreenPoints: showOffscreenPoints,
+              showPointOfInterestAreas: showPointOfInterestAreas,
               previewPoint: previewPoint,
               previewRadius: 100,
               previewColor: previewColor,
@@ -404,10 +407,12 @@ void main() {
         memberId: 2,
         userId: 2,
         name: 'Ana',
+        profilePhoto: 'https://example.com/ana.jpg',
         latitude: defaultLocation.latitude,
         longitude: defaultLocation.longitude,
         lastSeenAt: DateTime.now(),
       );
+      int? tappedMemberId;
       final point = PointOfInterest(
         id: 1,
         name: 'Colegio',
@@ -422,7 +427,9 @@ void main() {
         tester,
         controller,
         state: LocationState.initial().copyWith(visibleMembers: {2: member}),
+        onMemberTap: (memberId) => tappedMemberId = memberId,
         points: [point],
+        showPointOfInterestAreas: true,
         previewPoint: defaultLocation,
         previewColor: PointOfInterestColor.purple,
       );
@@ -437,10 +444,35 @@ void main() {
           .widget<MarkerLayer>(find.byType(MarkerLayer))
           .markers;
       Icon iconAt(int i) => (markers[i].child as Column).children.first as Icon;
-      expect(iconAt(1).icon, Icons.flag_rounded);
-      expect(iconAt(1).color, Colors.red);
-      expect(iconAt(2).icon, Icons.flag_rounded);
-      expect(iconAt(2).color, Colors.purple);
+      expect(markers, hasLength(2));
+      expect(markers[0].point, defaultLocation);
+      final occupiedMarker = markers[0].child as Column;
+      final occupiedStack = occupiedMarker.children.first as SizedBox;
+      final occupiedLayers = occupiedStack.child as Stack;
+      final occupiedPoint =
+          (occupiedLayers.children.first as Positioned).child as Container;
+      expect(
+        (occupiedPoint.decoration as BoxDecoration).color,
+        Colors.red.withValues(alpha: 0.3),
+      );
+      final occupiedAvatars = occupiedPoint.child as Wrap;
+      expect(occupiedAvatars.children, hasLength(1));
+      expect(
+        ((occupiedAvatars.children.single as GestureDetector).child
+                as UserAvatar)
+            .photoUrl,
+        'https://example.com/ana.jpg',
+      );
+      expect((occupiedMarker.children.last as SizedBox).child, isA<Text>());
+      expect(
+        ((occupiedMarker.children.last as SizedBox).child as Text).data,
+        'en Colegio',
+      );
+      final avatarDetector = occupiedAvatars.children.single as GestureDetector;
+      avatarDetector.onTap!.call();
+      expect(tappedMemberId, 2);
+      expect(iconAt(1).icon, LocationIcons.pointOfInterest);
+      expect(iconAt(1).color, Colors.purple);
       controller.move(
         LatLng(defaultLocation.latitude + 1, defaultLocation.longitude),
         15,
@@ -450,50 +482,47 @@ void main() {
       await disposeMap(tester, controller);
     },
   );
-  testWidgets(
-    'offscreen POI indicator uses a flag and follows the list state',
-    (tester) async {
-      final controller = MapController();
-      final point = PointOfInterest(
-        id: 1,
-        name: 'Colegio',
-        radius: 100,
-        latitude: defaultLocation.latitude,
-        longitude: defaultLocation.longitude + 1,
-        groupId: 20,
-        createdAt: DateTime(2026),
-        color: PointOfInterestColor.red,
-      );
+  testWidgets('offscreen POI indicator follows the list state', (tester) async {
+    final controller = MapController();
+    final point = PointOfInterest(
+      id: 1,
+      name: 'Colegio',
+      radius: 100,
+      latitude: defaultLocation.latitude,
+      longitude: defaultLocation.longitude + 1,
+      groupId: 20,
+      createdAt: DateTime(2026),
+      color: PointOfInterestColor.red,
+    );
 
-      await pumpMap(
-        tester,
-        controller,
-        points: [point],
-        showOffscreenPoints: true,
-      );
-      controller.move(defaultLocation, 15);
-      await tester.pump();
+    await pumpMap(
+      tester,
+      controller,
+      points: [point],
+      showOffscreenPoints: true,
+    );
+    controller.move(defaultLocation, 15);
+    await tester.pump();
 
-      final offscreenFlag = find.byWidgetPredicate(
+    final offscreenFlag = find.byWidgetPredicate(
+      (widget) =>
+          widget is Icon &&
+          widget.icon == LocationIcons.pointOfInterest &&
+          widget.color == Colors.white,
+    );
+    expect(offscreenFlag, findsOneWidget);
+    expect(
+      find.byWidgetPredicate(
         (widget) =>
             widget is Icon &&
-            widget.icon == Icons.flag_rounded &&
-            widget.color == Colors.white,
-      );
-      expect(offscreenFlag, findsOneWidget);
-      expect(
-        find.byWidgetPredicate(
-          (widget) =>
-              widget is Icon &&
-              widget.icon == Icons.navigation &&
-              widget.color == Colors.red,
-        ),
-        findsOneWidget,
-      );
+            widget.icon == Icons.navigation &&
+            widget.color == Colors.red,
+      ),
+      findsOneWidget,
+    );
 
-      await pumpMap(tester, controller, points: [point]);
-      expect(offscreenFlag, findsNothing);
-      await disposeMap(tester, controller);
-    },
-  );
+    await pumpMap(tester, controller, points: [point]);
+    expect(offscreenFlag, findsNothing);
+    await disposeMap(tester, controller);
+  });
 }

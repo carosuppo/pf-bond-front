@@ -643,6 +643,7 @@ class _MapScreenState extends ConsumerState<MapScreen> {
                             ? _draftRadius
                             : null,
                         showOffscreenPoints: _pointsExpanded,
+                        showPointOfInterestAreas: _pointsExpanded,
                         routePoints: navigation.remainingPoints,
                         routeFitRevision: navigation.routeRevision,
                         routeFitPadding: EdgeInsets.fromLTRB(
@@ -845,40 +846,42 @@ class _MapScreenState extends ConsumerState<MapScreen> {
         children: [
           if (pointProvider.loading) const LinearProgressIndicator(),
           if (!pointProvider.loading && pointProvider.points.isNotEmpty)
-            Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                for (
-                  int index = 0;
-                  index < pointProvider.points.length;
-                  index++
-                ) ...[
-                  FractionallySizedBox(
-                    widthFactor: 0.6,
-                    alignment: Alignment.center,
-                    child: _PointOfInterestListItem(
-                      point: pointProvider.points[index],
-                      navigationActive: navigationActive,
-                      onTap: _selectPoint,
-                      onEdit: _startEdit,
-                      onDelete: (point) {
-                        unawaited(_confirmDelete(point));
-                      },
-                      onDirections: (point) {
-                        unawaited(_startNavigation(point));
-                      },
-                    ),
-                  ),
-                  if (index < pointProvider.points.length - 1)
-                    const SizedBox(height: 8),
-                ],
-              ],
+            LayoutBuilder(
+              builder: (context, constraints) {
+                final cardWidth = (constraints.maxWidth - 12) / 2;
+
+                return Wrap(
+                  alignment: WrapAlignment.center,
+                  spacing: 12,
+                  runSpacing: 12,
+                  children: [
+                    for (final point in pointProvider.points)
+                      SizedBox(
+                        width: cardWidth,
+                        child: _PointOfInterestListItem(
+                          point: point,
+                          navigationActive: navigationActive,
+                          onTap: _selectPoint,
+                          onEdit: _startEdit,
+                          onDelete: (point) {
+                            unawaited(_confirmDelete(point));
+                          },
+                          onDirections: (point) {
+                            unawaited(_startNavigation(point));
+                          },
+                        ),
+                      ),
+                  ],
+                );
+              },
             ),
         ],
       ),
     );
   }
 }
+
+enum _PointOfInterestAction { edit, delete }
 
 class _PointOfInterestListItem extends StatelessWidget {
   final PointOfInterest point;
@@ -908,20 +911,12 @@ class _PointOfInterestListItem extends StatelessWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              Row(
-                children: [
-                  if (!navigationActive)
-                    Transform.translate(
-                      offset: const Offset(-6, -6),
-                      child: IconButton(
-                        tooltip: 'Editar punto de interés',
-                        color: AppColors.primary,
-                        onPressed: () => onEdit(point),
-                        icon: const Icon(Icons.edit_outlined),
-                      ),
-                    ),
-                  Expanded(
-                    child: Text(
+              SizedBox(
+                height: 48,
+                child: Stack(
+                  alignment: Alignment.center,
+                  children: [
+                    Text(
                       point.name,
                       textAlign: TextAlign.center,
                       style: const TextStyle(
@@ -930,18 +925,54 @@ class _PointOfInterestListItem extends StatelessWidget {
                         fontWeight: FontWeight.w600,
                       ),
                     ),
-                  ),
-                  if (!navigationActive)
-                    Transform.translate(
-                      offset: const Offset(6, -6),
-                      child: IconButton(
-                        tooltip: 'Eliminar punto de interés',
-                        color: AppColors.primary,
-                        onPressed: () => onDelete(point),
-                        icon: const Icon(Icons.delete_outline),
+                    if (!navigationActive)
+                      Align(
+                        alignment: Alignment.topRight,
+                        child: Transform.translate(
+                          offset: const Offset(8, 0),
+                          child: PopupMenuButton<_PointOfInterestAction>(
+                            padding: EdgeInsets.zero,
+                            tooltip: 'Opciones del punto de interés',
+                            position: PopupMenuPosition.under,
+                            onSelected: (action) {
+                              switch (action) {
+                                case _PointOfInterestAction.edit:
+                                  onEdit(point);
+                                case _PointOfInterestAction.delete:
+                                  onDelete(point);
+                              }
+                            },
+                            itemBuilder: (context) => [
+                              const PopupMenuItem<_PointOfInterestAction>(
+                                value: _PointOfInterestAction.edit,
+                                child: Row(
+                                  children: [
+                                    Icon(Icons.edit_outlined),
+                                    SizedBox(width: 8),
+                                    Text('Editar'),
+                                  ],
+                                ),
+                              ),
+                              const PopupMenuItem<_PointOfInterestAction>(
+                                value: _PointOfInterestAction.delete,
+                                child: Row(
+                                  children: [
+                                    Icon(Icons.delete_outline),
+                                    SizedBox(width: 8),
+                                    Text('Eliminar'),
+                                  ],
+                                ),
+                              ),
+                            ],
+                            icon: Icon(
+                              Icons.more_vert,
+                              color: Colors.white.withValues(alpha: 0.15),
+                            ),
+                          ),
+                        ),
                       ),
-                    ),
-                ],
+                  ],
+                ),
               ),
               if (point.isTemporary) ...[
                 const SizedBox(height: 4),
@@ -968,6 +999,11 @@ class _PointOfInterestListItem extends StatelessWidget {
                 const SizedBox(height: 8),
                 OutlinedButton.icon(
                   onPressed: () => onDirections(point),
+                  style: OutlinedButton.styleFrom(
+                    backgroundColor: AppColors.primary,
+                    foregroundColor: Colors.black,
+                    side: const BorderSide(color: AppColors.primary),
+                  ),
                   icon: const Icon(Icons.directions_rounded),
                   label: const Text('Cómo llegar'),
                 ),

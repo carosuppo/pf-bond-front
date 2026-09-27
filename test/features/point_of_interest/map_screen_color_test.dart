@@ -241,8 +241,13 @@ void main() {
       expect(find.text('Parque'), findsNWidgets(2));
       expect(find.text('Radio: 100 m'), findsOneWidget);
       expect(find.text('Cómo llegar'), findsNWidgets(2));
-      expect(find.byTooltip('Editar punto de interés'), findsNWidgets(2));
-      expect(find.byTooltip('Eliminar punto de interés'), findsNWidgets(2));
+      expect(find.byTooltip('Opciones del punto de interés'), findsNWidgets(2));
+      await tester.tap(find.byTooltip('Opciones del punto de interés').first);
+      await tester.pumpAndSettle();
+      expect(find.text('Editar'), findsOneWidget);
+      expect(find.text('Eliminar'), findsOneWidget);
+      await tester.tapAt(const Offset(20, 20));
+      await tester.pumpAndSettle();
       expect(
         tester.widget<LocationMap>(find.byType(LocationMap)).onPointTap,
         isNotNull,
@@ -276,8 +281,7 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(find.byTooltip('Agregar punto de interés'), findsNothing);
-      expect(find.byTooltip('Editar punto de interés'), findsNothing);
-      expect(find.byTooltip('Eliminar punto de interés'), findsNothing);
+      expect(find.byTooltip('Opciones del punto de interés'), findsNothing);
       expect(find.text('Cómo llegar'), findsNothing);
       final navigationMap = tester.widget<LocationMap>(
         find.byType(LocationMap),
@@ -473,8 +477,7 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.byTooltip('Agregar punto de interés'), findsNothing);
-    expect(find.byTooltip('Editar punto de interés'), findsNothing);
-    expect(find.byTooltip('Eliminar punto de interés'), findsNothing);
+    expect(find.byTooltip('Opciones del punto de interés'), findsNothing);
     expect(find.text('Cómo llegar'), findsNothing);
     expect(
       tester.widget<LocationMap>(find.byType(LocationMap)).onPointTap,
@@ -489,8 +492,7 @@ void main() {
     await expandPoints();
 
     expect(find.byTooltip('Agregar punto de interés'), findsOneWidget);
-    expect(find.byTooltip('Editar punto de interés'), findsOneWidget);
-    expect(find.byTooltip('Eliminar punto de interés'), findsOneWidget);
+    expect(find.byTooltip('Opciones del punto de interés'), findsOneWidget);
     expect(find.text('Cómo llegar'), findsOneWidget);
     expect(
       tester.widget<LocationMap>(find.byType(LocationMap)).onPointTap,

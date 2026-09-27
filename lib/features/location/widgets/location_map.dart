@@ -8,6 +8,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:latlong2/latlong.dart';
 
 import '../../../core/theme/app_colors.dart';
+import '../../../core/theme/location_icons.dart';
 import '../../../core/widgets/user_avatar.dart';
 import '../../point_of_interest/models/point_of_interest.dart';
 import '../../point_of_interest/models/point_of_interest_color.dart';
@@ -33,6 +34,7 @@ class LocationMap extends ConsumerStatefulWidget {
   final String? ownProfileName;
   final double indicatorBottomFraction;
   final bool showOffscreenPoints;
+  final bool showPointOfInterestAreas;
   final List<LatLng> routePoints;
   final int routeFitRevision;
   final EdgeInsets routeFitPadding;
@@ -56,6 +58,7 @@ class LocationMap extends ConsumerStatefulWidget {
     this.ownProfileName,
     this.indicatorBottomFraction = 0,
     this.showOffscreenPoints = false,
+    this.showPointOfInterestAreas = false,
     this.routePoints = const [],
     this.routeFitRevision = 0,
     this.routeFitPadding = EdgeInsets.zero,
@@ -351,7 +354,22 @@ class _LocationMapState extends ConsumerState<LocationMap>
         ),
       ...animatedMembers,
     ];
-    final memberClusters = _buildMemberClusters(membersForClustering);
+    final membersInsidePoints = <int, List<MemberLocationModel>>{
+      for (final point in widget.points)
+        point.id: [
+          for (final member in membersForClustering)
+            if (_isMemberInsidePoint(member, point)) member,
+        ],
+    };
+    final membersInsidePointIds = {
+      for (final members in membersInsidePoints.values)
+        for (final member in members) member.memberId,
+    };
+    final membersOutsidePoints = [
+      for (final member in membersForClustering)
+        if (!membersInsidePointIds.contains(member.memberId)) member,
+    ];
+    final memberClusters = _buildMemberClusters(membersOutsidePoints);
 
     // Usamos todos los IDs conocidos para
     // evitar cambiar colores solamente
@@ -438,15 +456,16 @@ class _LocationMapState extends ConsumerState<LocationMap>
         ),
         CircleLayer(
           circles: [
-            for (final point in widget.points)
-              CircleMarker(
-                point: LatLng(point.latitude, point.longitude),
-                radius: point.radius,
-                useRadiusInMeter: true,
-                color: point.color.visualColor.withAlpha(45),
-                borderColor: point.color.visualColor,
-                borderStrokeWidth: 2,
-              ),
+            if (widget.showPointOfInterestAreas)
+              for (final point in widget.points)
+                CircleMarker(
+                  point: LatLng(point.latitude, point.longitude),
+                  radius: point.radius,
+                  useRadiusInMeter: true,
+                  color: point.color.visualColor.withAlpha(45),
+                  borderColor: point.color.visualColor,
+                  borderStrokeWidth: 2,
+                ),
             if (widget.previewPoint != null && widget.previewRadius != null)
               CircleMarker(
                 point: widget.previewPoint!,
@@ -463,16 +482,27 @@ class _LocationMapState extends ConsumerState<LocationMap>
             for (final cluster in memberClusters)
               _memberClusterMarker(cluster, now),
             for (final point in widget.points)
-              _pointOfInterestMarker(
-                point: LatLng(point.latitude, point.longitude),
-                name: point.name,
-                color: point.color.visualColor,
-                isTemporary: point.isTemporary,
-                isDestination: point.id == widget.destinationPointId,
-                onTap: widget.onPointTap == null
-                    ? null
-                    : () => widget.onPointTap!(point),
-              ),
+              if (membersInsidePoints[point.id]!.isNotEmpty)
+                _pointMembersMarker(
+                  point: LatLng(point.latitude, point.longitude),
+                  name: point.name,
+                  color: point.color.visualColor,
+                  members: membersInsidePoints[point.id]!,
+                  onMemberTap: widget.onMemberTap,
+                  onTap: widget.onPointTap == null
+                      ? null
+                      : () => widget.onPointTap!(point),
+                )
+              else
+                _pointOfInterestMarker(
+                  point: LatLng(point.latitude, point.longitude),
+                  name: point.name,
+                  color: point.color.visualColor,
+                  isDestination: point.id == widget.destinationPointId,
+                  onTap: widget.onPointTap == null
+                      ? null
+                      : () => widget.onPointTap!(point),
+                ),
             if (widget.previewPoint != null && widget.previewRadius != null)
               _pointOfInterestMarker(
                 point: widget.previewPoint!,
@@ -503,11 +533,12 @@ class _LocationMapState extends ConsumerState<LocationMap>
                 ),
               if (widget.showOffscreenPoints)
                 for (final point in widget.points)
-                  _OffscreenLocation(
-                    point: LatLng(point.latitude, point.longitude),
-                    color: point.color.visualColor,
-                    icon: Icons.flag_rounded,
-                  ),
+                  if (membersInsidePoints[point.id]!.isEmpty)
+                    _OffscreenLocation(
+                      point: LatLng(point.latitude, point.longitude),
+                      color: point.color.visualColor,
+                      icon: LocationIcons.pointOfInterest,
+                    ),
             ],
             bottomFraction: widget.indicatorBottomFraction,
             onLocationTap: (point) =>
@@ -568,6 +599,15 @@ class _LocationMapState extends ConsumerState<LocationMap>
     );
   }
 
+  bool _isMemberInsidePoint(MemberLocationModel member, PointOfInterest point) {
+    return _distanceCalculator.as(
+          LengthUnit.Meter,
+          LatLng(member.latitude, member.longitude),
+          LatLng(point.latitude, point.longitude),
+        ) <=
+        point.radius;
+  }
+
   bool _isStale(MemberLocationModel member, DateTime now) {
     final lastSeenAt = member.lastSeenAt;
 
@@ -592,7 +632,6 @@ class _LocationMapState extends ConsumerState<LocationMap>
     required LatLng point,
     required String name,
     required Color color,
-    bool isTemporary = false,
     bool isDestination = false,
     VoidCallback? onTap,
   }) {
@@ -602,9 +641,7 @@ class _LocationMapState extends ConsumerState<LocationMap>
         Icon(
           isDestination
               ? Icons.location_on_rounded
-              : isTemporary
-              ? Icons.timer_rounded
-              : Icons.flag_rounded,
+              : LocationIcons.pointOfInterest,
           size: 42,
           color: color,
         ),
@@ -626,6 +663,121 @@ class _LocationMapState extends ConsumerState<LocationMap>
       rotate: true,
       width: 150,
       height: 66,
+      child: onTap == null
+          ? content
+          : GestureDetector(
+              behavior: HitTestBehavior.opaque,
+              onTap: onTap,
+              child: content,
+            ),
+    );
+  }
+
+  Marker _pointMembersMarker({
+    required LatLng point,
+    required String name,
+    required Color color,
+    required List<MemberLocationModel> members,
+    void Function(int memberId)? onMemberTap,
+    VoidCallback? onTap,
+  }) {
+    final count = members.length;
+    final avatarRadius =
+        (count > 4
+            ? 11.0
+            : count > 2
+            ? 14.0
+            : 17.0) *
+        1.3;
+    final columns = math.min(2, count);
+    final rows = (count + columns - 1) ~/ columns;
+    final avatarDiameter = avatarRadius * 2;
+    final contentWidth =
+        columns * avatarDiameter + (columns - 1) * _memberClusterPhotoGap;
+    final contentHeight =
+        rows * avatarDiameter + (rows - 1) * _memberClusterPhotoGap;
+    final width = contentWidth + 16;
+    const iconSize = 42.0;
+    const iconOutside = iconSize * 0.7;
+    final boxHeight = contentHeight + 28;
+    final height = iconOutside + boxHeight;
+    final markerWidth = math.max(width, 150.0);
+    final content = Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        SizedBox(
+          width: width,
+          height: height,
+          child: Stack(
+            children: [
+              Positioned(
+                top: iconOutside,
+                left: 0,
+                right: 0,
+                child: Container(
+                  width: width,
+                  height: boxHeight,
+                  decoration: BoxDecoration(
+                    color: color.withValues(alpha: 0.3),
+                    borderRadius: BorderRadius.circular(15),
+                  ),
+                  padding: const EdgeInsets.fromLTRB(6, 18, 6, 6),
+                  child: Wrap(
+                    alignment: WrapAlignment.center,
+                    runAlignment: WrapAlignment.center,
+                    crossAxisAlignment: WrapCrossAlignment.center,
+                    spacing: _memberClusterPhotoGap,
+                    runSpacing: _memberClusterPhotoGap,
+                    children: [
+                      for (final member in members)
+                        _memberAvatar(
+                          name: member.name,
+                          photoUrl: member.profilePhoto,
+                          radius: avatarRadius,
+                          isStale: _isStale(member, DateTime.now()),
+                          onTap: onMemberTap == null || member.memberId == -1
+                              ? null
+                              : () => onMemberTap(member.memberId),
+                        ),
+                    ],
+                  ),
+                ),
+              ),
+              Positioned(
+                top: 0,
+                left: 0,
+                right: 0,
+                child: Center(
+                  child: Icon(
+                    LocationIcons.pointOfInterest,
+                    size: iconSize,
+                    color: color,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+        SizedBox(
+          width: markerWidth,
+          child: Text(
+            'en $name',
+            textAlign: TextAlign.center,
+            style: const TextStyle(
+              color: Colors.black87,
+              fontSize: 13,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+        ),
+      ],
+    );
+
+    return Marker(
+      point: point,
+      rotate: true,
+      width: markerWidth,
+      height: height + 40,
       child: onTap == null
           ? content
           : GestureDetector(
@@ -676,7 +828,6 @@ class _LocationMapState extends ConsumerState<LocationMap>
           borderColor: AppColors.primary,
           borderWidth: 2,
         ),
-
         if (isStale && lastSeenAt != null && now != null)
           Text(
             _formatLastSeen(lastSeenAt, now),
