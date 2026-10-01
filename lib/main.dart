@@ -99,7 +99,13 @@ class MyApp extends StatelessWidget {
             context.read<NotificationApiService>(),
             context.read<AppPreferencesService>(),
             onOpened: (data) async {
-              if (data.type != 'EVENT_REMINDER') return;
+              const eventTypes = {
+                'EVENT_REMINDER',
+                'EVENT_CREATED',
+                'EVENT_UPDATED',
+                'EVENT_CANCELLED',
+              };
+              if (!eventTypes.contains(data.type)) return;
               final groupId = int.tryParse(data.groupId ?? '');
               final eventId = int.tryParse(data.eventId ?? '');
               if (groupId == null || eventId == null) return;

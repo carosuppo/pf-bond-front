@@ -3,6 +3,8 @@ const notificationTypeLabels = {
   'POINT_OF_INTEREST_UPDATED': 'Modificaciones de puntos de interés',
   'POINT_OF_INTEREST_ENTERED': 'Ingresos a puntos de interés',
   'POINT_OF_INTEREST_EXITED': 'Egresos de puntos de interés',
+  'EVENT_CREATED': 'Nuevos eventos',
+  'EVENT_UPDATED': 'Modificaciones de eventos',
   'EVENT_CANCELLED': 'Cancelaciones de eventos',
 };
 
