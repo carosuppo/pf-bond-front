@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../features/event/screens/events_screen.dart';
+import '../../features/expense_account/screens/expense_accounts_screen.dart';
 import '../../features/location/screens/map_screen.dart';
 import '../../features/settings/screens/settings_screen.dart';
 import '../widgets/app_bottom_nav_bar.dart';
@@ -41,7 +42,12 @@ class _AppShellState extends State<AppShell> {
     return Scaffold(
       body: IndexedStack(
         index: _selectedIndex,
-        children: const [MapScreen(), EventsScreen(), SettingsScreen()],
+        children: const [
+          MapScreen(),
+          EventsScreen(),
+          ExpenseAccountsScreen(),
+          SettingsScreen(),
+        ],
       ),
       bottomNavigationBar: SafeArea(
         top: false,

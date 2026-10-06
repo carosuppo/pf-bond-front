@@ -15,4 +15,7 @@ class AppRoutes {
   static const String updateGroup = '/groups/update-group';
   static const String events = '/events';
   static const String createEvent = '/events/create-event';
+  static const String expenseAccounts = '/expense-accounts';
+  static const String createExpenseAccount =
+      '/expense-accounts/create-expense-account';
 }

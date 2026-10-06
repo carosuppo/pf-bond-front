@@ -5,7 +5,7 @@ import '../../features/auth/providers/auth_provider.dart';
 import '../theme/app_colors.dart';
 import 'user_avatar.dart';
 
-enum AppBottomDestination { map, events, settings }
+enum AppBottomDestination { map, events, expenseAccounts, settings }
 
 class _BottomNavItem {
   const _BottomNavItem({
@@ -40,6 +40,12 @@ class AppBottomNavBar extends StatelessWidget {
       icon: Icons.event_outlined,
       selectedIcon: Icons.event_rounded,
       tooltip: 'Eventos',
+    ),
+    _BottomNavItem(
+      destination: AppBottomDestination.expenseAccounts,
+      icon: Icons.account_balance_wallet_outlined,
+      selectedIcon: Icons.account_balance_wallet_rounded,
+      tooltip: 'Cuentas',
     ),
     _BottomNavItem(
       destination: AppBottomDestination.settings,
