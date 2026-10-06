@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import '../../../core/theme/app_colors.dart';
+import 'event_month_calendar.dart';
 import 'event_time_picker.dart';
 
 enum EventDateTimePickerType { start, end }
@@ -48,6 +50,7 @@ class _EventDateTimeDialog extends StatefulWidget {
 
 class _EventDateTimeDialogState extends State<_EventDateTimeDialog> {
   late DateTime _selectedDate;
+  late DateTime _displayedMonth;
   late TimeOfDay _selectedTime;
 
   _PickerStep _step = _PickerStep.date;
@@ -78,6 +81,8 @@ class _EventDateTimeDialogState extends State<_EventDateTimeDialog> {
     if (_selectedDate.isBefore(minimumDate)) {
       _selectedDate = minimumDate;
     }
+
+    _displayedMonth = DateTime(_selectedDate.year, _selectedDate.month);
   }
 
   DateTime get _minimumDate {
@@ -139,25 +144,6 @@ class _EventDateTimeDialogState extends State<_EventDateTimeDialog> {
     return '$hour:$minute';
   }
 
-  String _formatMonth(DateTime dateTime) {
-    const months = [
-      'Enero',
-      'Febrero',
-      'Marzo',
-      'Abril',
-      'Mayo',
-      'Junio',
-      'Julio',
-      'Agosto',
-      'Septiembre',
-      'Octubre',
-      'Noviembre',
-      'Diciembre',
-    ];
-
-    return '${months[dateTime.month - 1]} de ${dateTime.year}';
-  }
-
   void _onDateSelected(DateTime date) {
     setState(() {
       _selectedDate = date;
@@ -213,12 +199,9 @@ class _EventDateTimeDialogState extends State<_EventDateTimeDialog> {
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final colorScheme = theme.colorScheme;
-
     return Dialog(
       insetPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 24),
-      backgroundColor: colorScheme.surface,
+      backgroundColor: AppColors.cardColor,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(28)),
       child: ConstrainedBox(
         constraints: BoxConstraints(
@@ -255,7 +238,7 @@ class _EventDateTimeDialogState extends State<_EventDateTimeDialog> {
 
                 const SizedBox(height: 20),
 
-                Divider(color: colorScheme.outlineVariant, height: 1),
+                Divider(color: AppColors.divider, height: 1),
 
                 const SizedBox(height: 16),
 
@@ -296,23 +279,19 @@ class _EventDateTimeDialogState extends State<_EventDateTimeDialog> {
   }
 
   Widget _buildDatePicker() {
-    return Column(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        Text(
-          _formatMonth(_selectedDate),
-          style: Theme.of(context).textTheme.titleLarge,
-        ),
-
-        const SizedBox(height: 8),
-
-        CalendarDatePicker(
-          initialDate: _selectedDate,
-          firstDate: _minimumDate,
-          lastDate: _maximumDate,
-          onDateChanged: _onDateSelected,
-        ),
-      ],
+    return EventMonthCalendar(
+      displayedMonth: _displayedMonth,
+      selectedDay: _selectedDate,
+      onMonthChanged: (month) {
+        setState(() {
+          _displayedMonth = DateTime(month.year, month.month);
+          _errorMessage = null;
+        });
+      },
+      onDaySelected: _onDateSelected,
+      firstDate: _minimumDate,
+      lastDate: _maximumDate,
+      today: _now,
     );
   }
 
@@ -385,10 +364,7 @@ class _DateTimeHeader extends StatelessWidget {
 
         Padding(
           padding: const EdgeInsets.symmetric(horizontal: 8),
-          child: Icon(
-            Icons.arrow_forward,
-            color: Theme.of(context).colorScheme.onSurfaceVariant,
-          ),
+          child: Icon(Icons.arrow_forward, color: AppColors.mutedText),
         ),
 
         Expanded(
@@ -438,7 +414,6 @@ class _DateTimeHeaderValue extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final colorScheme = theme.colorScheme;
 
     return Column(
       children: [
@@ -448,7 +423,7 @@ class _DateTimeHeaderValue extends StatelessWidget {
             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
             decoration: dateSelected
                 ? BoxDecoration(
-                    color: colorScheme.surfaceContainerHighest,
+                    color: AppColors.surface,
                     borderRadius: BorderRadius.circular(24),
                   )
                 : null,
@@ -456,7 +431,7 @@ class _DateTimeHeaderValue extends StatelessWidget {
               formatDate(date),
               textAlign: TextAlign.center,
               style: theme.textTheme.titleMedium?.copyWith(
-                color: colorScheme.onSurface,
+                color: AppColors.text,
                 fontWeight: dateSelected ? FontWeight.w600 : FontWeight.w400,
               ),
             ),
@@ -471,7 +446,7 @@ class _DateTimeHeaderValue extends StatelessWidget {
             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
             decoration: timeSelected
                 ? BoxDecoration(
-                    color: colorScheme.surfaceContainerHighest,
+                    color: AppColors.surface,
                     borderRadius: BorderRadius.circular(24),
                   )
                 : null,
@@ -479,7 +454,7 @@ class _DateTimeHeaderValue extends StatelessWidget {
               formatTime(time),
               textAlign: TextAlign.center,
               style: theme.textTheme.headlineSmall?.copyWith(
-                color: colorScheme.onSurface,
+                color: AppColors.text,
                 fontWeight: timeSelected ? FontWeight.w600 : FontWeight.w400,
               ),
             ),
@@ -498,29 +473,24 @@ class _ErrorMessage extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final colorScheme = theme.colorScheme;
 
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
-        color: colorScheme.errorContainer,
+        color: AppColors.error.withValues(alpha: 0.15),
         borderRadius: BorderRadius.circular(12),
       ),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Icon(
-            Icons.error_outline,
-            size: 20,
-            color: colorScheme.onErrorContainer,
-          ),
+          Icon(Icons.error_outline, size: 20, color: AppColors.error),
           const SizedBox(width: 8),
           Expanded(
             child: Text(
               message,
               style: theme.textTheme.bodyMedium?.copyWith(
-                color: colorScheme.onErrorContainer,
+                color: AppColors.error,
               ),
             ),
           ),

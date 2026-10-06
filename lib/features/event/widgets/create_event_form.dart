@@ -14,6 +14,7 @@ import '../models/event_model.response.dart';
 import '../models/update_event_model.request.dart';
 import '../providers/event_provider.dart';
 import 'event_date_time_picker.dart';
+import 'event_location_editor.dart';
 
 class CreateEventForm extends StatefulWidget {
   final EventResponseModel? initialEvent;
@@ -32,6 +33,8 @@ class _CreateEventFormState extends State<CreateEventForm> {
   DateTime? _startAt;
   DateTime? _endAt;
 
+  EventResponseModel? _currentEvent;
+
   final Set<int> _selectedMemberIds = {};
 
   String _initialName = '';
@@ -49,6 +52,7 @@ class _CreateEventFormState extends State<CreateEventForm> {
     final initialEvent = widget.initialEvent;
 
     if (initialEvent != null) {
+      _currentEvent = initialEvent;
       _nameController.text = initialEvent.name;
       _descriptionController.text = initialEvent.description ?? '';
 
@@ -150,6 +154,49 @@ class _CreateEventFormState extends State<CreateEventForm> {
     setState(() {
       _endAt = null;
     });
+  }
+
+  Future<void> _openLocationEditor() async {
+    final current = _currentEvent;
+
+    if (current == null) {
+      return;
+    }
+
+    FocusScope.of(context).unfocus();
+
+    final groupId =
+        widget.groupId ?? context.read<GroupProvider>().activeGroup?.id;
+
+    if (groupId == null) {
+      if (!mounted) {
+        return;
+      }
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('No hay un grupo activo seleccionado.')),
+      );
+
+      return;
+    }
+
+    final updatedEvent = await Navigator.of(context).push<EventResponseModel>(
+      MaterialPageRoute<EventResponseModel>(
+        builder: (_) => EventLocationEditor(event: current, groupId: groupId),
+      ),
+    );
+
+    if (!mounted || updatedEvent == null) {
+      return;
+    }
+
+    setState(() {
+      _currentEvent = updatedEvent;
+    });
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('Ubicación del evento guardada.')),
+    );
   }
 
   Future<void> _saveEvent() async {
@@ -444,6 +491,29 @@ class _CreateEventFormState extends State<CreateEventForm> {
                                   ? null
                                   : _clearEndDateTime,
                             ),
+
+                            if (_isEditing) ...[
+                              const SizedBox(height: 16),
+
+                              SizedBox(
+                                width: double.infinity,
+                                child: OutlinedButton.icon(
+                                  onPressed: isLoading
+                                      ? null
+                                      : _openLocationEditor,
+                                  icon: Icon(
+                                    _currentEvent?.location == null
+                                        ? Icons.add_location_alt_rounded
+                                        : Icons.edit_location_alt_rounded,
+                                  ),
+                                  label: Text(
+                                    _currentEvent?.location == null
+                                        ? 'Agregar ubicación'
+                                        : 'Modificar ubicación',
+                                  ),
+                                ),
+                              ),
+                            ],
 
                             const SizedBox(height: 24),
 
