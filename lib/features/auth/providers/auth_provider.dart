@@ -12,7 +12,17 @@ class AuthProvider extends ChangeNotifier {
   final AuthService _authService;
   final SessionStateCleanup _sessionStateCleanup;
 
-  AuthProvider(this._authService, this._sessionStateCleanup);
+  AuthProvider(
+    this._authService,
+    this._sessionStateCleanup, {
+    this.onSessionReady,
+    this.onSessionEnding,
+  });
+
+  final Future<void> Function()? onSessionReady;
+  final Future<void> Function()? onSessionEnding;
+
+  int _sessionVersion = 0;
 
   bool isLoading = false;
   bool isChangingPassword = false;
@@ -49,6 +59,7 @@ class AuthProvider extends ChangeNotifier {
   }
 
   Future<bool> login({required String email, required String password}) async {
+    final version = ++_sessionVersion;
     isLoading = true;
     errorMessage = null;
     authResponse = null;
@@ -57,35 +68,50 @@ class AuthProvider extends ChangeNotifier {
     try {
       final request = LoginRequest(email: email, password: password);
 
-      authResponse = await _authService.login(request);
+      final response = await _authService.login(request);
+      if (version != _sessionVersion) return false;
+      authResponse = response;
+      await onSessionReady?.call();
+      if (version != _sessionVersion) return false;
 
       return true;
     } catch (error) {
+      if (version != _sessionVersion) return false;
       errorMessage = error.toString().replaceFirst('Exception: ', '');
       return false;
     } finally {
-      isLoading = false;
-      notifyListeners();
+      if (version == _sessionVersion) {
+        isLoading = false;
+        notifyListeners();
+      }
     }
   }
 
   Future<bool> restoreSession() async {
+    final version = ++_sessionVersion;
     isLoading = true;
     errorMessage = null;
     notifyListeners();
 
     try {
-      authResponse = await _authService.restoreSession();
+      final response = await _authService.restoreSession();
+      if (version != _sessionVersion) return false;
+      authResponse = response;
+      if (authResponse != null) await onSessionReady?.call();
+      if (version != _sessionVersion) return false;
 
       return authResponse != null;
     } catch (error) {
+      if (version != _sessionVersion) return false;
       authResponse = null;
       errorMessage = error.toString().replaceFirst('Exception: ', '');
 
       return false;
     } finally {
-      isLoading = false;
-      notifyListeners();
+      if (version == _sessionVersion) {
+        isLoading = false;
+        notifyListeners();
+      }
     }
   }
 
@@ -95,13 +121,18 @@ class AuthProvider extends ChangeNotifier {
   }
 
   Future<bool> logout() async {
+    _sessionVersion++;
     isLoading = true;
     errorMessage = null;
     notifyListeners();
 
     try {
-      await _authService.logout();
-      await _finishSession();
+      await onSessionEnding?.call();
+      try {
+        await _authService.logout();
+      } finally {
+        await _finishSession();
+      }
 
       return true;
     } catch (error) {
@@ -176,6 +207,7 @@ class AuthProvider extends ChangeNotifier {
   }
 
   Future<void> _finishSession() async {
+    _sessionVersion++;
     authResponse = null;
     notifyListeners();
     try {

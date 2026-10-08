@@ -64,6 +64,7 @@ void main() {
       'stop-tracking',
       'unregister-fcm',
       'backend-logout',
+      'clear-session',
     ]);
   });
 }

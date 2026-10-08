@@ -1,10 +1,32 @@
 import 'package:geolocator/geolocator.dart';
 
 import '../mappers/location_mapper.dart';
+import '../constants/location_tracking_config.dart';
 import '../models/location_model.dart';
 import '../models/location_permission_status.dart';
 
 class LocationService {
+  // GPS availability is independent of permission; GPS off is recoverable.
+  Future<LocationPermissionStatus> checkBackgroundPermission() async =>
+      mapPermission(await Geolocator.checkPermission());
+
+  Future<LocationModel> getCurrentBackgroundLocation() async => mapPosition(
+    await Geolocator.getCurrentPosition(
+      locationSettings: const LocationSettings(
+        accuracy: LocationAccuracy.high,
+        timeLimit: Duration(seconds: 25),
+      ),
+    ),
+  );
+
+  Stream<LocationModel> getBackgroundLocationStream() =>
+      Geolocator.getPositionStream(
+        locationSettings: const LocationSettings(
+          accuracy: LocationAccuracy.high,
+          distanceFilter: LocationTrackingConfig.distanceFilterMeters,
+        ),
+      ).map(mapPosition);
+
   /// Durante navegación necesitamos actualizaciones mucho más frecuentes que
   /// las utilizadas originalmente.
   ///

@@ -27,16 +27,25 @@ class _Preferences extends AppPreferencesService {
 class _Backend extends LocationBackendService {
   _Backend() : super(ApiClient(SessionStorageService()));
 
+  bool sharingEnabled = true;
+  Completer<void>? sharingBarrier;
+  int reads = 0;
   @override
-  Future<List<LocationSharingModel>> getSharing() async => const [
-    LocationSharingModel(
-      memberId: 1,
-      groupId: 10,
-      locationSharingEnabled: true,
-      shareLocationMandatorily: false,
-      effectiveLocationSharing: true,
-    ),
-  ];
+  Future<List<LocationSharingModel>> getSharing() async {
+    reads++;
+    await sharingBarrier?.future;
+    return sharingEnabled
+        ? const [
+            LocationSharingModel(
+              memberId: 1,
+              groupId: 10,
+              locationSharingEnabled: true,
+              shareLocationMandatorily: false,
+              effectiveLocationSharing: true,
+            ),
+          ]
+        : [];
+  }
 
   @override
   Future<List<MemberLocationModel>> getGroupMembers(int groupId) async =>
@@ -52,9 +61,10 @@ class _Backend extends LocationBackendService {
 }
 
 class _LocationService extends LocationService {
+  LocationPermissionStatus permission = LocationPermissionStatus.always;
   @override
-  Future<LocationPermissionStatus> checkPermission() async =>
-      LocationPermissionStatus.always;
+  Future<LocationPermissionStatus> checkBackgroundPermission() async =>
+      permission;
 
   @override
   Future<LocationModel> getCurrentLocation() async => LocationModel(
@@ -66,6 +76,7 @@ class _LocationService extends LocationService {
 }
 
 class _Background extends BackgroundLocationService {
+  Completer<void>? startBarrier;
   int starts = 0;
   int stops = 0;
 
@@ -78,6 +89,7 @@ class _Background extends BackgroundLocationService {
   @override
   Future<void> ensureRunning() async {
     starts++;
+    await startBarrier?.future;
   }
 
   @override
@@ -110,6 +122,57 @@ class _Socket extends LocationSocketService {
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
+  for (final scenario in [
+    'enabled',
+    'disabled',
+    'denied',
+    'concurrent',
+    'logout',
+  ]) {
+    test('reconcile $scenario uses current sharing and permissions', () async {
+      final backend = _Backend()..sharingEnabled = scenario != 'disabled';
+      final location = _LocationService();
+      if (scenario == 'denied') {
+        location.permission = LocationPermissionStatus.denied;
+      }
+      final background = _Background();
+      final socket = _Socket();
+      if (scenario == 'logout') backend.sharingBarrier = Completer<void>();
+      final container = ProviderContainer(
+        overrides: [
+          appPreferencesProvider.overrideWithValue(_Preferences()),
+          locationBackendServiceProvider.overrideWithValue(backend),
+          locationServiceProvider.overrideWithValue(location),
+          backgroundLocationServiceProvider.overrideWithValue(background),
+          locationSocketServiceProvider.overrideWithValue(socket),
+        ],
+      );
+      final notifier = container.read(locationProvider.notifier);
+      final first = notifier.restoreSharingAndTracking();
+      final second = scenario == 'concurrent'
+          ? notifier.restoreSharingAndTracking()
+          : Future<void>.value();
+      if (scenario == 'logout') {
+        await Future<void>.delayed(Duration.zero);
+        await notifier.resetSessionState();
+        backend.sharingBarrier!.complete();
+      }
+      await Future.wait([first, second]);
+      expect(
+        background.starts,
+        ['enabled', 'concurrent'].contains(scenario) ? 1 : 0,
+      );
+      if (scenario == 'concurrent') expect(backend.reads, 1);
+      if (scenario == 'logout') {
+        expect(container.read(locationProvider).sharing, isEmpty);
+      }
+      if (['disabled', 'denied', 'logout'].contains(scenario)) {
+        expect(background.stops, greaterThan(0));
+      }
+      container.dispose();
+      await socket.controller.close();
+    });
+  }
 
   test(
     'reset de Riverpod limpia ubicación y cierra socket y tracking',
@@ -130,7 +193,10 @@ void main() {
       await notifier.startViewingGroup(10);
       final before = container.read(locationProvider);
       expect(before.isTracking, isTrue);
-      expect(before.currentLocation, isNotNull);
+      expect(
+        before.currentLocation,
+        isNull,
+      ); // Filled by foreground task events.
       expect(before.sharing, isNotEmpty);
       expect(before.visibleMembers, isNotEmpty);
       expect(before.activeGroupId, 10);

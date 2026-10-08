@@ -3,6 +3,8 @@ import 'dart:io';
 
 import 'package:flutter_foreground_task/flutter_foreground_task.dart';
 
+import '../../../core/storage/session_storage_service.dart';
+
 import '../constants/location_tracking_config.dart';
 import '../models/location_model.dart';
 import 'location_tracking_task_handler.dart';
@@ -21,6 +23,7 @@ class FlutterForegroundTaskGateway implements ForegroundTaskGateway {
 
   @override
   Future<void> start() async {
+    await SessionStorageService().setTrackingSuspended(false);
     final result = await FlutterForegroundTask.startService(
       serviceId: 731,
       serviceTypes: const [ForegroundServiceTypes.location],
@@ -33,6 +36,8 @@ class FlutterForegroundTaskGateway implements ForegroundTaskGateway {
 
   @override
   Future<void> stop() async {
+    await SessionStorageService().setTrackingSuspended(true);
+    if (!await isRunning) return;
     final result = await FlutterForegroundTask.stopService();
     if (result is ServiceRequestFailure) throw result.error;
   }
@@ -51,8 +56,7 @@ class BackgroundLocationService {
     : _gateway = gateway ?? FlutterForegroundTaskGateway();
 
   final ForegroundTaskGateway _gateway;
-  Future<void>? _startOperation;
-  Future<void>? _stopOperation;
+  Future<void> _operation = Future<void>.value();
 
   static void initialize() {
     FlutterForegroundTask.initCommunicationPort();
@@ -76,7 +80,7 @@ class BackgroundLocationService {
         eventAction: ForegroundTaskEventAction.repeat(
           LocationTrackingConfig.heartbeatInterval.inMilliseconds,
         ),
-        autoRunOnBoot: false,
+        autoRunOnBoot: true,
         autoRunOnMyPackageReplaced: false,
         allowWakeLock: true,
         allowWifiLock: false,
@@ -88,37 +92,29 @@ class BackgroundLocationService {
 
   Future<bool> get isRunning => _gateway.isRunning;
 
-  Future<void> ensureRunning() {
-    return _startOperation ??= _ensureRunning().whenComplete(() {
-      _startOperation = null;
-    });
+  Future<bool> get isIgnoringBatteryOptimizations async =>
+      !Platform.isAndroid ||
+      await FlutterForegroundTask.isIgnoringBatteryOptimizations;
+
+  Future<bool> get mayBeBatteryRestricted async =>
+      !await isIgnoringBatteryOptimizations;
+
+  /// Call only from an explicit user action; declining is always allowed.
+  Future<bool> openBatterySettings() async =>
+      Platform.isAndroid &&
+      await FlutterForegroundTask.openIgnoreBatteryOptimizationSettings();
+
+  Future<void> _enqueue(Future<void> Function() action) {
+    final next = _operation.then((_) => action());
+    _operation = next.catchError((Object _) {});
+    return next;
   }
 
-  Future<void> _ensureRunning() async {
-    final stopOperation = _stopOperation;
-    if (stopOperation != null) await stopOperation;
-    if (await _gateway.isRunning) return;
-    await _gateway.start();
-  }
+  Future<void> ensureRunning() => _enqueue(() async {
+    if (!await _gateway.isRunning) await _gateway.start();
+  });
 
-  Future<void> stop() {
-    return _stopOperation ??= _stop().whenComplete(() {
-      _stopOperation = null;
-    });
-  }
-
-  Future<void> _stop() async {
-    final startOperation = _startOperation;
-    if (startOperation != null) {
-      try {
-        await startOperation;
-      } catch (_) {
-        // A failed start leaves nothing to stop.
-      }
-    }
-    if (!await _gateway.isRunning) return;
-    await _gateway.stop();
-  }
+  Future<void> stop() => _enqueue(_gateway.stop);
 
   void addLocationListener(void Function(LocationModel) listener) {
     void callback(Object data) {
