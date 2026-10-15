@@ -20,8 +20,8 @@ Rutas relativas a `Front/pf-bond-front`. Cada fila indica cambio y motivo.
 | `lib/features/location/services/location_service.dart` | Separa permiso de disponibilidad GPS; stream background de 25 m, precisión high y consulta de respaldo limitada a 25 s, sin modificar navegación. |
 | `lib/features/location/services/location_tracking_task_handler.dart` | Autoriza antes de GPS; recupera error/done/silencio; backoff; fallback; exclusión mutua; detención terminal y cancelación de retries. |
 | `lib/features/location/widgets/group_info_sheet.dart` | Inserta controles de compartición y batería en la sección de información del grupo. |
-| `pubspec.yaml` | Resuelve la misma dependencia 11.0.2 desde una copia local para impedir alarmas exactas internas. No agrega bibliotecas. |
-| `pubspec.lock` | Registra ese origen local; conserva versión 11.0.2 y demás dependencias. |
+| `pubspec.yaml` | Resuelve flutter_foreground_task 11.0.2 desde pub.dev, fijado exactamente; Gradle aplica el parche Android reproducible. |
+| `pubspec.lock` | Registra source hosted y checksum de pub.dev; conserva version 11.0.2 y las demas dependencias. |
 | `test/features/location/background_location_service_test.dart` | Fake idempotente compatible con persistir stop aun cuando el proceso no está corriendo. |
 | `test/features/location/location_session_reset_test.dart` | Reconciliación con sharing/permisos reales, concurrencia y logout durante respuesta pendiente; ubicación UI proviene del servicio. |
 | `test/features/location/location_tracking_task_handler_test.dart` | Recuperación, fallback, autorización al arrancar y respuestas terminales/temporales. |
@@ -34,11 +34,12 @@ Rutas relativas a `Front/pf-bond-front`. Cada fila indica cambio y motivo.
 |---|---|
 | `lib/features/location/widgets/location_sharing_controls.dart` | Switch de sharing, disclosure previo, accesos explícitos a permisos/GPS y batería opcional. Los grupos obligatorios conservan su contrato: para dejar de compartir con ellos se sale del grupo. |
 | `test/features/location/location_sharing_controls_test.dart` | Comprueba que cancelar disclosure no solicite sharing y que batería nunca se abra automáticamente. |
-| `test/features/location/restart_alarm_policy_test.dart` | Verifica que la dependencia resuelta sea la local y que el restart no invoque alarmas exactas ni variantes allow-while-idle. |
+| `test/features/location/restart_alarm_policy_test.dart` | Verifica dependencia hosted fijada, hook instalado y reemplazo unico de la programacion exacta. |
 | `docs/BACKGROUND_LOCATION.md` | Informe, validaciones, checklist y protocolo manual reproducible. |
-| `third_party/flutter_foreground_task/BOND_PATCH.md` | Procedencia y mantenimiento del parche nativo. |
+| `android/gradle/foreground-task-inexact.gradle` | Parche Android reproducible, verificado por version y hashes, sin modificar el Pub cache. |
+| `docs/FOREGROUND_TASK_DEPENDENCY.md` | Revision de alternativas y mantenimiento del hook de Gradle. |
 
-La copia local contiene código y metadatos del plugin instalado, con licencia MIT preservada. No se descargó ni modificó el caché global. El único cambio de comportamiento respecto de esa copia es `RestartReceiver.kt`: reemplaza la rama `setAlarmClock` por `AlarmManager.set(RTC_WAKEUP, ...)` para todos los reinicios. El inventario individual de los archivos copiados figura al final.
+La dependencia vuelve a pub.dev con version exacta 11.0.2. El hook de Settings genera los inputs nativos en .dart_tool/bond_plugins/ y aplica solamente la sustitucion por AlarmManager.set. No se conserva third_party/flutter_foreground_task. Ver [revision de la dependencia](FOREGROUND_TASK_DEPENDENCY.md) para los archivos modificados/eliminados en esta limpieza.
 
 ## 3. REINICIO DEL CELULAR
 
@@ -85,7 +86,7 @@ Estrategia B. No se agregó REQUEST_IGNORE_BATTERY_OPTIMIZATIONS ni se invoca re
 
 El diálogo explica que Android puede limitar ubicación tras períodos prolongados sin abrir Bond y que cambiar batería es opcional. “Ahora no” no cambia sharing ni limita la app. No hay prompts automáticos ni recordatorios insistentes. El servicio expone isIgnoringBatteryOptimizations y mayBeBatteryRestricted; el provider expone el segundo para futuras indicaciones de UI.
 
-Detalle crítico: Android puede permitir alarmas exactas a una app exenta de batería incluso sin el permiso explícito. El plugin original 11.0.2 elegía setAlarmClock en ese caso tanto al destruir servicio como al quitar de recientes. Por eso se conserva localmente con un parche mínimo a alarmas INEXACTAS. No se solicita eludir Doze; no se añaden wake locks (se conserva la configuración ya existente del FGS) ni wifi locks.
+Detalle crítico: Android puede permitir alarmas exactas a una app exenta de batería incluso sin el permiso explícito. El plugin original 11.0.2 elegía setAlarmClock en ese caso tanto al destruir servicio como al quitar de recientes. Por eso Gradle aplica un parche minimo sobre una copia Android generada, usando solo alarmas INEXACTAS; el paquete sigue resolviendo desde pub.dev. No se solicita eludir Doze; no se añaden wake locks (se conserva la configuración ya existente del FGS) ni wifi locks.
 
 Fuentes: [Doze y exclusiones de batería](https://developer.android.com/training/monitoring-device-state/doze-standby), [AlarmManager](https://developer.android.com/reference/android/app/AlarmManager).
 
@@ -113,32 +114,15 @@ Se revisaron controller, servicio, repositorio y autenticación de sesiones. Ses
 
 ## 10. TESTS
 
-Los comandos Flutter se ejecutaron mediante el snapshot del SDK instalado para evitar el wrapper .bat bloqueado por permisos de caché. Equivalente reproducible en PowerShell desde la raíz frontend:
+La validacion vigente, despues de reemplazar el vendoring por el hook de Gradle, esta detallada en [FOREGROUND_TASK_DEPENDENCY.md](FOREGROUND_TASK_DEPENDENCY.md):
 
-```powershell
-$dartSdk = 'C:/Users/Usuario/Documents/flutter/bin/cache/dart-sdk/bin/dart.exe'
-$flutterTool = 'C:/Users/Usuario/Documents/flutter/bin/cache/flutter_tools.snapshot'
-& $dartSdk $flutterTool pub get --offline
-& $dartSdk $flutterTool test --no-pub --reporter expanded
-& $dartSdk $flutterTool analyze --no-pub
-& $dartSdk $flutterTool build apk --debug --no-pub
-```
+- flutter pub get --offline: dependencia hosted 11.0.2.
+- flutter test --no-pub: 179 aprobados, 0 fallidos.
+- flutter analyze --no-pub: sin incidencias en el proyecto completo.
+- flutter build apk --debug --no-pub: APK compilado.
+- Verificacion del manifiesto, bytecode de recuperacion y rechazo de fuentes inesperadas.
 
-| Comando equivalente | Resultado | Tests aprobados/fallidos |
-|---|---|---|
-| flutter pub get --offline | Correcto; cambia solamente el origen de flutter_foreground_task 11.0.2 a path local. | No aplica |
-| flutter test --no-pub --reporter expanded | Suite completa con plugin parcheado: correcta. | 178 / 0 |
-| flutter analyze --no-pub | Sin errores de Bond; 4 avisos info de APIs deprecadas en Dart original del plugin copiado (WillPopScope y Color.red/green/blue). | No aplica |
-| flutter analyze --no-pub lib test | Sin incidencias. | No aplica |
-| flutter build apk --debug --no-pub | Correcto con plugin nativo parcheado; APK en build/app/outputs/flutter-apk/app-debug.apk. | No aplica |
-
-Se inspeccionó además el bytecode compilado de RestartReceiver$Companion con javap: invoca AlarmManager.set y no setAlarmClock/setExact.
-
-Los cuatro avisos del plugin se conservaron visibles, sin silenciarlos ni modificar APIs ajenas al parche. El intento inicial de flutter --version mediante wrapper quedó bloqueado por su caché y se canceló; se utilizó el snapshot para las validaciones. Un primer intento de format desde el directorio padre no encontró rutas; se repitió correctamente dentro del frontend.
-
-Se ejecutó dart format únicamente sobre los archivos Dart modificados/nuevos. Iteraciones intermedias detectaron y corrigieron mocks desactualizados, un argumento obsoleto, lints y temporización de los tests: ubicación+logout 32/6; ubicación+auth 36/8 (incluye errores de carga); TaskHandler 12/2 y luego 14/0; ubicación+auth 72/1 y luego 76/0; suite completa previa al parche nativo 177/0. No se consideran satisfactorias las iteraciones fallidas. Backend sin cambios: no se ejecutó npm test.
-
-No se ejecutaron pruebas integradas en un teléfono físico. Compilar APK y pasar unit/widget tests no verifica por sí solo reboot, Doze o políticas OEM. El build avisa sobre Kotlin Gradle Plugin de firebase_core para futuras versiones de Flutter; no impidió compilar.
+No se ejecutaron pruebas integradas en un telefono fisico. Compilar APK y pasar tests no verifica por si solo reboot, Doze o politicas OEM. El build conserva el aviso previo de firebase_core/Kotlin sobre futuras versiones de Flutter.
 
 ## 11. PRUEBAS MANUALES
 
@@ -246,109 +230,6 @@ El sistema puede mantener activa una app con FGS. Registrar lo observado; no asu
 6. Serialización y guards frente a concurrencia y logout.
 7. Detención por sesión, permiso o sharing inválidos y veto local persistente.
 8. Controles explícitos, disclosure y batería manual opcional.
-9. Misma versión del plugin con parche local para usar sólo alarmas de recuperación inexactas.
+9. Misma version hosted del plugin con parche reproducible de Gradle para usar solo alarmas de recuperacion inexactas.
 10. Backend y contratos intactos; tests, análisis, APK y protocolo manual documentados.
 
-## Inventario individual de la dependencia local
-
-Las rutas siguientes son relativas a `third_party/flutter_foreground_task/`. Son copias nuevas respecto del proyecto Bond. Salvo RestartReceiver.kt y BOND_PATCH.md, su contenido se conserva idéntico al origen local.
-
-| Ruta | Finalidad |
-|---|---|
-| `analysis_options.yaml` | Metadatos, licencia o documentacion original preservados. |
-| `android/build.gradle` | Implementacion/configuracion Android original, sin cambios. |
-| `android/gradle/wrapper/gradle-wrapper.properties` | Implementacion/configuracion Android original, sin cambios. |
-| `android/gradle.properties` | Implementacion/configuracion Android original, sin cambios. |
-| `android/settings.gradle` | Implementacion/configuracion Android original, sin cambios. |
-| `android/src/main/AndroidManifest.xml` | Implementacion/configuracion Android original, sin cambios. |
-| `android/src/main/kotlin/com/pravera/flutter_foreground_task/errors/ActivityNotAttachedException.kt` | Implementacion/configuracion Android original, sin cambios. |
-| `android/src/main/kotlin/com/pravera/flutter_foreground_task/errors/NotSupportedException.kt` | Implementacion/configuracion Android original, sin cambios. |
-| `android/src/main/kotlin/com/pravera/flutter_foreground_task/errors/PermissionRequestCancelledException.kt` | Implementacion/configuracion Android original, sin cambios. |
-| `android/src/main/kotlin/com/pravera/flutter_foreground_task/errors/ServiceAlreadyStartedException.kt` | Implementacion/configuracion Android original, sin cambios. |
-| `android/src/main/kotlin/com/pravera/flutter_foreground_task/errors/ServiceNotStartedException.kt` | Implementacion/configuracion Android original, sin cambios. |
-| `android/src/main/kotlin/com/pravera/flutter_foreground_task/FlutterForegroundTaskLifecycleListener.kt` | Implementacion/configuracion Android original, sin cambios. |
-| `android/src/main/kotlin/com/pravera/flutter_foreground_task/FlutterForegroundTaskPlugin.kt` | Implementacion/configuracion Android original, sin cambios. |
-| `android/src/main/kotlin/com/pravera/flutter_foreground_task/FlutterForegroundTaskPluginChannel.kt` | Implementacion/configuracion Android original, sin cambios. |
-| `android/src/main/kotlin/com/pravera/flutter_foreground_task/FlutterForegroundTaskStarter.kt` | Implementacion/configuracion Android original, sin cambios. |
-| `android/src/main/kotlin/com/pravera/flutter_foreground_task/MethodCallHandlerImpl.kt` | Implementacion/configuracion Android original, sin cambios. |
-| `android/src/main/kotlin/com/pravera/flutter_foreground_task/models/ForegroundServiceAction.kt` | Implementacion/configuracion Android original, sin cambios. |
-| `android/src/main/kotlin/com/pravera/flutter_foreground_task/models/ForegroundServiceStatus.kt` | Implementacion/configuracion Android original, sin cambios. |
-| `android/src/main/kotlin/com/pravera/flutter_foreground_task/models/ForegroundServiceTypes.kt` | Implementacion/configuracion Android original, sin cambios. |
-| `android/src/main/kotlin/com/pravera/flutter_foreground_task/models/ForegroundTaskData.kt` | Implementacion/configuracion Android original, sin cambios. |
-| `android/src/main/kotlin/com/pravera/flutter_foreground_task/models/ForegroundTaskEventAction.kt` | Implementacion/configuracion Android original, sin cambios. |
-| `android/src/main/kotlin/com/pravera/flutter_foreground_task/models/ForegroundTaskEventType.kt` | Implementacion/configuracion Android original, sin cambios. |
-| `android/src/main/kotlin/com/pravera/flutter_foreground_task/models/ForegroundTaskOptions.kt` | Implementacion/configuracion Android original, sin cambios. |
-| `android/src/main/kotlin/com/pravera/flutter_foreground_task/models/NotificationButton.kt` | Implementacion/configuracion Android original, sin cambios. |
-| `android/src/main/kotlin/com/pravera/flutter_foreground_task/models/NotificationContent.kt` | Implementacion/configuracion Android original, sin cambios. |
-| `android/src/main/kotlin/com/pravera/flutter_foreground_task/models/NotificationIcon.kt` | Implementacion/configuracion Android original, sin cambios. |
-| `android/src/main/kotlin/com/pravera/flutter_foreground_task/models/NotificationOptions.kt` | Implementacion/configuracion Android original, sin cambios. |
-| `android/src/main/kotlin/com/pravera/flutter_foreground_task/models/NotificationPermission.kt` | Implementacion/configuracion Android original, sin cambios. |
-| `android/src/main/kotlin/com/pravera/flutter_foreground_task/PreferencesKey.kt` | Implementacion/configuracion Android original, sin cambios. |
-| `android/src/main/kotlin/com/pravera/flutter_foreground_task/RequestCode.kt` | Implementacion/configuracion Android original, sin cambios. |
-| `android/src/main/kotlin/com/pravera/flutter_foreground_task/service/ForegroundService.kt` | Implementacion/configuracion Android original, sin cambios. |
-| `android/src/main/kotlin/com/pravera/flutter_foreground_task/service/ForegroundServiceManager.kt` | Implementacion/configuracion Android original, sin cambios. |
-| `android/src/main/kotlin/com/pravera/flutter_foreground_task/service/ForegroundTask.kt` | Implementacion/configuracion Android original, sin cambios. |
-| `android/src/main/kotlin/com/pravera/flutter_foreground_task/service/ForegroundTaskLifecycleListeners.kt` | Implementacion/configuracion Android original, sin cambios. |
-| `android/src/main/kotlin/com/pravera/flutter_foreground_task/service/NotificationPermissionCallback.kt` | Implementacion/configuracion Android original, sin cambios. |
-| `android/src/main/kotlin/com/pravera/flutter_foreground_task/service/NotificationPermissionManager.kt` | Implementacion/configuracion Android original, sin cambios. |
-| `android/src/main/kotlin/com/pravera/flutter_foreground_task/service/RebootReceiver.kt` | Implementacion/configuracion Android original, sin cambios. |
-| `android/src/main/kotlin/com/pravera/flutter_foreground_task/service/RestartReceiver.kt` | Parche nativo: recuperacion siempre inexacta. |
-| `android/src/main/kotlin/com/pravera/flutter_foreground_task/service/ServiceProvider.kt` | Implementacion/configuracion Android original, sin cambios. |
-| `android/src/main/kotlin/com/pravera/flutter_foreground_task/utils/ErrorHandleUtils.kt` | Implementacion/configuracion Android original, sin cambios. |
-| `android/src/main/kotlin/com/pravera/flutter_foreground_task/utils/ForegroundServiceUtils.kt` | Implementacion/configuracion Android original, sin cambios. |
-| `android/src/main/kotlin/com/pravera/flutter_foreground_task/utils/PluginUtils.kt` | Implementacion/configuracion Android original, sin cambios. |
-| `android/src/main/kotlin/com/pravera/flutter_foreground_task/utils/TrackVisibilityUtils.kt` | Implementacion/configuracion Android original, sin cambios. |
-| `BOND_PATCH.md` | Documentacion del parche de Bond. |
-| `CHANGELOG.md` | Metadatos, licencia o documentacion original preservados. |
-| `ios/flutter_foreground_task/Classes/FlutterForegroundTaskPlugin.h` | Implementacion/metadatos iOS originales preservados; Bond usa Android. |
-| `ios/flutter_foreground_task/Classes/FlutterForegroundTaskPlugin.m` | Implementacion/metadatos iOS originales preservados; Bond usa Android. |
-| `ios/flutter_foreground_task/Package.swift` | Implementacion/metadatos iOS originales preservados; Bond usa Android. |
-| `ios/flutter_foreground_task/Sources/flutter_foreground_task/errors/ServiceError.swift` | Implementacion/metadatos iOS originales preservados; Bond usa Android. |
-| `ios/flutter_foreground_task/Sources/flutter_foreground_task/FlutterForegroundTaskLifecycleListener.swift` | Implementacion/metadatos iOS originales preservados; Bond usa Android. |
-| `ios/flutter_foreground_task/Sources/flutter_foreground_task/FlutterForegroundTaskPluginSPMBridge.swift` | Implementacion/metadatos iOS originales preservados; Bond usa Android. |
-| `ios/flutter_foreground_task/Sources/flutter_foreground_task/FlutterForegroundTaskStarter.swift` | Implementacion/metadatos iOS originales preservados; Bond usa Android. |
-| `ios/flutter_foreground_task/Sources/flutter_foreground_task/models/BackgroundServiceAction.swift` | Implementacion/metadatos iOS originales preservados; Bond usa Android. |
-| `ios/flutter_foreground_task/Sources/flutter_foreground_task/models/BackgroundServiceStatus.swift` | Implementacion/metadatos iOS originales preservados; Bond usa Android. |
-| `ios/flutter_foreground_task/Sources/flutter_foreground_task/models/ForegroundTaskData.swift` | Implementacion/metadatos iOS originales preservados; Bond usa Android. |
-| `ios/flutter_foreground_task/Sources/flutter_foreground_task/models/ForegroundTaskEventAction.swift` | Implementacion/metadatos iOS originales preservados; Bond usa Android. |
-| `ios/flutter_foreground_task/Sources/flutter_foreground_task/models/ForegroundTaskEventType.swift` | Implementacion/metadatos iOS originales preservados; Bond usa Android. |
-| `ios/flutter_foreground_task/Sources/flutter_foreground_task/models/ForegroundTaskOptions.swift` | Implementacion/metadatos iOS originales preservados; Bond usa Android. |
-| `ios/flutter_foreground_task/Sources/flutter_foreground_task/models/NotificationButton.swift` | Implementacion/metadatos iOS originales preservados; Bond usa Android. |
-| `ios/flutter_foreground_task/Sources/flutter_foreground_task/models/NotificationContent.swift` | Implementacion/metadatos iOS originales preservados; Bond usa Android. |
-| `ios/flutter_foreground_task/Sources/flutter_foreground_task/models/NotificationOptions.swift` | Implementacion/metadatos iOS originales preservados; Bond usa Android. |
-| `ios/flutter_foreground_task/Sources/flutter_foreground_task/models/NotificationPermission.swift` | Implementacion/metadatos iOS originales preservados; Bond usa Android. |
-| `ios/flutter_foreground_task/Sources/flutter_foreground_task/PreferencesKey.swift` | Implementacion/metadatos iOS originales preservados; Bond usa Android. |
-| `ios/flutter_foreground_task/Sources/flutter_foreground_task/service/BackgroundService.swift` | Implementacion/metadatos iOS originales preservados; Bond usa Android. |
-| `ios/flutter_foreground_task/Sources/flutter_foreground_task/service/BackgroundServiceManager.swift` | Implementacion/metadatos iOS originales preservados; Bond usa Android. |
-| `ios/flutter_foreground_task/Sources/flutter_foreground_task/service/ForegroundTask.swift` | Implementacion/metadatos iOS originales preservados; Bond usa Android. |
-| `ios/flutter_foreground_task/Sources/flutter_foreground_task/service/ForegroundTaskLifecycleListeners.swift` | Implementacion/metadatos iOS originales preservados; Bond usa Android. |
-| `ios/flutter_foreground_task/Sources/flutter_foreground_task/service/NotificationPermissionManager.swift` | Implementacion/metadatos iOS originales preservados; Bond usa Android. |
-| `ios/flutter_foreground_task/Sources/flutter_foreground_task/SwiftFlutterForegroundTaskPlugin.swift` | Implementacion/metadatos iOS originales preservados; Bond usa Android. |
-| `ios/flutter_foreground_task/Sources/flutter_foreground_task_early_registration/Flutterforegroundtaskearlyregistration.m` | Implementacion/metadatos iOS originales preservados; Bond usa Android. |
-| `ios/flutter_foreground_task/Sources/flutter_foreground_task_early_registration/include/flutter_foreground_task_early_registration/Flutterforegroundtaskearlyregistration.h` | Implementacion/metadatos iOS originales preservados; Bond usa Android. |
-| `ios/flutter_foreground_task.podspec` | Implementacion/metadatos iOS originales preservados; Bond usa Android. |
-| `lib/errors/service_already_started_exception.dart` | API Dart original, sin cambios. |
-| `lib/errors/service_not_initialized_exception.dart` | API Dart original, sin cambios. |
-| `lib/errors/service_not_started_exception.dart` | API Dart original, sin cambios. |
-| `lib/errors/service_timeout_exception.dart` | API Dart original, sin cambios. |
-| `lib/flutter_foreground_task.dart` | API Dart original, sin cambios. |
-| `lib/flutter_foreground_task_method_channel.dart` | API Dart original, sin cambios. |
-| `lib/flutter_foreground_task_platform_interface.dart` | API Dart original, sin cambios. |
-| `lib/models/foreground_service_types.dart` | API Dart original, sin cambios. |
-| `lib/models/foreground_task_event_action.dart` | API Dart original, sin cambios. |
-| `lib/models/foreground_task_options.dart` | API Dart original, sin cambios. |
-| `lib/models/notification_button.dart` | API Dart original, sin cambios. |
-| `lib/models/notification_channel_importance.dart` | API Dart original, sin cambios. |
-| `lib/models/notification_icon.dart` | API Dart original, sin cambios. |
-| `lib/models/notification_options.dart` | API Dart original, sin cambios. |
-| `lib/models/notification_permission.dart` | API Dart original, sin cambios. |
-| `lib/models/notification_priority.dart` | API Dart original, sin cambios. |
-| `lib/models/notification_visibility.dart` | API Dart original, sin cambios. |
-| `lib/models/service_options.dart` | API Dart original, sin cambios. |
-| `lib/models/service_request_result.dart` | API Dart original, sin cambios. |
-| `lib/task_handler.dart` | API Dart original, sin cambios. |
-| `lib/ui/with_foreground_task.dart` | API Dart original, sin cambios. |
-| `lib/utils/color_extension.dart` | API Dart original, sin cambios. |
-| `lib/utils/utility.dart` | API Dart original, sin cambios. |
-| `LICENSE` | Metadatos, licencia o documentacion original preservados. |
-| `pubspec.yaml` | Metadatos, licencia o documentacion original preservados. |

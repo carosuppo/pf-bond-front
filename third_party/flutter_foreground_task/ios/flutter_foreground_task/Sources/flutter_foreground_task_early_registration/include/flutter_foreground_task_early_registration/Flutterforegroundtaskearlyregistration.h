@@ -1,6 +1,0 @@
-#ifndef FlutterForegroundTaskEarlyRegistration_h
-#define FlutterForegroundTaskEarlyRegistration_h
-
-extern void flutter_foreground_task_register_app_refresh(void);
-
-#endif
