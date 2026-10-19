@@ -28,6 +28,7 @@ class PushNotificationService {
   final AppPreferencesService _preferencesService;
   final FlutterLocalNotificationsPlugin _localNotifications;
   final Future<void> Function(PushNotificationData data)? onOpened;
+  final Future<void> Function(PushNotificationData data)? onReceived;
 
   StreamSubscription<String>? _tokenRefreshSubscription;
   StreamSubscription<RemoteMessage>? _foregroundSubscription;
@@ -40,6 +41,7 @@ class PushNotificationService {
     this._preferencesService, {
     FlutterLocalNotificationsPlugin? localNotifications,
     this.onOpened,
+    this.onReceived,
   }) : _localNotifications =
            localNotifications ?? FlutterLocalNotificationsPlugin();
 
@@ -134,6 +136,7 @@ class PushNotificationService {
   Future<void> _showForegroundNotification(RemoteMessage message) async {
     final notification = message.notification;
     if (notification == null) return;
+    final data = PushNotificationData.fromMap(message.data);
 
     await _localNotifications.show(
       id: notification.hashCode,
@@ -153,6 +156,17 @@ class PushNotificationService {
       ),
       payload: jsonEncode(message.data),
     );
+
+    if (data.groupId != null) {
+      final handler = onReceived;
+      if (handler != null) {
+        try {
+          await handler(data);
+        } catch (error) {
+          debugPrint('No se pudo actualizar la solicitud de grupo: $error');
+        }
+      }
+    }
   }
 
   Future<AuthorizationStatus> getPermissionStatus() async {

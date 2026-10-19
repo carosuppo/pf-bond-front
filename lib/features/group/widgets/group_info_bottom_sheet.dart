@@ -99,6 +99,9 @@ class _GroupInfoBottomSheetState extends State<GroupInfoBottomSheet> {
           member.idUser == authProvider.authResponse?.user.id &&
           member.role == RoleEnum.admin,
     );
+    final isCurrentUserMember = displayedGroup.members.any(
+      (member) => member.idUser == authProvider.authResponse?.user.id,
+    );
     final adminCount = displayedGroup.members
         .where((member) => member.role == RoleEnum.admin)
         .length;
@@ -333,16 +336,159 @@ class _GroupInfoBottomSheetState extends State<GroupInfoBottomSheet> {
                   ],
                 ),
               ),
+              if (isCurrentUserMember) ...[
+                const SizedBox(height: 12),
+                _LeaveGroupButton(
+                  group: displayedGroup,
+                  isLoading: groupProvider.isLoading,
+                ),
+              ],
             ],
             if (widget.bottomContent != null) ...[
               const SizedBox(height: 24),
               widget.bottomContent!,
+            ],
+            if (isCurrentUserAdmin) ...[
+              const SizedBox(height: 24),
+              SizedBox(
+                width: double.infinity,
+                child: OutlinedButton.icon(
+                  key: const Key('delete-group-button'),
+                  onPressed: groupProvider.isLoading
+                      ? null
+                      : () => _confirmDelete(
+                          context,
+                          displayedGroup,
+                          isCurrentUserAdmin,
+                        ),
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: AppColors.error,
+                    side: const BorderSide(color: AppColors.error),
+                  ),
+                  icon: const Icon(Icons.delete_outline_rounded),
+                  label: const Text('Eliminar grupo'),
+                ),
+              ),
             ],
           ],
         ),
       ),
     );
   }
+
+  Future<void> _confirmDelete(
+    BuildContext context,
+    GetGroupResponseModel group,
+    bool isCurrentUserAdmin,
+  ) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Eliminar grupo'),
+        content: Text(
+          '¿Querés eliminar "${group.name}"? Se removerá a todos sus miembros y esta acción es definitiva.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(false),
+            child: const Text('Cancelar'),
+          ),
+          FilledButton(
+            style: FilledButton.styleFrom(backgroundColor: AppColors.error),
+            onPressed: () => Navigator.of(dialogContext).pop(true),
+            child: const Text('Eliminar'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed != true || !context.mounted) {
+      return;
+    }
+
+    final groupProvider = context.read<GroupProvider>();
+    final scaffoldMessenger = ScaffoldMessenger.of(context);
+    final success = await groupProvider.deleteGroup(
+      groupId: group.id,
+      isCurrentUserAdmin: isCurrentUserAdmin,
+    );
+
+    if (success) {
+      scaffoldMessenger
+        ..hideCurrentSnackBar()
+        ..showSnackBar(
+          const SnackBar(content: Text('Grupo eliminado correctamente.')),
+        );
+      return;
+    }
+
+    if (!context.mounted) {
+      return;
+    }
+
+    scaffoldMessenger
+      ..hideCurrentSnackBar()
+      ..showSnackBar(
+        SnackBar(
+          content: Text(
+            groupProvider.errorMessage ?? 'No se pudo eliminar el grupo.',
+          ),
+        ),
+      );
+  }
+}
+
+Future<void> _confirmLeaveGroup(
+  BuildContext context,
+  GetGroupResponseModel group,
+) async {
+  final isOnlyMember = group.members.length == 1;
+  final confirmed = await showDialog<bool>(
+    context: context,
+    builder: (dialogContext) => AlertDialog(
+      title: const Text('Abandonar grupo'),
+      content: Text(
+        isOnlyMember
+            ? 'Sos el único miembro. Si abandonás "${group.name}", el grupo y su información se eliminarán automáticamente y su código de invitación dejará de ser válido.'
+            : '¿Querés abandonar "${group.name}"? Dejarás de tener acceso a su información y funcionalidades.',
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.of(dialogContext).pop(false),
+          child: const Text('Cancelar'),
+        ),
+        FilledButton(
+          style: FilledButton.styleFrom(backgroundColor: AppColors.error),
+          onPressed: () => Navigator.of(dialogContext).pop(true),
+          child: const Text('Abandonar'),
+        ),
+      ],
+    ),
+  );
+
+  if (confirmed != true || !context.mounted) {
+    return;
+  }
+
+  final groupProvider = context.read<GroupProvider>();
+  final scaffoldMessenger = ScaffoldMessenger.of(context);
+  final success = await groupProvider.leaveGroup(group.id);
+
+  if (!context.mounted) {
+    return;
+  }
+
+  scaffoldMessenger
+    ..hideCurrentSnackBar()
+    ..showSnackBar(
+      SnackBar(
+        content: Text(
+          success
+              ? 'Abandonaste el grupo.'
+              : groupProvider.errorMessage ?? 'No se pudo abandonar el grupo.',
+        ),
+      ),
+    );
 }
 
 class _GroupImage extends StatelessWidget {
@@ -434,6 +580,9 @@ class GroupMembersBottomSheet extends StatelessWidget {
           member.idUser == authProvider.authResponse?.user.id &&
           member.role == RoleEnum.admin,
     );
+    final isCurrentUserMember = displayedGroup.members.any(
+      (member) => member.idUser == authProvider.authResponse?.user.id,
+    );
     final adminCount = displayedGroup.members
         .where((member) => member.role == RoleEnum.admin)
         .length;
@@ -446,35 +595,48 @@ class GroupMembersBottomSheet extends StatelessWidget {
           builder: (context, constraints) {
             final cardWidth = (constraints.maxWidth - 12) / 2;
 
-            return Wrap(
-              alignment: WrapAlignment.center,
-              spacing: 12,
-              runSpacing: 12,
+            return Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                for (final member in displayedGroup.members)
-                  SizedBox(
-                    width: cardWidth,
-                    height: 170,
-                    child: _MemberListItem(
-                      member: member,
-                      isCurrentUser:
-                          member.idUser == authProvider.authResponse?.user.id,
-                      isCurrentUserAdmin: isCurrentUserAdmin,
-                      isOnlyAdmin: adminCount == 1,
-                      isLoading: groupProvider.isLoading,
-                      onRemove:
-                          isCurrentUserAdmin &&
-                              member.idUser !=
-                                  authProvider.authResponse?.user.id
-                          ? () => _confirmRemove(
-                              context,
-                              member.name,
-                              member.id,
-                              isCurrentUserAdmin,
-                            )
-                          : null,
-                    ),
+                Wrap(
+                  alignment: WrapAlignment.center,
+                  spacing: 12,
+                  runSpacing: 12,
+                  children: [
+                    for (final member in displayedGroup.members)
+                      SizedBox(
+                        width: cardWidth,
+                        height: 170,
+                        child: _MemberListItem(
+                          member: member,
+                          isCurrentUser:
+                              member.idUser ==
+                              authProvider.authResponse?.user.id,
+                          isCurrentUserAdmin: isCurrentUserAdmin,
+                          isOnlyAdmin: adminCount == 1,
+                          isLoading: groupProvider.isLoading,
+                          onRemove:
+                              isCurrentUserAdmin &&
+                                  member.idUser !=
+                                      authProvider.authResponse?.user.id
+                              ? () => _confirmRemove(
+                                  context,
+                                  member.name,
+                                  member.id,
+                                  isCurrentUserAdmin,
+                                )
+                              : null,
+                        ),
+                      ),
+                  ],
+                ),
+                if (isCurrentUserMember) ...[
+                  const SizedBox(height: 16),
+                  _LeaveGroupButton(
+                    group: displayedGroup,
+                    isLoading: groupProvider.isLoading,
                   ),
+                ],
               ],
             );
           },
@@ -551,6 +713,31 @@ class _GroupSectionCard extends StatelessWidget {
         border: Border.all(color: AppColors.border),
       ),
       child: child,
+    );
+  }
+}
+
+class _LeaveGroupButton extends StatelessWidget {
+  final GetGroupResponseModel group;
+  final bool isLoading;
+
+  const _LeaveGroupButton({required this.group, required this.isLoading});
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      width: double.infinity,
+      child: OutlinedButton.icon(
+        key: const Key('leave-group-button'),
+        onPressed: isLoading ? null : () => _confirmLeaveGroup(context, group),
+        style: OutlinedButton.styleFrom(
+          foregroundColor: Colors.white,
+          backgroundColor: AppColors.error,
+          side: const BorderSide(color: AppColors.error),
+        ),
+        icon: const Icon(Icons.exit_to_app_rounded),
+        label: const Text('Abandonar grupo'),
+      ),
     );
   }
 }

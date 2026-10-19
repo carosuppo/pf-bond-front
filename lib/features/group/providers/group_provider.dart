@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:math';
 
 import 'package:flutter/material.dart';
@@ -143,17 +144,21 @@ class GroupProvider extends ChangeNotifier {
     try {
       final request = JoinGroupRequest(invitationCode: invitationCode);
 
-      final joinedGroup = await _groupService.joinGroup(request: request);
+      final joinRequest = await _groupService.joinGroup(request: request);
       if (sessionVersion != _sessionVersion) return false;
-      joinResponse = joinedGroup;
+      joinResponse = joinRequest;
 
       return true;
     } catch (error) {
       if (sessionVersion != _sessionVersion) return false;
       if (error is ApiException) {
         joinErrorStatusCode = error.statusCode;
+        errorMessage = error.statusCode == 404
+            ? 'No se pudo enviar la solicitud. Actualiza la aplicación y vuelve a intentarlo.'
+            : error.toString().replaceFirst('Exception: ', '');
+      } else {
+        errorMessage = error.toString().replaceFirst('Exception: ', '');
       }
-      errorMessage = error.toString().replaceFirst('Exception: ', '');
 
       return false;
     } finally {
@@ -287,6 +292,124 @@ class GroupProvider extends ChangeNotifier {
       if (sessionVersion != _sessionVersion) return false;
       errorMessage = error.toString().replaceFirst('Exception: ', '');
 
+      return false;
+    } finally {
+      if (sessionVersion == _sessionVersion) {
+        isLoading = false;
+        notifyListeners();
+      }
+    }
+  }
+
+  Future<bool> deleteGroup({
+    required int groupId,
+    required bool isCurrentUserAdmin,
+  }) async {
+    if (!isCurrentUserAdmin) {
+      errorMessage = 'Solo los administradores pueden eliminar el grupo.';
+      notifyListeners();
+      return false;
+    }
+
+    final sessionVersion = _sessionVersion;
+    isLoading = true;
+    errorMessage = null;
+    notifyListeners();
+
+    try {
+      await _groupService.deleteGroup(groupId: groupId);
+      if (sessionVersion != _sessionVersion) return false;
+      _applyDeletedGroup(groupId);
+      return true;
+    } catch (error) {
+      if (sessionVersion != _sessionVersion) return false;
+      errorMessage = error.toString().replaceFirst('Exception: ', '');
+      return false;
+    } finally {
+      if (sessionVersion == _sessionVersion) {
+        isLoading = false;
+        notifyListeners();
+      }
+    }
+  }
+
+  void handleGroupDeleted(int groupId) {
+    _applyDeletedGroup(groupId);
+    notifyListeners();
+  }
+
+  void _applyDeletedGroup(int groupId) {
+    groups = groups.where((group) => group.id != groupId).toList();
+
+    if (activeGroup?.id == groupId) {
+      activeGroup = null;
+      unawaited(_clearActiveGroupPreference(groupId));
+    }
+
+    if (groupDetails?.id == groupId) {
+      groupDetails = null;
+    }
+  }
+
+  Future<void> _clearActiveGroupPreference(int groupId) async {
+    try {
+      if (await _preferencesService.getActiveGroupId() == groupId) {
+        await _preferencesService.clearActiveGroupId();
+      }
+    } catch (error) {
+      debugPrint('No se pudo limpiar el grupo activo guardado: $error');
+    }
+  }
+
+  Future<bool> leaveGroupForLocationPermission(int groupId) {
+    return leaveGroup(groupId);
+  }
+
+  Future<bool> leaveGroup(int groupId) async {
+    final sessionVersion = _sessionVersion;
+    isLoading = true;
+    errorMessage = null;
+    notifyListeners();
+
+    try {
+      await _groupService.leaveGroup(groupId: groupId);
+      if (sessionVersion != _sessionVersion) return false;
+
+      groups = await _groupService.getGroups();
+      if (sessionVersion != _sessionVersion) return false;
+
+      if (activeGroup?.id == groupId || activeGroup == null) {
+        groupDetails = null;
+        activeGroup = groups.isEmpty ? null : groups.first;
+
+        if (activeGroup == null) {
+          try {
+            await _preferencesService.clearActiveGroupId();
+          } catch (error) {
+            debugPrint('No se pudo limpiar el grupo activo guardado: $error');
+          }
+        } else {
+          try {
+            await _saveActiveGroupId(activeGroup!.id);
+          } catch (error) {
+            debugPrint('No se pudo guardar el grupo activo: $error');
+          }
+          if (sessionVersion != _sessionVersion) return false;
+
+          try {
+            groupDetails = await _groupService.getGroup(
+              groupId: activeGroup!.id,
+            );
+          } catch (_) {
+            groupDetails = null;
+          }
+        }
+      }
+
+      return true;
+    } catch (_) {
+      if (sessionVersion != _sessionVersion) return false;
+      errorMessage = 'No se pudo salir del grupo. Intentá de nuevo.';
       return false;
     } finally {
       if (sessionVersion == _sessionVersion) {

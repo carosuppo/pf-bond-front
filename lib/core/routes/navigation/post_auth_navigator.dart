@@ -41,8 +41,15 @@ class PostAuthNavigator {
       if (invitationResult.openedGroup) {
         await locationNotifier.restoreSharingAndTracking();
         if (!context.mounted) return;
-        navigation.pushNamedAndRemoveUntil(AppRoutes.map, (_) => false);
-        _showMessage(invitationResult.message);
+        navigation.pushNamedAndRemoveUntil(
+          groupProvider.groups.isEmpty ? AppRoutes.groups : AppRoutes.map,
+          (_) => false,
+        );
+        if (groupProvider.groups.any(
+          (group) => group.id == invitationResult.groupId,
+        )) {
+          _showMessage(invitationResult.message);
+        }
         return;
       }
 
@@ -68,7 +75,9 @@ class PostAuthNavigator {
 
     if (!context.mounted) return;
 
-    navigation.pushReplacementNamed(AppRoutes.map);
+    navigation.pushReplacementNamed(
+      groupProvider.groups.isEmpty ? AppRoutes.groups : AppRoutes.map,
+    );
     markAppReady();
     await openPendingEventReminder();
     _showMessage(deferredMessage);

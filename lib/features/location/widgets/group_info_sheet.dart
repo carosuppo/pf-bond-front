@@ -1,10 +1,13 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 
 import '../../../core/theme/app_colors.dart';
 import '../../group/models/get_group_model.response.dart';
 import '../../group/models/get_member_info_model.response.dart';
+import '../../group/providers/group_provider.dart';
 import '../../group/widgets/group_info_bottom_sheet.dart';
 import '../../group/widgets/member_info_bottom_sheet.dart';
+import '../../point_of_interest/widgets/point_of_interest_marker_icon.dart';
 
 enum _GroupSheetSection { overview, members, points }
 
@@ -106,7 +109,7 @@ class _GroupInfoSheetState extends State<GroupInfoSheet> {
                           scrollController: scrollController,
                           bottomContent: widget.pointsContent,
                         )
-                      : _buildSection(scrollController),
+                      : _buildSection(context, scrollController),
                 ),
               ],
             ),
@@ -116,7 +119,10 @@ class _GroupInfoSheetState extends State<GroupInfoSheet> {
     );
   }
 
-  Widget _buildSection(ScrollController scrollController) {
+  Widget _buildSection(
+    BuildContext context,
+    ScrollController scrollController,
+  ) {
     switch (_section) {
       case _GroupSheetSection.overview:
         return GroupInfoBottomSheet(
@@ -126,7 +132,13 @@ class _GroupInfoSheetState extends State<GroupInfoSheet> {
           bottomContent: _GroupSectionMenu(
             membersCount: widget.group.members.length,
             pointsCount: widget.pointsCount,
-            onMembersTap: () {
+            onMembersTap: () async {
+              await context.read<GroupProvider>().getGroupDetails(
+                groupId: widget.group.id,
+              );
+              if (!mounted) {
+                return;
+              }
               setState(() {
                 _section = _GroupSheetSection.members;
               });
@@ -142,7 +154,7 @@ class _GroupInfoSheetState extends State<GroupInfoSheet> {
       case _GroupSheetSection.members:
         return _GroupSectionPage(
           title: 'Miembros',
-          icon: Icons.group_rounded,
+          icon: const Icon(Icons.group_rounded),
           count: widget.group.members.length,
           onBack: _showOverview,
           child: GroupMembersBottomSheet(
@@ -153,7 +165,7 @@ class _GroupInfoSheetState extends State<GroupInfoSheet> {
       case _GroupSheetSection.points:
         return _GroupSectionPage(
           title: 'Puntos de interés',
-          icon: Icons.flag_rounded,
+          icon: const PointOfInterestMarkerIcon(color: AppColors.primary),
           count: widget.pointsCount,
           onBack: _showOverview,
           child: SingleChildScrollView(
@@ -205,7 +217,7 @@ class _GroupSectionMenu extends StatelessWidget {
         ),
         ListTile(
           contentPadding: EdgeInsets.zero,
-          leading: const Icon(Icons.flag_rounded, color: AppColors.primary),
+          leading: const PointOfInterestMarkerIcon(color: AppColors.primary),
           title: Row(
             children: [
               const Text('Puntos de interés'),
@@ -223,7 +235,7 @@ class _GroupSectionMenu extends StatelessWidget {
 
 class _GroupSectionPage extends StatelessWidget {
   final String title;
-  final IconData icon;
+  final Widget icon;
   final int count;
   final VoidCallback onBack;
   final Widget child;
@@ -248,7 +260,7 @@ class _GroupSectionPage extends StatelessWidget {
                 onPressed: onBack,
                 icon: const Icon(Icons.arrow_back_rounded),
               ),
-              Icon(icon, color: AppColors.primary),
+              icon,
               const SizedBox(width: 8),
               Text(
                 title,

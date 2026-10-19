@@ -1,4 +1,5 @@
 import '../models/notification_preferences.dart';
+import '../models/group_inbox_notification.dart';
 import '../../../core/network/api_client.dart';
 
 class NotificationApiService {
@@ -10,6 +11,23 @@ class NotificationApiService {
       NotificationPreferences.fromJson(
         await _apiClient.authenticatedGet('/notification/preferences'),
       );
+
+  Future<List<GroupInboxNotification>> getInbox() async {
+    final response = await _apiClient.authenticatedGetList(
+      '/notification/inbox',
+    );
+    return response
+        .map(GroupInboxNotification.fromJson)
+        .toList(growable: false);
+  }
+
+  Future<void> markInboxNotificationRead(int notificationId) async {
+    await _apiClient.authenticatedPatch(
+      '/notification/inbox/$notificationId/read',
+      <String, dynamic>{},
+    );
+  }
+
   Future<void> setGlobalPreference(bool enabled) async {
     await _apiClient.authenticatedPatch('/notification/preferences/global', {
       'enabled': enabled,

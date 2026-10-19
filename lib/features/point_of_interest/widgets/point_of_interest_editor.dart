@@ -11,6 +11,7 @@ import '../../location/services/location_service.dart';
 import '../models/point_of_interest.dart';
 import '../models/point_of_interest_color.dart';
 import '../models/point_of_interest_request.dart';
+import 'point_of_interest_marker_icon.dart';
 
 class PointOfInterestEditor extends StatefulWidget {
   final PointOfInterest? initial;
@@ -547,8 +548,7 @@ class PointOfInterestEditorState extends State<PointOfInterestEditor> {
                         horizontal: 14,
                         vertical: 4,
                       ),
-                      leading: const Icon(
-                        Icons.location_on_outlined,
+                      leading: const PointOfInterestMarkerIcon(
                         color: AppColors.primary,
                       ),
                       title: Text(

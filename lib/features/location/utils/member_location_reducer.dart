@@ -17,6 +17,10 @@ Map<int, MemberLocationModel> reduceMemberLocations(
     return <int, MemberLocationModel>{...current}..remove(event.memberId);
   }
 
+  if (event is MemberLeft && event.groupId == activeGroupId) {
+    return <int, MemberLocationModel>{...current}..remove(event.memberId);
+  }
+
   if (event is MemberLocationHeartbeat && event.groupId == activeGroupId) {
     final member = current[event.memberId];
 

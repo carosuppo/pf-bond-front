@@ -47,11 +47,9 @@ class _JoinGroupFormState extends State<JoinGroupForm> {
       final response = groupProvider.joinResponse;
       final message = response?.alreadyMember == true
           ? 'Ya pertenecés al grupo ${response!.group.name}.'
-          : response?.message ?? 'Ingresaste al grupo correctamente.';
-
-      if (response != null) {
-        await groupProvider.refreshAndSelectGroup(groupId: response.group.id);
-      }
+          : response?.alreadyPending == true
+          ? 'Ya enviaste una solicitud para ingresar a este grupo.'
+          : response?.message ?? 'Tu solicitud fue enviada correctamente.';
 
       if (!mounted) {
         return;
@@ -164,7 +162,7 @@ class _JoinGroupFormState extends State<JoinGroupForm> {
                           const SizedBox(height: 24),
 
                           AppPrimaryButton(
-                            text: 'Ingresar',
+                            text: 'Enviar solicitud',
                             loading: isLoading,
                             onPressed: _join,
                           ),

@@ -1,6 +1,5 @@
 import 'dart:math' as math;
 import 'package:bond_front/core/theme/app_colors.dart';
-import 'package:bond_front/core/theme/location_icons.dart';
 import 'package:bond_front/core/widgets/user_avatar.dart';
 import 'package:bond_front/features/location/constants/default_location.dart';
 import 'package:bond_front/features/location/constants/location_tracking_config.dart';
@@ -13,6 +12,7 @@ import 'package:bond_front/features/location/utils/marker_colors.dart';
 import 'package:bond_front/features/location/widgets/location_map.dart';
 import 'package:bond_front/features/point_of_interest/models/point_of_interest.dart';
 import 'package:bond_front/features/point_of_interest/models/point_of_interest_color.dart';
+import 'package:bond_front/features/point_of_interest/widgets/point_of_interest_marker_icon.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -239,6 +239,10 @@ void main() {
         final circle = tester.widget<Container>(circleFinder);
         final color = buildDistinctMarkerColors([2])[2]!;
         expect(
+          tester.widget<Icon>(arrow).color,
+          stale ? color.withAlpha(110) : color,
+        );
+        expect(
           (circle.decoration as BoxDecoration).color,
           stale ? color.withAlpha(110) : color,
         );
@@ -278,6 +282,69 @@ void main() {
       },
     );
   }
+  testWidgets('separa los marcadores fuera de vista', (tester) async {
+    final controller = MapController();
+    final members = <int, MemberLocationModel>{
+      for (var index = 0; index < 3; index++)
+        index + 2: MemberLocationModel(
+          memberId: index + 2,
+          userId: index + 2,
+          name: 'Miembro ${index + 2}',
+          latitude: defaultLocation.latitude,
+          longitude: defaultLocation.longitude + 1,
+          lastSeenAt: DateTime.now(),
+        ),
+    };
+    final points = [
+      for (var index = 0; index < 4; index++)
+        PointOfInterest(
+          id: index + 1,
+          name: 'Punto ${index + 1}',
+          radius: 20,
+          latitude: defaultLocation.latitude + 0.0005,
+          longitude: defaultLocation.longitude + 1,
+          groupId: 20,
+          createdAt: DateTime(2026),
+        ),
+    ];
+
+    await pumpMap(
+      tester,
+      controller,
+      state: LocationState.initial().copyWith(visibleMembers: members),
+      points: points,
+      showOffscreenPoints: true,
+    );
+    controller.move(defaultLocation, 15);
+    await tester.pump();
+
+    final arrows = find.byIcon(Icons.navigation);
+    expect(arrows, findsNWidgets(members.length + points.length));
+    final bounds = <Rect>[];
+    for (var index = 0; index < members.length + points.length; index++) {
+      final indicator = find
+          .ancestor(
+            of: arrows.at(index),
+            matching: find.byType(GestureDetector),
+          )
+          .first;
+      bounds.add(
+        Rect.fromCenter(
+          center: tester.getCenter(indicator),
+          width: 84,
+          height: 84,
+        ).inflate(2),
+      );
+    }
+
+    for (var first = 0; first < bounds.length; first++) {
+      for (var second = first + 1; second < bounds.length; second++) {
+        expect(bounds[first].overlaps(bounds[second]), isFalse);
+      }
+    }
+
+    await disposeMap(tester, controller);
+  });
   testWidgets('own offscreen indicator recenters Vos at the current zoom', (
     tester,
   ) async {
@@ -443,7 +510,9 @@ void main() {
       final markers = tester
           .widget<MarkerLayer>(find.byType(MarkerLayer))
           .markers;
-      Icon iconAt(int i) => (markers[i].child as Column).children.first as Icon;
+      PointOfInterestMarkerIcon iconAt(int i) =>
+          (markers[i].child as Column).children.first
+              as PointOfInterestMarkerIcon;
       expect(markers, hasLength(2));
       expect(markers[0].point, defaultLocation);
       final occupiedMarker = markers[0].child as Column;
@@ -468,10 +537,10 @@ void main() {
         ((occupiedMarker.children.last as SizedBox).child as Text).data,
         'en Colegio',
       );
+      expect(find.byIcon(Icons.location_on), findsNWidgets(2));
       final avatarDetector = occupiedAvatars.children.single as GestureDetector;
       avatarDetector.onTap!.call();
       expect(tappedMemberId, 2);
-      expect(iconAt(1).icon, LocationIcons.pointOfInterest);
       expect(iconAt(1).color, Colors.purple);
       controller.move(
         LatLng(defaultLocation.latitude + 1, defaultLocation.longitude),
@@ -507,10 +576,14 @@ void main() {
     final offscreenFlag = find.byWidgetPredicate(
       (widget) =>
           widget is Icon &&
-          widget.icon == LocationIcons.pointOfInterest &&
+          widget.icon == Icons.location_on &&
           widget.color == Colors.white,
     );
     expect(offscreenFlag, findsOneWidget);
+    expect(
+      find.ancestor(of: offscreenFlag, matching: find.byType(Transform)),
+      findsNothing,
+    );
     expect(
       find.byWidgetPredicate(
         (widget) =>

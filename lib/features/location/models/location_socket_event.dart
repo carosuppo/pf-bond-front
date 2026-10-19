@@ -42,6 +42,24 @@ class MemberLocationHeartbeat extends LocationSocketEvent {
   });
 }
 
+class GroupDeleted extends LocationSocketEvent {
+  final int groupId;
+
+  const GroupDeleted({required this.groupId});
+}
+
+class MemberLeft extends LocationSocketEvent {
+  final int groupId;
+  final int memberId;
+  final int userId;
+
+  const MemberLeft({
+    required this.groupId,
+    required this.memberId,
+    required this.userId,
+  });
+}
+
 sealed class PointOfInterestSocketEvent extends LocationSocketEvent {
   final int groupId;
   final int pointOfInterestId;
@@ -92,6 +110,12 @@ LocationSocketEvent? parseLocationSocketEvent(
       memberId: data['memberId'] as int,
       userId: data['userId'] as int,
       lastSeenAt: DateTime.parse(data['lastSeenAt'] as String),
+    ),
+    'groupDeleted' => GroupDeleted(groupId: data['groupId'] as int),
+    'memberLeft' => MemberLeft(
+      groupId: data['groupId'] as int,
+      memberId: data['memberId'] as int,
+      userId: data['userId'] as int,
     ),
     'pointOfInterestCreated' => PointOfInterestCreated(
       groupId: data['groupId'] as int,
