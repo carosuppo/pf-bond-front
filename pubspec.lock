@@ -425,10 +425,9 @@ packages:
   flutter_map:
     dependency: "direct main"
     description:
-      name: flutter_map
-      sha256: ce1debbb29cade61964334b2a19c7c76e5bb2ef7dacf126c6424ee44036232f8
-      url: "https://pub.dev"
-    source: hosted
+      path: "diagnostics/vendor/flutter_map"
+      relative: true
+    source: path
     version: "8.3.1"
   flutter_native_splash:
     dependency: "direct dev"

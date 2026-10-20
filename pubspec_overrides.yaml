@@ -1,0 +1,3 @@
+dependency_overrides:
+  flutter_map:
+    path: diagnostics/vendor/flutter_map

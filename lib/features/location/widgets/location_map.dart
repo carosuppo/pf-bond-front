@@ -17,6 +17,8 @@ import '../models/member_location_model.dart';
 import '../models/location_model.dart';
 import '../providers/location_provider.dart';
 import '../utils/marker_colors.dart';
+import '../services/map_diagnostics.dart';
+import 'package:flutter_map/bond_map_diagnostics.dart';
 
 class LocationMap extends ConsumerStatefulWidget {
   final int? groupId;
@@ -84,6 +86,7 @@ class _LocationMapState extends ConsumerState<LocationMap>
   int? _scheduledRouteFitRevision;
 
   Timer? _freshnessTimer;
+  MapDiagnostics? _diagnostics;
   late final AnimationController _memberMovementController;
   final Map<int, LatLng> _memberMovementStarts = {};
   final Map<int, LatLng> _memberMovementTargets = {};
@@ -93,6 +96,7 @@ class _LocationMapState extends ConsumerState<LocationMap>
   @override
   void initState() {
     super.initState();
+    if (BondMapDiagnostics.enabled) _diagnostics = MapDiagnostics();
 
     _memberMovementController = AnimationController(
       vsync: this,
@@ -111,6 +115,7 @@ class _LocationMapState extends ConsumerState<LocationMap>
 
   @override
   void dispose() {
+    _diagnostics?.dispose();
     _freshnessTimer?.cancel();
     _memberMovementController.dispose();
 
@@ -352,6 +357,11 @@ class _LocationMapState extends ConsumerState<LocationMap>
       ...animatedMembers,
     ];
     final memberClusters = _buildMemberClusters(membersForClustering);
+    _diagnostics
+      ?..members = membersForClustering.length
+      ..clusters = memberClusters.length
+      ..points = widget.points.length
+      ..routePoints = widget.routePoints.length;
 
     // Usamos todos los IDs conocidos para
     // evitar cambiar colores solamente
@@ -405,6 +415,7 @@ class _LocationMapState extends ConsumerState<LocationMap>
         initialCenter: initialCenter,
         initialZoom: defaultZoom,
         onMapReady: _handleMapReady,
+        onMapEvent: _diagnostics?.onEvent,
         onTap: (_, point) {
           if (widget.onTap != null) {
             widget.onTap!(point);
