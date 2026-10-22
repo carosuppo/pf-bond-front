@@ -413,6 +413,9 @@ class _LocationMapState extends ConsumerState<LocationMap>
       mapController: _mapController,
       options: MapOptions(
         initialCenter: initialCenter,
+        interactionOptions: const InteractionOptions(
+          flags: InteractiveFlag.all & ~InteractiveFlag.flingAnimation,
+        ),
         initialZoom: defaultZoom,
         onMapReady: _handleMapReady,
         onMapEvent: _diagnostics?.onEvent,
