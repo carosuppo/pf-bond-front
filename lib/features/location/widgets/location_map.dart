@@ -17,12 +17,11 @@ import '../models/member_location_model.dart';
 import '../models/location_model.dart';
 import '../providers/location_provider.dart';
 import '../utils/marker_colors.dart';
-import '../services/map_diagnostics.dart';
-import 'package:flutter_map/bond_map_diagnostics.dart';
 
 class LocationMap extends ConsumerStatefulWidget {
   final int? groupId;
   final bool showMembers;
+  final bool autoCenter;
   final VoidCallback? onMapTap;
   final void Function(int memberId)? onMemberTap;
   final List<PointOfInterest> points;
@@ -46,6 +45,7 @@ class LocationMap extends ConsumerStatefulWidget {
     super.key,
     required this.groupId,
     this.showMembers = true,
+    this.autoCenter = true,
     this.onMapTap,
     this.onMemberTap,
     this.points = const [],
@@ -86,7 +86,6 @@ class _LocationMapState extends ConsumerState<LocationMap>
   int? _scheduledRouteFitRevision;
 
   Timer? _freshnessTimer;
-  MapDiagnostics? _diagnostics;
   late final AnimationController _memberMovementController;
   final Map<int, LatLng> _memberMovementStarts = {};
   final Map<int, LatLng> _memberMovementTargets = {};
@@ -96,7 +95,6 @@ class _LocationMapState extends ConsumerState<LocationMap>
   @override
   void initState() {
     super.initState();
-    if (BondMapDiagnostics.enabled) _diagnostics = MapDiagnostics();
 
     _memberMovementController = AnimationController(
       vsync: this,
@@ -115,7 +113,6 @@ class _LocationMapState extends ConsumerState<LocationMap>
 
   @override
   void dispose() {
-    _diagnostics?.dispose();
     _freshnessTimer?.cancel();
     _memberMovementController.dispose();
 
@@ -143,10 +140,11 @@ class _LocationMapState extends ConsumerState<LocationMap>
     final oldPreviewPoint = oldWidget.previewPoint;
     final newPreviewPoint = widget.previewPoint;
 
-    if (!_samePoint(oldPreviewPoint, newPreviewPoint) &&
+    if (widget.autoCenter &&
+        !_samePoint(oldPreviewPoint, newPreviewPoint) &&
         newPreviewPoint != null) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (mounted && _mapReady) {
+        if (mounted && _mapReady && widget.autoCenter) {
           _mapController.move(newPreviewPoint, defaultZoom);
         }
       });
@@ -167,6 +165,8 @@ class _LocationMapState extends ConsumerState<LocationMap>
       return;
     }
 
+    if (!widget.autoCenter) return;
+
     final previewPoint = widget.previewPoint;
     if (previewPoint != null) {
       _mapController.move(previewPoint, defaultZoom);
@@ -175,7 +175,7 @@ class _LocationMapState extends ConsumerState<LocationMap>
     }
 
     final ownLocation = _ownLocationToCenter;
-    if (!_hasCenteredOnUser && ownLocation != null) {
+    if (widget.autoCenter && !_hasCenteredOnUser && ownLocation != null) {
       _mapController.move(ownLocation, defaultZoom);
       _hasCenteredOnUser = true;
     }
@@ -357,11 +357,6 @@ class _LocationMapState extends ConsumerState<LocationMap>
       ...animatedMembers,
     ];
     final memberClusters = _buildMemberClusters(membersForClustering);
-    _diagnostics
-      ?..members = membersForClustering.length
-      ..clusters = memberClusters.length
-      ..points = widget.points.length
-      ..routePoints = widget.routePoints.length;
 
     // Usamos todos los IDs conocidos para
     // evitar cambiar colores solamente
@@ -375,7 +370,8 @@ class _LocationMapState extends ConsumerState<LocationMap>
 
     final colors = buildDistinctMarkerColors(markerIds);
 
-    if (!_hasCenteredOnUser &&
+    if (widget.autoCenter &&
+        !_hasCenteredOnUser &&
         ownLocation != null &&
         widget.routePoints.length < 2) {
       _ownLocationToCenter = LatLng(
@@ -387,7 +383,7 @@ class _LocationMapState extends ConsumerState<LocationMap>
         final point = _ownLocationToCenter!;
 
         WidgetsBinding.instance.addPostFrameCallback((_) {
-          if (!mounted || _hasCenteredOnUser) {
+          if (!mounted || _hasCenteredOnUser || !widget.autoCenter) {
             return;
           }
 
@@ -418,7 +414,6 @@ class _LocationMapState extends ConsumerState<LocationMap>
         ),
         initialZoom: defaultZoom,
         onMapReady: _handleMapReady,
-        onMapEvent: _diagnostics?.onEvent,
         onTap: (_, point) {
           if (widget.onTap != null) {
             widget.onTap!(point);

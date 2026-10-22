@@ -17,7 +17,6 @@ import 'core/storage/session_storage_service.dart';
 import 'core/theme/app_colors.dart';
 import 'core/timezone/app_timezone.dart';
 import 'features/auth/providers/auth_provider.dart';
-import 'features/metrics/services/foreground_activity_service.dart';
 import 'features/auth/services/auth_service.dart';
 import 'features/auth/services/session_state_cleanup.dart';
 import 'features/event/providers/event_provider.dart';
@@ -227,17 +226,12 @@ class _BondMaterialApp extends ConsumerStatefulWidget {
 
 class _BondMaterialAppState extends ConsumerState<_BondMaterialApp> {
   StreamSubscription<String>? _invitationSubscription;
-  ForegroundActivityService? _foregroundActivity;
   bool _isHandlingInvitation = false;
   bool _handleAgain = false;
 
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
-    _foregroundActivity ??= ForegroundActivityService(
-      context.read<AuthProvider>(),
-      context.read<ApiClient>(),
-    );
     _invitationSubscription ??= context
         .read<AppLinkService>()
         .invitationCodes
@@ -291,7 +285,6 @@ class _BondMaterialAppState extends ConsumerState<_BondMaterialApp> {
 
   @override
   void dispose() {
-    _foregroundActivity?.dispose();
     _invitationSubscription?.cancel();
     super.dispose();
   }
