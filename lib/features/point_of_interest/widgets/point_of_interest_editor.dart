@@ -11,6 +11,7 @@ import '../../location/services/location_service.dart';
 import '../models/point_of_interest.dart';
 import '../models/point_of_interest_color.dart';
 import '../models/point_of_interest_request.dart';
+import 'point_of_interest_marker_icon.dart';
 
 class PointOfInterestEditor extends StatefulWidget {
   final PointOfInterest? initial;
@@ -587,6 +588,44 @@ class PointOfInterestEditorState extends State<PointOfInterestEditor> {
                   ],
                 ),
               ),
+              for (final result in _results) ...[
+                const SizedBox(height: 12),
+                Card(
+                  margin: EdgeInsets.zero,
+                  color: AppColors.cardColor,
+                  elevation: 0,
+                  clipBehavior: Clip.antiAlias,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12),
+                    side: const BorderSide(color: AppColors.border),
+                  ),
+                  child: InkWell(
+                    onTap: () {
+                      widget.onLocationChanged(
+                        LatLng(result.latitude, result.longitude),
+                      );
+
+                      setState(() {
+                        _results = [];
+                      });
+                    },
+                    child: ListTile(
+                      contentPadding: const EdgeInsets.symmetric(
+                        horizontal: 14,
+                        vertical: 4,
+                      ),
+                      leading: const PointOfInterestMarkerIcon(
+                        color: AppColors.primary,
+                      ),
+                      title: Text(
+                        result.displayName,
+                        maxLines: 3,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                  ),
+                ),
+              ],
               const SizedBox(height: 16),
               Center(
                 child: SizedBox(

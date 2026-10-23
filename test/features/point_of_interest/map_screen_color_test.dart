@@ -315,7 +315,13 @@ void main() {
       );
       expect(navigationMap.onPointTap, isNull);
       expect(navigationMap.destinationPointId, 1);
-      expect(find.byIcon(Icons.location_on_rounded), findsOneWidget);
+      expect(
+        find.descendant(
+          of: find.byType(LocationMap),
+          matching: find.byIcon(Icons.location_on),
+        ),
+        findsWidgets,
+      );
 
       final centerBeforeTap = navigationMap.controller!.camera.center;
       final parkMarker = find.byWidgetPredicate(

@@ -53,12 +53,15 @@ class LocationState {
     String? errorMessage,
     bool clearError = false,
     bool clearActiveGroup = false,
+    bool clearCurrentLocation = false,
   }) {
     return LocationState(
       isLoading: isLoading ?? this.isLoading,
       isTracking: isTracking ?? this.isTracking,
       permissionStatus: permissionStatus ?? this.permissionStatus,
-      currentLocation: currentLocation ?? this.currentLocation,
+      currentLocation: clearCurrentLocation
+          ? null
+          : currentLocation ?? this.currentLocation,
       sharing: sharing ?? this.sharing,
       visibleMembers: visibleMembers ?? this.visibleMembers,
       activeGroupId: clearActiveGroup

@@ -32,6 +32,9 @@ import 'features/group/services/group_service.dart';
 import 'features/location/providers/location_provider.dart';
 import 'features/location/services/background_location_service.dart';
 import 'features/location/services/location_service.dart';
+import 'features/location/widgets/mandatory_group_location_dialog.dart';
+import 'features/notification/models/push_notification_data.dart';
+import 'features/notification/providers/group_inbox_provider.dart';
 import 'features/notification/services/notification_api_service.dart';
 import 'features/notification/services/push_notification_service.dart';
 import 'features/point_of_interest/providers/point_of_interest_provider.dart';
@@ -110,11 +113,32 @@ class MyApp extends StatelessWidget {
                 'EVENT_UPDATED',
                 'EVENT_CANCELLED',
               };
+              if (data.type == 'GROUP_JOIN_REQUEST') {
+                AppNavigation.navigatorKey.currentState?.pushNamed(
+                  AppRoutes.inbox,
+                );
+                return;
+              }
+              if (data.type == 'GROUP_JOIN_REQUEST_ACCEPTED' ||
+                  data.type == 'GROUP_JOIN_REQUEST_REJECTED') {
+                await _handleGroupJoinRequestResolution(data, openMap: true);
+                return;
+              }
               if (!eventTypes.contains(data.type)) return;
               final groupId = int.tryParse(data.groupId ?? '');
               final eventId = int.tryParse(data.eventId ?? '');
               if (groupId == null || eventId == null) return;
               await handleEventReminderTap(groupId: groupId, eventId: eventId);
+            },
+            onReceived: (data) async {
+              final appContext = AppNavigation.navigatorKey.currentContext;
+              if (appContext != null) {
+                await appContext.read<GroupInboxProvider>().load();
+              }
+              if (data.type == 'GROUP_JOIN_REQUEST_ACCEPTED' ||
+                  data.type == 'GROUP_JOIN_REQUEST_REJECTED') {
+                await _handleGroupJoinRequestResolution(data);
+              }
             },
           ),
           dispose: (_, service) => service.dispose(),
@@ -154,6 +178,12 @@ class MyApp extends StatelessWidget {
           create: (context) => GroupProvider(
             context.read<GroupService>(),
             context.read<AppPreferencesService>(),
+          ),
+        ),
+        provider.ChangeNotifierProvider<GroupInboxProvider>(
+          create: (context) => GroupInboxProvider(
+            context.read<NotificationApiService>(),
+            context.read<GroupService>(),
           ),
         ),
         provider.Provider<PointOfInterestService>(
@@ -228,6 +258,49 @@ class MyApp extends StatelessWidget {
   }
 }
 
+Future<void> _handleGroupJoinRequestResolution(
+  PushNotificationData data, {
+  bool openMap = false,
+}) async {
+  final context = AppNavigation.navigatorKey.currentContext;
+  if (context == null) return;
+
+  final accepted = data.type == 'GROUP_JOIN_REQUEST_ACCEPTED';
+  if (accepted) {
+    final groupId = int.tryParse(data.groupId ?? '');
+    if (groupId == null) return;
+
+    final groups = context.read<GroupProvider>();
+    final selected = await groups.refreshAndSelectGroup(groupId: groupId);
+    if (!context.mounted) return;
+
+    if (selected) {
+      final locationContainer = ProviderScope.containerOf(
+        context,
+        listen: false,
+      );
+      await locationContainer
+          .read(locationProvider.notifier)
+          .restoreSharingAndTracking();
+      if (!context.mounted) return;
+      if (openMap) {
+        AppNavigation.navigatorKey.currentState?.pushNamedAndRemoveUntil(
+          AppRoutes.map,
+          (_) => false,
+        );
+      }
+    }
+  }
+
+  if (openMap || !accepted) {
+    AppNavigation.showMessage(
+      accepted
+          ? 'Tu solicitud fue aceptada. Ya puedes ingresar al grupo.'
+          : 'Tu solicitud para ingresar al grupo fue rechazada.',
+    );
+  }
+}
+
 class _BondMaterialApp extends ConsumerStatefulWidget {
   const _BondMaterialApp();
 
@@ -239,6 +312,7 @@ class _BondMaterialAppState extends ConsumerState<_BondMaterialApp> {
   StreamSubscription<String>? _invitationSubscription;
   bool _isHandlingInvitation = false;
   bool _handleAgain = false;
+  bool _mandatoryGroupLocationHandlersConfigured = false;
 
   @override
   void didChangeDependencies() {
@@ -247,6 +321,39 @@ class _BondMaterialAppState extends ConsumerState<_BondMaterialApp> {
         .read<AppLinkService>()
         .invitationCodes
         .listen(_handleInvitation);
+
+    if (!_mandatoryGroupLocationHandlersConfigured) {
+      final groups = context.read<GroupProvider>();
+      final locationNotifier = ref.read(locationProvider.notifier);
+      locationNotifier.setMandatoryGroupLocationPrompt((groupId) async {
+        final dialogContext = AppNavigation.navigatorKey.currentContext;
+        if (dialogContext == null) return null;
+
+        String? groupName;
+        for (final group in groups.groups) {
+          if (group.id == groupId) {
+            groupName = group.name;
+            break;
+          }
+        }
+        return showMandatoryGroupLocationDialog(
+          context: dialogContext,
+          groupName: groupName ?? 'este grupo',
+        );
+      });
+
+      locationNotifier.setMandatoryGroupExitHandler((groupId) async {
+        final left = await groups.leaveGroupForLocationPermission(groupId);
+        if (!left) {
+          AppNavigation.showMessage(
+            groups.errorMessage ??
+                'No se pudo salir del grupo. Intentá de nuevo.',
+          );
+        }
+        return left;
+      });
+      _mandatoryGroupLocationHandlersConfigured = true;
+    }
   }
 
   void _handleInvitation(String _) {

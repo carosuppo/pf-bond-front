@@ -35,4 +35,24 @@ void main() {
     expect(updated, isA<MemberLocationUpdated>());
     expect((updated! as MemberLocationUpdated).member.name, 'Ana');
   });
+
+  test('parses group deletion events', () {
+    final event = parseLocationSocketEvent('groupDeleted', {'groupId': 12});
+
+    expect(event, isA<GroupDeleted>());
+    expect((event! as GroupDeleted).groupId, 12);
+  });
+
+  test('parses group membership departure events', () {
+    final event = parseLocationSocketEvent('memberLeft', {
+      'groupId': 12,
+      'memberId': 4,
+      'userId': 8,
+    });
+
+    expect(event, isA<MemberLeft>());
+    final memberLeft = event! as MemberLeft;
+    expect(memberLeft.memberId, 4);
+    expect(memberLeft.userId, 8);
+  });
 }

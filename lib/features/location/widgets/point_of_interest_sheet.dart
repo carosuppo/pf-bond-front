@@ -6,6 +6,7 @@ import '../../point_of_interest/models/point_of_interest.dart';
 import '../../point_of_interest/models/point_of_interest_color.dart';
 import '../../point_of_interest/models/point_of_interest_request.dart';
 import '../../point_of_interest/widgets/point_of_interest_editor.dart';
+import '../../point_of_interest/widgets/point_of_interest_marker_icon.dart';
 
 class PointOfInterestSheet extends StatelessWidget {
   static const minChildSize = 0.12;
@@ -116,8 +117,7 @@ class PointOfInterestSheet extends StatelessWidget {
                                 editorKey.currentState?.requestClose(),
                             icon: const Icon(Icons.arrow_back_rounded),
                           ),
-                          const Icon(
-                            Icons.flag_rounded,
+                          const PointOfInterestMarkerIcon(
                             color: AppColors.primary,
                           ),
                           const SizedBox(width: 8),

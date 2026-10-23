@@ -1,6 +1,8 @@
 import 'package:bond_front/features/location/constants/location_tracking_config.dart';
 import 'package:bond_front/core/theme/app_colors.dart';
+import 'package:bond_front/features/location/models/location_model.dart';
 import 'package:bond_front/features/location/models/location_permission_status.dart';
+import 'package:bond_front/features/location/models/location_sharing_model.dart';
 import 'package:bond_front/features/location/models/location_state.dart';
 import 'package:bond_front/features/location/models/member_location_model.dart';
 import 'package:bond_front/features/location/providers/location_provider.dart';
@@ -59,6 +61,51 @@ Future<void> _disposeMap(WidgetTester tester) async {
 }
 
 void main() {
+  testWidgets(
+    'muestra la ubicación propia en grupos sin compartir obligatoriamente',
+    (tester) async {
+      final currentLocation = LocationModel(
+        latitude: -34.6037,
+        longitude: -58.3816,
+        accuracy: 5,
+        timestamp: DateTime(2026),
+      );
+      final state = LocationState(
+        isLoading: false,
+        isTracking: false,
+        permissionStatus: LocationPermissionStatus.whileInUse,
+        currentLocation: currentLocation,
+        sharing: const [
+          LocationSharingModel(
+            memberId: 1,
+            groupId: 20,
+            locationSharingEnabled: false,
+            shareLocationMandatorily: false,
+            effectiveLocationSharing: false,
+          ),
+        ],
+        visibleMembers: const {},
+        activeGroupId: 20,
+      );
+
+      await _pumpMap(tester, state);
+
+      final markerLayer = tester.widget<MarkerLayer>(find.byType(MarkerLayer));
+      expect(markerLayer.markers, hasLength(1));
+      expect(
+        markerLayer.markers.single.point.latitude,
+        currentLocation.latitude,
+      );
+      expect(
+        markerLayer.markers.single.point.longitude,
+        currentLocation.longitude,
+      );
+      expect(find.text('Vos'), findsOneWidget);
+
+      await _disposeMap(tester);
+    },
+  );
+
   testWidgets(
     'BND-59 FE-01 muestra miembros con ubicacion antigua y atenua su avatar',
     (tester) async {

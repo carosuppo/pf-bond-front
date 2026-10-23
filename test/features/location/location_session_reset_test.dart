@@ -63,6 +63,9 @@ class _Backend extends LocationBackendService {
 class _LocationService extends LocationService {
   LocationPermissionStatus permission = LocationPermissionStatus.always;
   @override
+  Future<LocationPermissionStatus> checkPermission() async => permission;
+
+  @override
   Future<LocationPermissionStatus> checkBackgroundPermission() async =>
       permission;
 
@@ -193,10 +196,7 @@ void main() {
       await notifier.startViewingGroup(10);
       final before = container.read(locationProvider);
       expect(before.isTracking, isTrue);
-      expect(
-        before.currentLocation,
-        isNull,
-      ); // Filled by foreground task events.
+      expect(before.currentLocation, isNotNull);
       expect(before.sharing, isNotEmpty);
       expect(before.visibleMembers, isNotEmpty);
       expect(before.activeGroupId, 10);

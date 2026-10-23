@@ -4,7 +4,8 @@ import '../utils/invitation_code.dart';
 
 enum GroupInvitationProcessingStatus {
   noPendingInvitation,
-  joined,
+  requestSent,
+  requestAlreadyPending,
   alreadyMember,
   authenticationRequired,
   invalidInvitation,
@@ -25,7 +26,6 @@ class GroupInvitationProcessingResult {
   final String? message;
 
   bool get openedGroup =>
-      status == GroupInvitationProcessingStatus.joined ||
       status == GroupInvitationProcessingStatus.alreadyMember;
 }
 
@@ -113,21 +113,19 @@ class GroupInvitationCoordinator {
       );
     }
 
-    final selected = await groupProvider.refreshAndSelectGroup(
-      groupId: response.group.id,
-    );
-    if (!selected) {
-      return GroupInvitationProcessingResult(
-        status: GroupInvitationProcessingStatus.retryableFailure,
-        message:
-            groupProvider.errorMessage ??
-            'Te uniste al grupo, pero no pudimos abrirlo todavía.',
-      );
-    }
-
-    await _preferences.clearPendingInvitationCode(expectedCode: pendingCode);
-
     if (response.alreadyMember) {
+      final selected = await groupProvider.refreshAndSelectGroup(
+        groupId: response.group.id,
+      );
+      if (!selected) {
+        return GroupInvitationProcessingResult(
+          status: GroupInvitationProcessingStatus.retryableFailure,
+          message:
+              groupProvider.errorMessage ??
+              'No se pudo abrir el grupo al que ya perteneces.',
+        );
+      }
+      await _preferences.clearPendingInvitationCode(expectedCode: pendingCode);
       return GroupInvitationProcessingResult(
         status: GroupInvitationProcessingStatus.alreadyMember,
         groupId: response.group.id,
@@ -136,11 +134,22 @@ class GroupInvitationCoordinator {
       );
     }
 
+    await _preferences.clearPendingInvitationCode(expectedCode: pendingCode);
+
+    if (response.alreadyPending) {
+      return GroupInvitationProcessingResult(
+        status: GroupInvitationProcessingStatus.requestAlreadyPending,
+        groupId: response.group.id,
+        groupName: response.group.name,
+        message: response.message,
+      );
+    }
+
     return GroupInvitationProcessingResult(
-      status: GroupInvitationProcessingStatus.joined,
+      status: GroupInvitationProcessingStatus.requestSent,
       groupId: response.group.id,
       groupName: response.group.name,
-      message: 'Te uniste al grupo ${response.group.name}.',
+      message: response.message,
     );
   }
 }

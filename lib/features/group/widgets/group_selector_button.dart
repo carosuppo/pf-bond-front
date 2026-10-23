@@ -7,7 +7,9 @@ import '../models/get_groups_model.response.dart';
 import '../providers/group_provider.dart';
 
 class GroupSelectorButton extends StatefulWidget {
-  const GroupSelectorButton({super.key});
+  const GroupSelectorButton({super.key, this.width = 250});
+
+  final double width;
 
   @override
   State<GroupSelectorButton> createState() => _GroupSelectorButtonState();
@@ -49,7 +51,7 @@ class _GroupSelectorButtonState extends State<GroupSelectorButton> {
               ),
             ),
             Positioned(
-              width: 250,
+              width: widget.width,
               child: CompositedTransformFollower(
                 link: _layerLink,
                 showWhenUnlinked: false,
@@ -60,7 +62,7 @@ class _GroupSelectorButtonState extends State<GroupSelectorButton> {
                 child: Material(
                   color: Colors.transparent,
                   child: SizedBox(
-                    width: 250,
+                    width: widget.width,
                     child: Container(
                       decoration: BoxDecoration(
                         color: AppColors.cardColor,
@@ -118,7 +120,7 @@ class _GroupSelectorButtonState extends State<GroupSelectorButton> {
         link: _layerLink,
         child: Center(
           child: SizedBox(
-            width: 250,
+            width: widget.width,
             child: FilledButton(
               onPressed: _toggleOverlay,
               style: FilledButton.styleFrom(

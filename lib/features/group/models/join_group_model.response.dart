@@ -16,16 +16,19 @@ class JoinGroupResponseModel {
   final String message;
   final JoinedGroupResponseModel group;
   final bool alreadyMember;
+  final bool alreadyPending;
 
   const JoinGroupResponseModel({
     required this.message,
     required this.group,
     this.alreadyMember = false,
+    this.alreadyPending = false,
   });
 
   factory JoinGroupResponseModel.fromJson(
     Map<String, dynamic> json, {
     bool alreadyMember = false,
+    bool alreadyPending = false,
   }) {
     return JoinGroupResponseModel(
       message: json['message'] as String,
@@ -33,6 +36,7 @@ class JoinGroupResponseModel {
         json['group'] as Map<String, dynamic>,
       ),
       alreadyMember: alreadyMember,
+      alreadyPending: json['alreadyPending'] as bool? ?? alreadyPending,
     );
   }
 }

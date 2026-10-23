@@ -8,10 +8,10 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:latlong2/latlong.dart';
 
 import '../../../core/theme/app_colors.dart';
-import '../../../core/theme/location_icons.dart';
 import '../../../core/widgets/user_avatar.dart';
 import '../../point_of_interest/models/point_of_interest.dart';
 import '../../point_of_interest/models/point_of_interest_color.dart';
+import '../../point_of_interest/widgets/point_of_interest_marker_icon.dart';
 import '../constants/default_location.dart';
 import '../constants/location_tracking_config.dart';
 import '../models/member_location_model.dart';
@@ -308,15 +308,14 @@ class _LocationMapState extends ConsumerState<LocationMap>
 
     final now = DateTime.now();
 
-    final ownSharing =
+    final ownMembership =
         widget.showMembers &&
         widget.groupId != null &&
-        state.sharingForGroup(widget.groupId!)?.effectiveLocationSharing ==
-            true;
+        state.sharingForGroup(widget.groupId!) != null;
 
     final ownLocation =
         widget.navigationLocation ??
-        (ownSharing ? state.currentLocation : null);
+        (ownMembership ? state.currentLocation : null);
 
     final allMembers = state.visibleMembers.values.toList();
 
@@ -507,7 +506,6 @@ class _LocationMapState extends ConsumerState<LocationMap>
                   point: LatLng(point.latitude, point.longitude),
                   name: point.name,
                   color: point.color.visualColor,
-                  isDestination: point.id == widget.destinationPointId,
                   onTap: widget.onPointTap == null
                       ? null
                       : () => widget.onPointTap!(point),
@@ -546,7 +544,10 @@ class _LocationMapState extends ConsumerState<LocationMap>
                     _OffscreenLocation(
                       point: LatLng(point.latitude, point.longitude),
                       color: point.color.visualColor,
-                      icon: LocationIcons.pointOfInterest,
+                      icon: const PointOfInterestMarkerIcon(
+                        color: Colors.white,
+                        size: 20,
+                      ),
                     ),
             ],
             bottomFraction: widget.indicatorBottomFraction,
@@ -641,19 +642,12 @@ class _LocationMapState extends ConsumerState<LocationMap>
     required LatLng point,
     required String name,
     required Color color,
-    bool isDestination = false,
     VoidCallback? onTap,
   }) {
     final content = Column(
       mainAxisSize: MainAxisSize.min,
       children: [
-        Icon(
-          isDestination
-              ? Icons.location_on_rounded
-              : LocationIcons.pointOfInterest,
-          size: 42,
-          color: color,
-        ),
+        PointOfInterestMarkerIcon(color: color, size: 42),
         Text(
           name,
           maxLines: 1,
@@ -757,10 +751,9 @@ class _LocationMapState extends ConsumerState<LocationMap>
                 left: 0,
                 right: 0,
                 child: Center(
-                  child: Icon(
-                    LocationIcons.pointOfInterest,
-                    size: iconSize,
+                  child: PointOfInterestMarkerIcon(
                     color: color,
+                    size: iconSize,
                   ),
                 ),
               ),
@@ -1028,6 +1021,8 @@ class _MemberCluster {
 
 class _OffscreenLocationIndicatorLayer extends StatelessWidget {
   static const _indicatorSize = Size(54, 78);
+  static const _collisionSize = Size(84, 84);
+  static const _indicatorGap = 4.0;
 
   static const _edgePadding = EdgeInsets.fromLTRB(12, 72, 12, 12);
 
@@ -1068,38 +1063,229 @@ class _OffscreenLocationIndicatorLayer extends StatelessWidget {
           return const SizedBox.shrink();
         }
 
+        final candidates = <_OffscreenIndicatorCandidate>[];
+        for (final location in locations) {
+          final indicator = _indicatorPosition(
+            camera: camera,
+            viewport: viewport,
+            safeBounds: safeBounds,
+            point: location.point,
+          );
+          if (indicator != null) {
+            candidates.add(
+              _OffscreenIndicatorCandidate(
+                location: location,
+                indicator: indicator,
+              ),
+            );
+          }
+        }
+
+        final arrangedIndicators = _arrangeIndicators(candidates, safeBounds);
+
         return Stack(
           children: [
-            for (final location in locations)
-              if (_indicatorPosition(
-                    camera: camera,
-                    viewport: viewport,
-                    safeBounds: safeBounds,
-                    point: location.point,
-                  )
-                  case final indicator?)
-                Positioned(
-                  left: indicator.position.dx - _indicatorSize.width / 2,
-                  top: indicator.position.dy - _indicatorSize.height / 2,
-                  width: _indicatorSize.width,
-                  height: _indicatorSize.height,
-                  child: GestureDetector(
-                    onTap: () => onLocationTap(location.point),
-                    child: _OffscreenLocationIndicator(
-                      color: location.displayColor,
-                      angle: indicator.angle,
-                      icon: location.icon,
-                      arrowColor: location.avatarName == null
-                          ? location.displayColor
-                          : AppColors.primary,
-                      avatarName: location.avatarName,
-                      photoUrl: location.photoUrl,
-                    ),
+            for (final indicator in arrangedIndicators)
+              Positioned(
+                left: indicator.position.dx - _indicatorSize.width / 2,
+                top: indicator.position.dy - _indicatorSize.height / 2,
+                width: _indicatorSize.width,
+                height: _indicatorSize.height,
+                child: GestureDetector(
+                  onTap: () => onLocationTap(indicator.location.point),
+                  child: _OffscreenLocationIndicator(
+                    color: indicator.location.displayColor,
+                    angle: indicator.angle,
+                    icon: indicator.location.icon,
+                    arrowColor: indicator.location.displayColor,
+                    avatarName: indicator.location.avatarName,
+                    photoUrl: indicator.location.photoUrl,
                   ),
                 ),
+              ),
           ],
         );
       },
+    );
+  }
+
+  List<_PositionedOffscreenIndicator> _arrangeIndicators(
+    List<_OffscreenIndicatorCandidate> candidates,
+    Rect bounds,
+  ) {
+    final orderedCandidates = [...candidates]
+      ..sort((first, second) {
+        final edgeOrder = first.indicator.edge.index.compareTo(
+          second.indicator.edge.index,
+        );
+        if (edgeOrder != 0) return edgeOrder;
+
+        final firstPosition = first.indicator.edge.isHorizontal
+            ? first.indicator.position.dx
+            : first.indicator.position.dy;
+        final secondPosition = second.indicator.edge.isHorizontal
+            ? second.indicator.position.dx
+            : second.indicator.position.dy;
+        return firstPosition.compareTo(secondPosition);
+      });
+    final placed = <_PositionedOffscreenIndicator>[];
+    final occupied = <Rect>[];
+
+    for (final candidate in orderedCandidates) {
+      Offset? position;
+      final originalPosition = candidate.indicator.position;
+      final originalBounds = _collisionBounds(originalPosition);
+      if (occupied.every((other) => !other.overlaps(originalBounds))) {
+        position = originalPosition;
+        occupied.add(originalBounds);
+      }
+
+      if (position == null) {
+        final positions = _positionsAlongEdge(
+          candidate.indicator.edge,
+          originalPosition,
+          bounds,
+        );
+        for (final option in positions) {
+          final optionBounds = _collisionBounds(option);
+          if (occupied.every((other) => !other.overlaps(optionBounds))) {
+            position = option;
+            occupied.add(optionBounds);
+            break;
+          }
+        }
+      }
+
+      if (position == null) {
+        for (final edge in _IndicatorEdge.values) {
+          if (edge == candidate.indicator.edge) continue;
+          final edgePosition = _positionOnEdge(edge, originalPosition, bounds);
+          final positions = _positionsAlongEdge(edge, edgePosition, bounds);
+          for (final option in positions) {
+            final optionBounds = _collisionBounds(option);
+            if (occupied.every((other) => !other.overlaps(optionBounds))) {
+              position = option;
+              occupied.add(optionBounds);
+              break;
+            }
+          }
+          if (position != null) break;
+        }
+      }
+
+      if (position != null) {
+        placed.add(
+          _PositionedOffscreenIndicator(
+            location: candidate.location,
+            position: position,
+            angle: candidate.indicator.angle,
+          ),
+        );
+      }
+    }
+
+    return placed;
+  }
+
+  Rect _collisionBounds(Offset position) {
+    return Rect.fromCenter(
+      center: position,
+      width: _collisionSize.width,
+      height: _collisionSize.height,
+    ).inflate(_indicatorGap / 2);
+  }
+
+  Offset _positionOnEdge(_IndicatorEdge edge, Offset origin, Rect bounds) =>
+      switch (edge) {
+        _IndicatorEdge.top => Offset(
+          origin.dx.clamp(bounds.left, bounds.right).toDouble(),
+          bounds.top,
+        ),
+        _IndicatorEdge.right => Offset(
+          bounds.right,
+          origin.dy.clamp(bounds.top, bounds.bottom).toDouble(),
+        ),
+        _IndicatorEdge.bottom => Offset(
+          origin.dx.clamp(bounds.left, bounds.right).toDouble(),
+          bounds.bottom,
+        ),
+        _IndicatorEdge.left => Offset(
+          bounds.left,
+          origin.dy.clamp(bounds.top, bounds.bottom).toDouble(),
+        ),
+      };
+
+  List<Offset> _positionsAlongEdge(
+    _IndicatorEdge edge,
+    Offset origin,
+    Rect bounds,
+  ) {
+    final horizontal = edge.isHorizontal;
+    final axisStart = horizontal ? bounds.left : bounds.top;
+    final axisEnd = horizontal ? bounds.right : bounds.bottom;
+    final crossStart = horizontal ? bounds.top : bounds.left;
+    final crossEnd = horizontal ? bounds.bottom : bounds.right;
+    final axisExtent = horizontal
+        ? _collisionSize.width
+        : _collisionSize.height;
+    final crossExtent = horizontal
+        ? _collisionSize.height
+        : _collisionSize.width;
+    final axisStep = axisExtent + _indicatorGap;
+    final crossStep = crossExtent + _indicatorGap;
+    final originalAxis = horizontal ? origin.dx : origin.dy;
+    final maximumAxisOffset = axisEnd - axisStart;
+    final maximumCrossOffset = crossEnd - crossStart;
+    final maximumBands = (maximumCrossOffset / crossStep).floor();
+    final maximumAxisSteps = (maximumAxisOffset / axisStep).ceil();
+    final axisCenters = _edgeSlotCenters(axisStart, axisEnd, axisStep);
+    final positions = <Offset>[];
+
+    for (var band = 0; band <= maximumBands; band++) {
+      final crossPosition = switch (edge) {
+        _IndicatorEdge.top => bounds.top + band * crossStep,
+        _IndicatorEdge.right => bounds.right - band * crossStep,
+        _IndicatorEdge.bottom => bounds.bottom - band * crossStep,
+        _IndicatorEdge.left => bounds.left + band * crossStep,
+      };
+
+      if (crossPosition < crossStart || crossPosition > crossEnd) continue;
+
+      for (var step = 1; step <= maximumAxisSteps; step++) {
+        for (final offset in [-step * axisStep, step * axisStep]) {
+          final axisPosition = originalAxis + offset;
+          if (axisPosition < axisStart || axisPosition > axisEnd) continue;
+
+          positions.add(
+            horizontal
+                ? Offset(axisPosition, crossPosition)
+                : Offset(crossPosition, axisPosition),
+          );
+        }
+      }
+
+      positions.addAll([
+        for (final axisPosition in axisCenters)
+          if (axisPosition != originalAxis)
+            horizontal
+                ? Offset(axisPosition, crossPosition)
+                : Offset(crossPosition, axisPosition),
+      ]);
+    }
+
+    return positions;
+  }
+
+  List<double> _edgeSlotCenters(double start, double end, double spacing) {
+    final length = end - start;
+    final count = (length / spacing).floor() + 1;
+    final occupiedLength = (count - 1) * spacing;
+    final firstCenter = start + (length - occupiedLength) / 2;
+
+    return List<double>.generate(
+      count,
+      (index) => firstCenter + index * spacing,
+      growable: false,
     );
   }
 
@@ -1145,9 +1331,18 @@ class _OffscreenLocationIndicatorLayer extends StatelessWidget {
       return null;
     }
 
+    final edge = horizontalScale <= verticalScale
+        ? direction.dx > 0
+              ? _IndicatorEdge.right
+              : _IndicatorEdge.left
+        : direction.dy > 0
+        ? _IndicatorEdge.bottom
+        : _IndicatorEdge.top;
+
     return _IndicatorPlacement(
       position: origin + direction * scale,
       angle: math.atan2(direction.dy, direction.dx) + math.pi / 2,
+      edge: edge,
     );
   }
 }
@@ -1164,7 +1359,7 @@ class _OffscreenLocationIndicator extends StatelessWidget {
 
   final Color color;
   final double angle;
-  final IconData icon;
+  final Widget icon;
   final Color arrowColor;
   final String? avatarName;
   final String? photoUrl;
@@ -1172,10 +1367,7 @@ class _OffscreenLocationIndicator extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final memberContent = avatarName == null
-        ? Transform.rotate(
-            angle: angle,
-            child: Icon(icon, size: 20, color: Colors.white),
-          )
+        ? icon
         : UserAvatar(name: avatarName!, photoUrl: photoUrl, radius: 14);
     final directionAngle = angle - math.pi / 2;
 
@@ -1218,7 +1410,7 @@ class _OffscreenLocation {
   const _OffscreenLocation({
     required this.point,
     required this.color,
-    this.icon = Icons.navigation,
+    this.icon = const Icon(Icons.navigation, size: 20, color: Colors.white),
     this.avatarName,
     this.photoUrl,
     this.stale = false,
@@ -1226,7 +1418,7 @@ class _OffscreenLocation {
 
   final LatLng point;
   final Color color;
-  final IconData icon;
+  final Widget icon;
   final String? avatarName;
   final String? photoUrl;
   final bool stale;
@@ -1236,9 +1428,45 @@ class _OffscreenLocation {
   }
 }
 
+enum _IndicatorEdge {
+  top,
+  right,
+  bottom,
+  left;
+
+  bool get isHorizontal => this == top || this == bottom;
+}
+
+class _OffscreenIndicatorCandidate {
+  const _OffscreenIndicatorCandidate({
+    required this.location,
+    required this.indicator,
+  });
+
+  final _OffscreenLocation location;
+  final _IndicatorPlacement indicator;
+}
+
+class _PositionedOffscreenIndicator {
+  const _PositionedOffscreenIndicator({
+    required this.location,
+    required this.position,
+    required this.angle,
+  });
+
+  final _OffscreenLocation location;
+  final Offset position;
+  final double angle;
+}
+
 class _IndicatorPlacement {
-  const _IndicatorPlacement({required this.position, required this.angle});
+  const _IndicatorPlacement({
+    required this.position,
+    required this.angle,
+    required this.edge,
+  });
 
   final Offset position;
   final double angle;
+  final _IndicatorEdge edge;
 }

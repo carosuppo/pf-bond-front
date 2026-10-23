@@ -9,6 +9,7 @@ import '../models/get_group_model.response.dart';
 import '../models/get_groups_model.response.dart';
 import '../models/get_member_info_model.response.dart';
 import '../models/get_member_model.response.dart';
+import '../models/group_join_request.dart';
 import '../models/group_model.response.dart';
 import '../models/join_group_model.request.dart';
 import '../models/join_group_model.response.dart';
@@ -35,7 +36,7 @@ class GroupService {
   }) async {
     try {
       final response = await _apiClient.authenticatedPost(
-        '/group/join',
+        '/group/join-request',
         request.toJson(),
       );
 
@@ -98,6 +99,35 @@ class GroupService {
 
   Future<void> removeMember({required int memberId}) async {
     await _apiClient.authenticatedDelete('/member/$memberId');
+  }
+
+  Future<void> deleteGroup({required int groupId}) async {
+    await _apiClient.authenticatedDelete('/group/$groupId');
+  }
+
+  Future<void> leaveGroup({required int groupId}) async {
+    await _apiClient.authenticatedDelete('/group/$groupId/leave');
+  }
+
+  Future<List<GroupJoinRequest>> getJoinRequests() async {
+    final response = await _apiClient.authenticatedGetList(
+      '/group/join-requests/inbox',
+    );
+    return response.map(GroupJoinRequest.fromJson).toList(growable: false);
+  }
+
+  Future<void> acceptJoinRequest({required int requestId}) async {
+    await _apiClient.authenticatedPost(
+      '/group/join-requests/$requestId/accept',
+      <String, dynamic>{},
+    );
+  }
+
+  Future<void> rejectJoinRequest({required int requestId}) async {
+    await _apiClient.authenticatedPost(
+      '/group/join-requests/$requestId/reject',
+      <String, dynamic>{},
+    );
   }
 
   Future<List<GetGroupsResponseModel>> getGroups() async {

@@ -15,6 +15,7 @@ import '../../features/group/screens/edit_group_screen.dart';
 import '../../features/group/screens/groups_screen.dart';
 import '../../features/group/screens/join_group_screen.dart';
 import '../../features/notification/providers/notification_preferences_provider.dart';
+import '../../features/notification/screens/group_inbox_screen.dart';
 import '../../features/notification/screens/notification_preferences_screen.dart';
 import '../../features/notification/services/notification_api_service.dart';
 import '../../features/profile/screens/edit_profile_screen.dart';
@@ -66,6 +67,12 @@ class AppRouter {
             )..load(),
             child: const NotificationPreferencesScreen(),
           ),
+          settings: settings,
+        );
+
+      case AppRoutes.inbox:
+        return MaterialPageRoute(
+          builder: (_) => const GroupInboxScreen(),
           settings: settings,
         );
 

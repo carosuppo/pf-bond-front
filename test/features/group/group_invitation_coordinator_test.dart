@@ -52,7 +52,7 @@ class _FakeGroupService extends GroupService {
   int joinCalls = 0;
   ApiException? joinError;
   JoinGroupResponseModel response = const JoinGroupResponseModel(
-    message: 'Ingresaste al grupo correctamente.',
+    message: 'Tu solicitud fue enviada correctamente.',
     group: JoinedGroupResponseModel(id: 12, name: 'Familia'),
   );
   List<GetGroupsResponseModel> availableGroups = [
@@ -88,21 +88,52 @@ class _FakeGroupService extends GroupService {
 }
 
 void main() {
-  test('pending invitation joins, refreshes, selects, and clears', () async {
-    final preferences = _MemoryPreferences()..pendingInvitationCode = 'abc-def';
-    final service = _FakeGroupService();
-    final provider = GroupProvider(service, preferences);
-    final coordinator = GroupInvitationCoordinator(preferences);
+  test(
+    'pending invitation sends a request without joining the group',
+    () async {
+      final preferences = _MemoryPreferences()
+        ..pendingInvitationCode = 'abc-def';
+      final service = _FakeGroupService();
+      final provider = GroupProvider(service, preferences);
+      final coordinator = GroupInvitationCoordinator(preferences);
 
-    final result = await coordinator.processPendingInvitation(provider);
+      final result = await coordinator.processPendingInvitation(provider);
 
-    expect(result.status, GroupInvitationProcessingStatus.joined);
-    expect(service.joinCalls, 1);
-    expect(provider.activeGroup?.id, 12);
-    expect(provider.groupDetails?.id, 12);
-    expect(preferences.activeGroupId, 12);
-    expect(preferences.pendingInvitationCode, isNull);
-  });
+      expect(result.status, GroupInvitationProcessingStatus.requestSent);
+      expect(service.joinCalls, 1);
+      expect(provider.activeGroup, isNull);
+      expect(provider.groupDetails, isNull);
+      expect(preferences.activeGroupId, isNull);
+      expect(preferences.pendingInvitationCode, isNull);
+    },
+  );
+
+  test(
+    'already pending invitation does not join or duplicate the request',
+    () async {
+      final preferences = _MemoryPreferences()
+        ..pendingInvitationCode = 'ABCDEF';
+      final service = _FakeGroupService()
+        ..response = const JoinGroupResponseModel(
+          message: 'Ya enviaste una solicitud para ingresar a este grupo.',
+          group: JoinedGroupResponseModel(id: 12, name: 'Familia'),
+          alreadyPending: true,
+        );
+      final provider = GroupProvider(service, preferences);
+
+      final result = await GroupInvitationCoordinator(
+        preferences,
+      ).processPendingInvitation(provider);
+
+      expect(
+        result.status,
+        GroupInvitationProcessingStatus.requestAlreadyPending,
+      );
+      expect(provider.activeGroup, isNull);
+      expect(service.joinCalls, 1);
+      expect(preferences.pendingInvitationCode, isNull);
+    },
+  );
 
   test(
     'existing member selects the invitation group instead of failing',
