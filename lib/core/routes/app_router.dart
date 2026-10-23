@@ -5,6 +5,7 @@ import '../../features/auth/screens/change_password_screen.dart';
 import '../../features/auth/screens/login_screen.dart';
 import '../../features/auth/screens/register_screen.dart';
 import '../../features/event/screens/create_event_screen.dart';
+import '../../features/expense_account/screens/create_expense_account_screen.dart';
 import '../../features/group/models/get_group_model.response.dart';
 import '../../features/group/screens/create_group_screen.dart';
 import '../../features/group/screens/edit_group_screen.dart';
@@ -116,6 +117,20 @@ class AppRouter {
       case AppRoutes.createEvent:
         return MaterialPageRoute(
           builder: (_) => const CreateEventScreen(),
+          settings: settings,
+        );
+
+      case AppRoutes.expenseAccounts:
+        return MaterialPageRoute(
+          builder: (_) => const AppShell(
+            initialDestination: AppBottomDestination.expenseAccounts,
+          ),
+          settings: settings,
+        );
+
+      case AppRoutes.createExpenseAccount:
+        return MaterialPageRoute(
+          builder: (_) => const CreateExpenseAccountScreen(),
           settings: settings,
         );
 

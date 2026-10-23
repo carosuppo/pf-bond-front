@@ -51,9 +51,7 @@ class NotificationPreferencesScreen extends StatelessWidget {
                               padding: const EdgeInsets.all(16),
                               child: Text(
                                 state.errorMessage!,
-                                style: TextStyle(
-                                  color: Theme.of(context).colorScheme.error,
-                                ),
+                                style: TextStyle(color: AppColors.error),
                               ),
                             ),
                           SwitchListTile(
@@ -149,9 +147,7 @@ class GroupNotificationPreferencesScreen extends StatelessWidget {
                             padding: const EdgeInsets.all(16),
                             child: Text(
                               state.errorMessage!,
-                              style: TextStyle(
-                                color: Theme.of(context).colorScheme.error,
-                              ),
+                              style: TextStyle(color: AppColors.error),
                             ),
                           ),
                         SwitchListTile(

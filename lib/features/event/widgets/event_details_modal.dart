@@ -17,7 +17,6 @@ import '../models/event_model.response.dart';
 import '../providers/event_provider.dart';
 import '../screens/edit_event_screen.dart';
 import 'cancel_event_dialog.dart';
-import 'event_location_editor.dart';
 import 'event_reminder_button.dart';
 
 Future<bool> showEventDetailsModal(
@@ -95,12 +94,6 @@ class EventDetailsModal extends StatelessWidget {
     final canCancel = _canCancel(context, currentEvent);
     final isCancelling = context.watch<EventProvider>().isLoading;
     final hasEnd = currentEvent.endAt != null;
-    final sameDay =
-        hasEnd &&
-        EventDateFormatter.isSameLocalDay(
-          currentEvent.startAt,
-          currentEvent.endAt!,
-        );
 
     return ScaffoldMessenger(
       child: Scaffold(
@@ -184,31 +177,35 @@ class EventDetailsModal extends StatelessWidget {
 
                       const SizedBox(height: 16),
 
-                      _InfoRow(
-                        icon: Icons.event_rounded,
-                        text: EventDateFormatter.dayMonthYear(
-                          currentEvent.startAt,
+                      if (hasEnd)
+                        Row(
+                          children: [
+                            Expanded(
+                              child: _EventDateTimeBox(
+                                label: 'Comienza',
+                                dateTime: currentEvent.startAt,
+                              ),
+                            ),
+                            const Padding(
+                              padding: EdgeInsets.symmetric(horizontal: 8),
+                              child: Icon(
+                                Icons.arrow_forward,
+                                color: AppColors.mutedText,
+                              ),
+                            ),
+                            Expanded(
+                              child: _EventDateTimeBox(
+                                label: 'Finaliza',
+                                dateTime: currentEvent.endAt!,
+                              ),
+                            ),
+                          ],
+                        )
+                      else
+                        _EventDateTimeBox(
+                          label: 'Comienza',
+                          dateTime: currentEvent.startAt,
                         ),
-                      ),
-
-                      const SizedBox(height: 10),
-
-                      _InfoRow(
-                        icon: Icons.schedule_rounded,
-                        text:
-                            'Inicio: ${EventDateFormatter.time(currentEvent.startAt)}',
-                      ),
-
-                      if (hasEnd) ...[
-                        const SizedBox(height: 10),
-                        _InfoRow(
-                          icon: Icons.schedule_rounded,
-                          text: sameDay
-                              ? 'Finaliza: ${EventDateFormatter.time(currentEvent.endAt!)}'
-                              : 'Finaliza: ${EventDateFormatter.dayMonth(currentEvent.endAt!)} '
-                                    '${EventDateFormatter.time(currentEvent.endAt!)}',
-                        ),
-                      ],
 
                       if (currentEvent.description != null &&
                           currentEvent.description!.isNotEmpty) ...[
@@ -264,46 +261,6 @@ class EventDetailsModal extends StatelessWidget {
                           ),
                         ),
 
-                      const SizedBox(height: 12),
-
-                      SizedBox(
-                        width: double.infinity,
-                        child: OutlinedButton.icon(
-                          onPressed: () async {
-                            final navigator = Navigator.of(context);
-                            final messenger = ScaffoldMessenger.of(context);
-                            final updatedEvent = await navigator
-                                .push<EventResponseModel>(
-                                  MaterialPageRoute<EventResponseModel>(
-                                    builder: (_) => EventLocationEditor(
-                                      event: currentEvent,
-                                      groupId: groupId,
-                                    ),
-                                  ),
-                                );
-
-                            if (!messenger.mounted || updatedEvent == null) {
-                              return;
-                            }
-
-                            messenger.showSnackBar(
-                              const SnackBar(
-                                content: Text('Ubicación del evento guardada.'),
-                              ),
-                            );
-                          },
-                          icon: Icon(
-                            currentEvent.location == null
-                                ? Icons.add_location_alt_rounded
-                                : Icons.edit_location_alt_rounded,
-                          ),
-                          label: Text(
-                            currentEvent.location == null
-                                ? 'Agregar ubicación'
-                                : 'Modificar ubicación',
-                          ),
-                        ),
-                      ),
                       if (canCancel) ...[
                         const SizedBox(height: 20),
                         const _SectionTitle('Recordatorio'),
@@ -455,25 +412,49 @@ class _SectionTitle extends StatelessWidget {
   }
 }
 
-class _InfoRow extends StatelessWidget {
-  final IconData icon;
-  final String text;
+class _EventDateTimeBox extends StatelessWidget {
+  final String label;
+  final DateTime dateTime;
 
-  const _InfoRow({required this.icon, required this.text});
+  const _EventDateTimeBox({required this.label, required this.dateTime});
 
   @override
   Widget build(BuildContext context) {
-    return Row(
-      children: [
-        Icon(icon, color: AppColors.primary, size: 20),
-        const SizedBox(width: 10),
-        Expanded(
-          child: Text(
-            text,
-            style: const TextStyle(color: AppColors.mutedText, fontSize: 16),
+    final theme = Theme.of(context);
+
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+      decoration: BoxDecoration(
+        color: AppColors.fieldColor,
+        borderRadius: BorderRadius.circular(14),
+      ),
+      child: Column(
+        children: [
+          Text(
+            label,
+            style: const TextStyle(color: AppColors.mutedText, fontSize: 12),
           ),
-        ),
-      ],
+          const SizedBox(height: 4),
+          Text(
+            EventDateFormatter.dayMonth(dateTime),
+            textAlign: TextAlign.center,
+            style: theme.textTheme.titleMedium?.copyWith(
+              color: AppColors.text,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            EventDateFormatter.time(dateTime),
+            textAlign: TextAlign.center,
+            style: theme.textTheme.headlineSmall?.copyWith(
+              color: AppColors.text,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+        ],
+      ),
     );
   }
 }

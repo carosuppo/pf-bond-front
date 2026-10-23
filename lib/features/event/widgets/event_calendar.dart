@@ -8,6 +8,7 @@ import '../formatters/event_date_formatter.dart';
 import '../models/event_model.response.dart';
 import '../providers/event_provider.dart';
 import 'event_details_modal.dart';
+import 'event_month_calendar.dart';
 
 class EventCalendar extends StatefulWidget {
   const EventCalendar({super.key});
@@ -17,31 +18,6 @@ class EventCalendar extends StatefulWidget {
 }
 
 class _EventCalendarState extends State<EventCalendar> {
-  static const List<String> _weekdaysShort = [
-    'Lun',
-    'Mar',
-    'Mié',
-    'Jue',
-    'Vie',
-    'Sáb',
-    'Dom',
-  ];
-
-  static const List<String> _monthsFull = [
-    'Enero',
-    'Febrero',
-    'Marzo',
-    'Abril',
-    'Mayo',
-    'Junio',
-    'Julio',
-    'Agosto',
-    'Septiembre',
-    'Octubre',
-    'Noviembre',
-    'Diciembre',
-  ];
-
   late DateTime _displayedMonth;
   DateTime? _selectedDay;
   bool _initialized = false;
@@ -70,12 +46,9 @@ class _EventCalendarState extends State<EventCalendar> {
     );
   }
 
-  void _goToMonth(int offset) {
+  void _onMonthChanged(DateTime month) {
     setState(() {
-      _displayedMonth = DateTime(
-        _displayedMonth.year,
-        _displayedMonth.month + offset,
-      );
+      _displayedMonth = DateTime(month.year, month.month);
     });
     _ensureMonthLoaded();
   }
@@ -89,22 +62,11 @@ class _EventCalendarState extends State<EventCalendar> {
     final eventProvider = context.watch<EventProvider>();
     final groupId = context.watch<GroupProvider>().activeGroup?.id;
 
-    final daysInMonth = DateTime(
-      _displayedMonth.year,
-      _displayedMonth.month + 1,
-      0,
-    ).day;
-    final firstWeekday = DateTime(
-      _displayedMonth.year,
-      _displayedMonth.month,
-      1,
-    ).weekday;
-    const totalCells = 42;
-    final leadingBlanks = firstWeekday - 1;
-
     final selectedEvents = _selectedDay == null || groupId == null
         ? const <EventResponseModel>[]
         : eventProvider.eventsForDay(_selectedDay!);
+
+    final now = AppTimezone.now();
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -122,135 +84,40 @@ class _EventCalendarState extends State<EventCalendar> {
         ),
         Padding(
           padding: const EdgeInsets.fromLTRB(24, 12, 24, 0),
-          child: Container(
-            decoration: BoxDecoration(
-              color: AppColors.cardColor,
-              borderRadius: BorderRadius.circular(18),
-              border: Border.all(color: AppColors.border),
-            ),
-            padding: const EdgeInsets.fromLTRB(12, 8, 12, 16),
-            child: Column(
-              children: [
-                Row(
-                  children: [
-                    IconButton(
-                      onPressed: () => _goToMonth(-1),
-                      tooltip: 'Mes anterior',
-                      icon: const Icon(
-                        Icons.chevron_left_rounded,
-                        color: AppColors.text,
-                      ),
-                    ),
-                    Expanded(
-                      child: Text(
-                        '${_monthsFull[_displayedMonth.month - 1]} ${_displayedMonth.year}',
-                        textAlign: TextAlign.center,
-                        style: const TextStyle(
-                          color: AppColors.text,
-                          fontSize: 16,
-                          fontWeight: FontWeight.w700,
-                        ),
-                      ),
-                    ),
-                    IconButton(
-                      onPressed: () => _goToMonth(1),
-                      tooltip: 'Mes siguiente',
-                      icon: const Icon(
-                        Icons.chevron_right_rounded,
-                        color: AppColors.text,
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 4),
-                Row(
-                  children: [
-                    for (final weekday in _weekdaysShort)
-                      Expanded(
-                        child: Text(
-                          weekday,
-                          textAlign: TextAlign.center,
-                          style: const TextStyle(
-                            color: AppColors.mutedText,
-                            fontSize: 12,
-                            fontWeight: FontWeight.w600,
-                          ),
-                        ),
-                      ),
-                  ],
-                ),
-                const SizedBox(height: 8),
-                GridView.builder(
-                  shrinkWrap: true,
-                  physics: const NeverScrollableScrollPhysics(),
-                  gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                    crossAxisCount: 7,
+          child: Column(
+            children: [
+              EventMonthCalendar(
+                displayedMonth: _displayedMonth,
+                selectedDay: _selectedDay,
+                onMonthChanged: _onMonthChanged,
+                onDaySelected: _selectDay,
+                today: now,
+                dayHasEvents: (day) =>
+                    eventProvider.eventsForDay(day).isNotEmpty,
+                dayIsMultiDay: (day) => eventProvider
+                    .eventsForDay(day)
+                    .any(eventProvider.isMultiDayEvent),
+              ),
+              const SizedBox(height: 8),
+              const Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  _LegendDot(),
+                  SizedBox(width: 6),
+                  Text(
+                    'Tiene eventos',
+                    style: TextStyle(color: AppColors.mutedText, fontSize: 12),
                   ),
-                  itemCount: totalCells,
-                  itemBuilder: (context, index) {
-                    final dayNumber = index - leadingBlanks + 1;
-                    if (dayNumber < 1 || dayNumber > daysInMonth) {
-                      return const SizedBox.shrink();
-                    }
-
-                    final day = DateTime(
-                      _displayedMonth.year,
-                      _displayedMonth.month,
-                      dayNumber,
-                    );
-                    final dayEvents = eventProvider.eventsForDay(day);
-                    final hasEvents = dayEvents.isNotEmpty;
-                    final hasMultiDay = dayEvents.any(
-                      eventProvider.isMultiDayEvent,
-                    );
-                    final isSelected =
-                        _selectedDay != null &&
-                        _selectedDay!.year == day.year &&
-                        _selectedDay!.month == day.month &&
-                        _selectedDay!.day == day.day;
-                    final now = AppTimezone.now();
-                    final isToday =
-                        now.year == day.year &&
-                        now.month == day.month &&
-                        now.day == day.day;
-
-                    return _DayCell(
-                      dayNumber: dayNumber,
-                      hasEvents: hasEvents,
-                      hasMultiDay: hasMultiDay,
-                      isSelected: isSelected,
-                      isToday: isToday,
-                      onTap: () => _selectDay(day),
-                    );
-                  },
-                ),
-                const SizedBox(height: 8),
-                const Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    _LegendDot(),
-                    SizedBox(width: 6),
-                    Text(
-                      'Tiene eventos',
-                      style: TextStyle(
-                        color: AppColors.mutedText,
-                        fontSize: 12,
-                      ),
-                    ),
-                    SizedBox(width: 16),
-                    _LegendMultiDay(),
-                    SizedBox(width: 6),
-                    Text(
-                      'Varios días',
-                      style: TextStyle(
-                        color: AppColors.mutedText,
-                        fontSize: 12,
-                      ),
-                    ),
-                  ],
-                ),
-              ],
-            ),
+                  SizedBox(width: 16),
+                  _LegendMultiDay(),
+                  SizedBox(width: 6),
+                  Text(
+                    'Varios días',
+                    style: TextStyle(color: AppColors.mutedText, fontSize: 12),
+                  ),
+                ],
+              ),
+            ],
           ),
         ),
         Padding(
@@ -262,86 +129,6 @@ class _EventCalendarState extends State<EventCalendar> {
           ),
         ),
       ],
-    );
-  }
-}
-
-class _DayCell extends StatelessWidget {
-  final int dayNumber;
-  final bool hasEvents;
-  final bool hasMultiDay;
-  final bool isSelected;
-  final bool isToday;
-  final VoidCallback onTap;
-
-  const _DayCell({
-    required this.dayNumber,
-    required this.hasEvents,
-    required this.hasMultiDay,
-    required this.isSelected,
-    required this.isToday,
-    required this.onTap,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final background = isSelected
-        ? AppColors.primary
-        : hasEvents
-        ? AppColors.primary.withAlpha(28)
-        : Colors.transparent;
-    final border = isSelected
-        ? null
-        : isToday
-        ? Border.all(color: AppColors.primary, width: 1.5)
-        : hasEvents
-        ? Border.all(color: AppColors.primary, width: 1.5)
-        : null;
-    final textColor = isSelected ? AppColors.onPrimary : AppColors.text;
-
-    return Padding(
-      padding: const EdgeInsets.all(2),
-      child: Material(
-        color: Colors.transparent,
-        child: InkWell(
-          onTap: onTap,
-          borderRadius: BorderRadius.circular(12),
-          child: Container(
-            decoration: BoxDecoration(
-              color: background,
-              borderRadius: BorderRadius.circular(12),
-              border: border,
-            ),
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Text(
-                  '$dayNumber',
-                  style: TextStyle(
-                    color: textColor,
-                    fontSize: 14,
-                    fontWeight: hasEvents || isToday || isSelected
-                        ? FontWeight.w700
-                        : FontWeight.w500,
-                  ),
-                ),
-                if (hasMultiDay)
-                  Container(
-                    margin: const EdgeInsets.only(top: 3),
-                    width: 14,
-                    height: 3,
-                    decoration: BoxDecoration(
-                      color: isSelected
-                          ? AppColors.onPrimary
-                          : AppColors.primary,
-                      borderRadius: BorderRadius.circular(2),
-                    ),
-                  ),
-              ],
-            ),
-          ),
-        ),
-      ),
     );
   }
 }

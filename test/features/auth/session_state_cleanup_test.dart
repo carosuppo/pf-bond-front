@@ -13,6 +13,9 @@ import 'package:bond_front/features/auth/services/session_state_cleanup.dart';
 import 'package:bond_front/features/event/models/event_model.response.dart';
 import 'package:bond_front/features/event/providers/event_provider.dart';
 import 'package:bond_front/features/event/services/event_service.dart';
+import 'package:bond_front/features/expense_account/models/expense_account_model.response.dart';
+import 'package:bond_front/features/expense_account/providers/expense_account_provider.dart';
+import 'package:bond_front/features/expense_account/services/expense_account_service.dart';
 import 'package:bond_front/features/group/models/get_group_model.response.dart';
 import 'package:bond_front/features/group/models/get_groups_model.response.dart';
 import 'package:bond_front/features/group/providers/group_provider.dart';
@@ -247,6 +250,7 @@ class _Fixture {
     profile = ProfileProvider(ProfileService(api), groupsService);
     points = PointOfInterestProvider(PointOfInterestService(api));
     events = EventProvider(EventService(api));
+    expenseAccounts = ExpenseAccountProvider(ExpenseAccountService(api));
     container = ProviderContainer(
       overrides: [locationProvider.overrideWith(_Location.new)],
     );
@@ -258,6 +262,7 @@ class _Fixture {
       profile: profile,
       points: points,
       events: events,
+      expenseAccounts: expenseAccounts,
       locationContainer: container,
       backgroundLocation: background,
     );
@@ -279,6 +284,7 @@ class _Fixture {
   late final ProfileProvider profile;
   late final PointOfInterestProvider points;
   late final EventProvider events;
+  late final ExpenseAccountProvider expenseAccounts;
   late final ProviderContainer container;
   late final LocalSessionStateCleanup cleanup;
   late final AuthProvider auth;
@@ -306,6 +312,12 @@ class _Fixture {
         memberIds: const [],
       ),
     ];
+    expenseAccounts.expenseAccount = ExpenseAccountResponseModel(
+      id: 5,
+      name: 'Cuenta de A',
+      groupId: 10,
+      memberIds: const [1],
+    );
     (container.read(locationProvider.notifier) as _Location).seed();
   }
 
@@ -315,6 +327,7 @@ class _Fixture {
     profile.dispose();
     points.dispose();
     events.dispose();
+    expenseAccounts.dispose();
     container.dispose();
   }
 }
@@ -342,6 +355,7 @@ void _expectCleared(_Fixture fixture) {
   expect(fixture.profile.groups, isEmpty);
   expect(fixture.points.points, isEmpty);
   expect(fixture.events.events, isEmpty);
+  expect(fixture.expenseAccounts.expenseAccount, isNull);
   final location = fixture.container.read(locationProvider);
   expect(location.visibleMembers, isEmpty);
   expect(location.currentLocation, isNull);

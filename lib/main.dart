@@ -22,6 +22,8 @@ import 'features/auth/services/session_state_cleanup.dart';
 import 'features/event/providers/event_provider.dart';
 import 'features/event/services/event_reminder_service.dart';
 import 'features/event/services/event_service.dart';
+import 'features/expense_account/providers/expense_account_provider.dart';
+import 'features/expense_account/services/expense_account_service.dart';
 import 'features/event/utils/event_reminder_navigation.dart';
 import 'features/group/providers/group_provider.dart';
 import 'features/group/services/group_invitation_coordinator.dart';
@@ -99,7 +101,13 @@ class MyApp extends StatelessWidget {
             context.read<NotificationApiService>(),
             context.read<AppPreferencesService>(),
             onOpened: (data) async {
-              if (data.type != 'EVENT_REMINDER') return;
+              const eventTypes = {
+                'EVENT_REMINDER',
+                'EVENT_CREATED',
+                'EVENT_UPDATED',
+                'EVENT_CANCELLED',
+              };
+              if (!eventTypes.contains(data.type)) return;
               final groupId = int.tryParse(data.groupId ?? '');
               final eventId = int.tryParse(data.eventId ?? '');
               if (groupId == null || eventId == null) return;
@@ -172,6 +180,13 @@ class MyApp extends StatelessWidget {
         provider.ChangeNotifierProvider<EventProvider>(
           create: (context) => EventProvider(context.read<EventService>()),
         ),
+        provider.Provider<ExpenseAccountService>(
+          create: (context) => ExpenseAccountService(context.read<ApiClient>()),
+        ),
+        provider.ChangeNotifierProvider<ExpenseAccountProvider>(
+          create: (context) =>
+              ExpenseAccountProvider(context.read<ExpenseAccountService>()),
+        ),
         provider.Provider<SessionStateCleanup>(
           create: (context) => LocalSessionStateCleanup(
             storage: context.read<SessionStorageService>(),
@@ -181,6 +196,7 @@ class MyApp extends StatelessWidget {
             profile: context.read<ProfileProvider>(),
             points: context.read<PointOfInterestProvider>(),
             events: context.read<EventProvider>(),
+            expenseAccounts: context.read<ExpenseAccountProvider>(),
             locationContainer: ProviderScope.containerOf(
               context,
               listen: false,

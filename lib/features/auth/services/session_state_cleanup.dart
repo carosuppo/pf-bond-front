@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/preferences/app_preferences_service.dart';
 import '../../../core/storage/session_storage_service.dart';
 import '../../event/providers/event_provider.dart';
+import '../../expense_account/providers/expense_account_provider.dart';
 import '../../group/providers/group_provider.dart';
 import '../../location/providers/location_provider.dart';
 import '../../location/services/background_location_service.dart';
@@ -25,6 +26,7 @@ class LocalSessionStateCleanup implements SessionStateCleanup {
     required this.profile,
     required this.points,
     required this.events,
+    required this.expenseAccounts,
     required this.locationContainer,
     required this.backgroundLocation,
     this.navigation,
@@ -37,6 +39,7 @@ class LocalSessionStateCleanup implements SessionStateCleanup {
   final ProfileProvider profile;
   final PointOfInterestProvider points;
   final EventProvider events;
+  final ExpenseAccountProvider expenseAccounts;
   final ProviderContainer locationContainer;
   final BackgroundLocationService backgroundLocation;
   final NavigationProvider? navigation;
@@ -52,6 +55,10 @@ class LocalSessionStateCleanup implements SessionStateCleanup {
       await navigation?.clear();
     });
     await _attempt('events', () async => events.resetSessionState());
+    await _attempt(
+      'expense accounts',
+      () async => expenseAccounts.resetSessionState(),
+    );
     await _attempt('active group preference', preferences.clearActiveGroupId);
     await _attempt(
       'location and socket',

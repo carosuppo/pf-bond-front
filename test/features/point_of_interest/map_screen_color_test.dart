@@ -224,9 +224,9 @@ void main() {
       await tester.pumpAndSettle();
       await tester.tap(find.byTooltip('Agregar punto de interés'));
       await tester.pumpAndSettle();
-      expect(find.text('Crear punto de interés'), findsOneWidget);
+      expect(find.text('Punto de interés'), findsOneWidget);
       expect(find.text('Vigencia'), findsOneWidget);
-      await tester.tap(find.text('Cancelar'));
+      await tester.tap(find.byIcon(Icons.arrow_back_rounded));
       await tester.pumpAndSettle();
 
       Future<void> expandPoints() async {
