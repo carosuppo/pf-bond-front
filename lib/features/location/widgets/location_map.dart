@@ -22,6 +22,7 @@ import '../utils/marker_colors.dart';
 class LocationMap extends ConsumerStatefulWidget {
   final int? groupId;
   final bool showMembers;
+  final bool autoCenter;
   final VoidCallback? onMapTap;
   final void Function(int memberId)? onMemberTap;
   final List<PointOfInterest> points;
@@ -46,6 +47,7 @@ class LocationMap extends ConsumerStatefulWidget {
     super.key,
     required this.groupId,
     this.showMembers = true,
+    this.autoCenter = true,
     this.onMapTap,
     this.onMemberTap,
     this.points = const [],
@@ -141,10 +143,11 @@ class _LocationMapState extends ConsumerState<LocationMap>
     final oldPreviewPoint = oldWidget.previewPoint;
     final newPreviewPoint = widget.previewPoint;
 
-    if (!_samePoint(oldPreviewPoint, newPreviewPoint) &&
+    if (widget.autoCenter &&
+        !_samePoint(oldPreviewPoint, newPreviewPoint) &&
         newPreviewPoint != null) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (mounted && _mapReady) {
+        if (mounted && _mapReady && widget.autoCenter) {
           _mapController.move(newPreviewPoint, defaultZoom);
         }
       });
@@ -165,6 +168,8 @@ class _LocationMapState extends ConsumerState<LocationMap>
       return;
     }
 
+    if (!widget.autoCenter) return;
+
     final previewPoint = widget.previewPoint;
     if (previewPoint != null) {
       _mapController.move(previewPoint, defaultZoom);
@@ -173,7 +178,7 @@ class _LocationMapState extends ConsumerState<LocationMap>
     }
 
     final ownLocation = _ownLocationToCenter;
-    if (!_hasCenteredOnUser && ownLocation != null) {
+    if (widget.autoCenter && !_hasCenteredOnUser && ownLocation != null) {
       _mapController.move(ownLocation, defaultZoom);
       _hasCenteredOnUser = true;
     }
@@ -383,7 +388,8 @@ class _LocationMapState extends ConsumerState<LocationMap>
 
     final colors = buildDistinctMarkerColors(markerIds);
 
-    if (!_hasCenteredOnUser &&
+    if (widget.autoCenter &&
+        !_hasCenteredOnUser &&
         ownLocation != null &&
         widget.routePoints.length < 2) {
       _ownLocationToCenter = LatLng(
@@ -395,7 +401,7 @@ class _LocationMapState extends ConsumerState<LocationMap>
         final point = _ownLocationToCenter!;
 
         WidgetsBinding.instance.addPostFrameCallback((_) {
-          if (!mounted || _hasCenteredOnUser) {
+          if (!mounted || _hasCenteredOnUser || !widget.autoCenter) {
             return;
           }
 
@@ -421,6 +427,9 @@ class _LocationMapState extends ConsumerState<LocationMap>
       mapController: _mapController,
       options: MapOptions(
         initialCenter: initialCenter,
+        interactionOptions: const InteractionOptions(
+          flags: InteractiveFlag.all & ~InteractiveFlag.flingAnimation,
+        ),
         initialZoom: defaultZoom,
         onMapReady: _handleMapReady,
         onTap: (_, point) {
