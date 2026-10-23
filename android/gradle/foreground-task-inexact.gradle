@@ -1,0 +1,73 @@
+import java.nio.file.Files
+import java.security.MessageDigest
+
+// Settings hook: Flutter has included the plugin, but no Android project has
+// been evaluated yet. Never modify the hosted package or the global Pub cache.
+def descriptor = settings.project(':flutter_foreground_task')
+def upstream = descriptor.projectDir.canonicalFile
+def normalize = { File file -> file.getText('UTF-8').replace('\r\n', '\n') }
+def sha256 = { String text ->
+    MessageDigest.getInstance('SHA-256').digest(text.getBytes('UTF-8')).encodeHex().toString()
+}
+def packageSpec = new File(upstream.parentFile, 'pubspec.yaml')
+if (!(normalize(packageSpec) =~ /(?m)^version: 11\.0\.2\s*$/).find()) {
+    throw new GradleException('Bond restart patch requires flutter_foreground_task 11.0.2. Review before upgrading.')
+}
+def servicePath = 'src/main/kotlin/com/pravera/flutter_foreground_task/service/'
+def expected = [
+    'RestartReceiver.kt': '242c419fc5c8a7898c2a1452f03714267e8bec55512bc2bc912aef01deb32d7e',
+    'ForegroundService.kt': '18a6bbfb9d3771e231a4e8b3c25394160f251e0703a11102b60588a4c121346f',
+    'RebootReceiver.kt': 'f4c21cb063e91aa172e12f7e0c43d89780348dce82ed7cef9bc4f0f1f49d88ec',
+]
+expected.each { name, digest ->
+    if (sha256(normalize(new File(upstream, servicePath + name))) != digest) {
+        throw new GradleException("Bond restart patch: unexpected ${name}. Refusing to compile unreviewed recovery code.")
+    }
+}
+def before = '''\t\t\tif (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S &&
+\t\t\t\tPluginUtils.canScheduleExactAlarms(context)) {
+\t\t\t\tval info = AlarmManager.AlarmClockInfo(triggerTime, operation)
+\t\t\t\talarmManager.setAlarmClock(info, operation)
+\t\t\t} else {
+\t\t\t\talarmManager.set(AlarmManager.RTC_WAKEUP, triggerTime, operation)
+\t\t\t}'''
+def after = '''            // Bond: inexact recovery, subject to Doze even with battery exemption.
+            alarmManager.set(AlarmManager.RTC_WAKEUP, triggerTime, operation)'''
+def original = normalize(new File(upstream, servicePath + 'RestartReceiver.kt'))
+if (original.count(before) != 1) {
+    throw new GradleException('Bond restart patch: expected exactly one alarm scheduling block.')
+}
+def patched = original.replace(before, after)
+if (patched =~ /\.\s*set(?:AlarmClock|Exact|ExactAndAllowWhileIdle|AndAllowWhileIdle)\s*\(/) {
+    throw new GradleException('Bond restart patch left a forbidden alarm call.')
+}
+// .dart_tool is generated, unversioned, and survives a Gradle clean in the same
+// invocation. Flutter clean removes it; the next build regenerates this copy.
+def generated = new File(settings.settingsDir.parentFile,
+    '.dart_tool/bond_plugins/flutter_foreground_task-11.0.2-inexact-v1/android').canonicalFile
+if (generated.toPath().startsWith(upstream.toPath()) || upstream.toPath().startsWith(generated.toPath())) {
+    throw new GradleException('Bond restart patch requires separate source and generated directories.')
+}
+def writeIfChanged = { File target, byte[] bytes ->
+    if (!target.isFile() || !Arrays.equals(Files.readAllBytes(target.toPath()), bytes)) {
+        Files.createDirectories(target.parentFile.toPath())
+        Files.write(target.toPath(), bytes)
+    }
+}
+// Copy package inputs only, never caches or outputs. Contents are refreshed
+// on every settings evaluation without changing timestamps unnecessarily.
+['src', 'gradle', 'build.gradle', 'gradle.properties', 'settings.gradle'].each { name ->
+    def input = new File(upstream, name)
+    if (input.isDirectory()) {
+        input.eachFileRecurse(groovy.io.FileType.FILES) { file ->
+            def relative = upstream.toPath().relativize(file.toPath()).toString()
+            def bytes = relative.replace('\\', '/') == servicePath + 'RestartReceiver.kt'
+                ? patched.getBytes('UTF-8') : Files.readAllBytes(file.toPath())
+            writeIfChanged(new File(generated, relative), bytes)
+        }
+    } else if (input.isFile()) {
+        writeIfChanged(new File(generated, name), Files.readAllBytes(input.toPath()))
+    }
+}
+descriptor.projectDir = generated
+println('Bond: flutter_foreground_task 11.0.2 uses verified inexact restart alarms.')

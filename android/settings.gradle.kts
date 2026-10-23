@@ -25,3 +25,6 @@ plugins {
 }
 
 include(":app")
+
+// Apply after Flutter includes the plugin and before Android project evaluation.
+apply(from = "gradle/foreground-task-inexact.gradle")

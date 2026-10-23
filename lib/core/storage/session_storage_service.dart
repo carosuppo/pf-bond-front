@@ -9,6 +9,13 @@ class SessionStorageService {
   SessionStorageService({FlutterSecureStorage? storage})
     : _storage = storage ?? const FlutterSecureStorage();
 
+  // A local veto, never authorization: backend sharing and permissions still apply.
+  Future<void> setTrackingSuspended(bool suspended) =>
+      _storage.write(key: 'location_tracking_suspended', value: '$suspended');
+
+  Future<bool> isTrackingSuspended() async =>
+      await _storage.read(key: 'location_tracking_suspended') == 'true';
+
   Future<void> saveSession({
     required String sessionToken,
     required DateTime expiresAt,

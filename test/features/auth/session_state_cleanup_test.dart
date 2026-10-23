@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:bond_front/core/network/api_client.dart';
+import 'package:bond_front/core/network/api_exception.dart';
 import 'package:bond_front/core/preferences/app_preferences_service.dart';
 import 'package:bond_front/core/routes/app_routes.dart';
 import 'package:bond_front/core/routes/navigation/post_auth_navigator.dart';
@@ -96,10 +97,25 @@ class _Api extends ApiClient {
   int deleteCalls = 0;
   int logoutCalls = 0;
   int loginUserId = 1;
+  Object? restoreError = const ApiException(
+    'Invalid session.',
+    statusCode: 401,
+  );
+  Completer<void>? restoreBarrier;
 
   @override
-  Future<Map<String, dynamic>> authenticatedGet(String path) async =>
-      throw Exception('401');
+  Future<Map<String, dynamic>> authenticatedGet(String path) async {
+    await restoreBarrier?.future;
+    if (restoreError case final error?) throw error;
+    return {
+      'id': loginUserId,
+      'name': 'Usuario',
+      'email': 'test@bond.test',
+      'locationId': null,
+      'createdAt': DateTime(2026).toIso8601String(),
+      'updatedAt': DateTime(2026).toIso8601String(),
+    };
+  }
 
   @override
   Future<Map<String, dynamic>> post(
@@ -242,7 +258,7 @@ class _Location extends LocationProvider {
 }
 
 class _Fixture {
-  _Fixture() {
+  _Fixture({Future<void> Function()? onSessionReady}) {
     api = _Api(storage);
     push = _Push(api, preferences);
     groupsService = _Groups();
@@ -266,7 +282,11 @@ class _Fixture {
       locationContainer: container,
       backgroundLocation: background,
     );
-    auth = AuthProvider(AuthService(api, storage, push, background), cleanup);
+    auth = AuthProvider(
+      AuthService(api, storage, push, background),
+      cleanup,
+      onSessionReady: onSessionReady,
+    );
     auth.authResponse = AuthResponse(
       sessionToken: 'A',
       expiresAt: DateTime(2027),
@@ -368,6 +388,54 @@ void _expectCleared(_Fixture fixture) {
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
+
+  test(
+    'valid restoration reconciles tracking before navigation or group loads',
+    () async {
+      var reconciliations = 0;
+      final fixture = _Fixture(
+        onSessionReady: () async {
+          reconciliations++;
+        },
+      );
+      fixture.api.restoreError = null;
+      expect(await fixture.auth.restoreSession(), isTrue);
+      expect(reconciliations, 1);
+      expect(fixture.group.isInitialized, isFalse);
+      fixture.dispose();
+    },
+  );
+
+  test(
+    'temporary restoration network failure preserves local session',
+    () async {
+      final fixture = _Fixture();
+      fixture.api.restoreError = TimeoutException('offline');
+      expect(await fixture.auth.restoreSession(), isFalse);
+      expect(fixture.storage.hasToken, isTrue);
+      expect(fixture.storage.clearCalls, 0);
+      fixture.dispose();
+    },
+  );
+
+  test('logout invalidates a pending authentication restoration', () async {
+    var reconciliations = 0;
+    final fixture = _Fixture(
+      onSessionReady: () async {
+        reconciliations++;
+      },
+    );
+    fixture.api.restoreError = null;
+    fixture.api.restoreBarrier = Completer<void>();
+    final restoring = fixture.auth.restoreSession();
+    await Future<void>.delayed(Duration.zero);
+    expect(await fixture.auth.logout(), isTrue);
+    fixture.api.restoreBarrier!.complete();
+    expect(await restoring, isFalse);
+    expect(reconciliations, 0);
+    expect(fixture.auth.authResponse, isNull);
+    fixture.dispose();
+  });
 
   test(
     'delete limpia todos los providers y B vuelve a cargar sus grupos',
