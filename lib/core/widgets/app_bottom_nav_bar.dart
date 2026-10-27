@@ -5,7 +5,13 @@ import '../../features/auth/providers/auth_provider.dart';
 import '../theme/app_colors.dart';
 import 'user_avatar.dart';
 
-enum AppBottomDestination { map, events, expenseAccounts, settings }
+enum AppBottomDestination {
+  map,
+  events,
+  expenseAccounts,
+  documentation,
+  settings,
+}
 
 class _BottomNavItem {
   const _BottomNavItem({
@@ -48,6 +54,12 @@ class AppBottomNavBar extends StatelessWidget {
       tooltip: 'Cuentas',
     ),
     _BottomNavItem(
+      destination: AppBottomDestination.documentation,
+      icon: Icons.folder_outlined,
+      selectedIcon: Icons.folder_rounded,
+      tooltip: 'Documentación',
+    ),
+    _BottomNavItem(
       destination: AppBottomDestination.settings,
       icon: Icons.person_outline,
       selectedIcon: Icons.person,
@@ -71,7 +83,7 @@ class AppBottomNavBar extends StatelessWidget {
           ),
         ),
       ),
-      padding: const EdgeInsets.symmetric(horizontal: 40, vertical: 2),
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 2),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceEvenly,
         children: [for (final item in _items) _buildButton(context, item)],
