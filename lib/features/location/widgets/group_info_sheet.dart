@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import 'location_sharing_controls.dart';
+
 import '../../../core/theme/app_colors.dart';
 import '../../group/models/get_group_model.response.dart';
 import '../../group/models/get_member_info_model.response.dart';
@@ -123,20 +125,25 @@ class _GroupInfoSheetState extends State<GroupInfoSheet> {
           group: widget.group,
           scrollController: scrollController,
           showMembersSection: false,
-          bottomContent: _GroupSectionMenu(
-            membersCount: widget.group.members.length,
-            pointsCount: widget.pointsCount,
-            onMembersTap: () {
-              setState(() {
-                _section = _GroupSheetSection.members;
-              });
-            },
-            onPointsTap: () {
-              widget.onPointsSectionChanged?.call(true);
-              setState(() {
-                _section = _GroupSheetSection.points;
-              });
-            },
+          bottomContent: Column(
+            children: [
+              LocationSharingControls(groupId: widget.group.id),
+              _GroupSectionMenu(
+                membersCount: widget.group.members.length,
+                pointsCount: widget.pointsCount,
+                onMembersTap: () {
+                  setState(() {
+                    _section = _GroupSheetSection.members;
+                  });
+                },
+                onPointsTap: () {
+                  widget.onPointsSectionChanged?.call(true);
+                  setState(() {
+                    _section = _GroupSheetSection.points;
+                  });
+                },
+              ),
+            ],
           ),
         );
       case _GroupSheetSection.members:

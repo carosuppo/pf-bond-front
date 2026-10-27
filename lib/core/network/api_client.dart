@@ -144,10 +144,9 @@ class ApiClient {
   ) async {
     final uri = Uri.parse('${ApiConfig.baseUrl}$path');
 
-    final response = await http.put(
-      uri,
-      headers: await _buildHeaders(authenticated: true),
-      body: jsonEncode(body),
+    final headers = await _buildHeaders(authenticated: true);
+    final response = await _send(
+      () => http.put(uri, headers: headers, body: jsonEncode(body)),
     );
 
     return _handleResponse(response);

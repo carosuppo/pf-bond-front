@@ -1,6 +1,7 @@
 import 'package:flutter/foundation.dart';
 
 import '../../../core/network/api_client.dart';
+import '../../../core/network/api_exception.dart';
 import '../../../core/storage/session_storage_service.dart';
 import '../models/auth_response.dart';
 import '../models/change_password_request.dart';
@@ -55,6 +56,7 @@ class AuthService {
 
     try {
       final json = await _apiClient.authenticatedGet('/user/me');
+      if (await _sessionStorage.getSessionToken() != sessionToken) return null;
 
       final response = AuthResponse(
         sessionToken: sessionToken!,
@@ -64,7 +66,8 @@ class AuthService {
       await _pushNotificationService.onAuthenticated();
 
       return response;
-    } catch (_) {
+    } on ApiException catch (error) {
+      if (!error.isUnauthorized) rethrow;
       await _clearInvalidSession();
       return null;
     }
@@ -83,7 +86,13 @@ class AuthService {
       debugPrint('No se pudo desregistrar push antes del logout: $error');
       debugPrintStack(stackTrace: stackTrace);
     }
-    await _apiClient.authenticatedPostNoContent('/user/logout');
+    try {
+      await _apiClient.authenticatedPostNoContent('/user/logout');
+    } catch (error) {
+      debugPrint('Logout remoto pendiente: $error');
+    } finally {
+      await _sessionStorage.clearSession();
+    }
   }
 
   Future<void> deleteAccount() async {
@@ -91,6 +100,11 @@ class AuthService {
   }
 
   Future<void> _clearInvalidSession() async {
+    try {
+      await _backgroundLocationService.stop();
+    } catch (error) {
+      debugPrint('No se pudo detener una sesion invalida: $error');
+    }
     try {
       await _sessionStorage.clearSession();
     } catch (error, stackTrace) {

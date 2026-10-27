@@ -86,7 +86,10 @@ class MyApp extends StatelessWidget {
         ),
         provider.Provider<AppLinkService>.value(value: appLinkService),
         provider.Provider<BackgroundLocationService>(
-          create: (_) => BackgroundLocationService(),
+          create: (context) => ProviderScope.containerOf(
+            context,
+            listen: false,
+          ).read(backgroundLocationServiceProvider),
         ),
         provider.Provider<ApiClient>(
           create: (context) => ApiClient(context.read<SessionStorageService>()),
@@ -209,6 +212,14 @@ class MyApp extends StatelessWidget {
           create: (context) => AuthProvider(
             context.read<AuthService>(),
             context.read<SessionStateCleanup>(),
+            onSessionReady: () => ProviderScope.containerOf(
+              context,
+              listen: false,
+            ).read(locationProvider.notifier).restoreSharingAndTracking(),
+            onSessionEnding: () => ProviderScope.containerOf(
+              context,
+              listen: false,
+            ).read(locationProvider.notifier).resetSessionState(),
           ),
         ),
       ],
