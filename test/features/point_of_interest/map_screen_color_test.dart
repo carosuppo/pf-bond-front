@@ -1,3 +1,5 @@
+import 'package:bond_front/features/location/widgets/point_of_interest_sheet.dart';
+import 'package:bond_front/features/point_of_interest/widgets/point_of_interest_editor.dart';
 import 'dart:async';
 import 'package:bond_front/core/network/api_client.dart';
 import 'package:bond_front/core/preferences/app_preferences_service.dart';
@@ -226,7 +228,32 @@ void main() {
       await tester.pumpAndSettle();
       expect(find.text('Punto de interés'), findsOneWidget);
       expect(find.text('Vigencia'), findsOneWidget);
+      final poiPanel = tester.widget<PointOfInterestSheet>(
+        find.byType(PointOfInterestSheet),
+      );
+      poiPanel.controller.jumpTo(0);
+      await tester.pumpAndSettle();
+      expect(tester.takeException(), isNull);
+      expect(poiPanel.controller.pixels, greaterThanOrEqualTo(92));
+      poiPanel.controller.jumpTo(PointOfInterestSheet.maxChildSize);
+      await tester.pumpAndSettle();
+      // The same callback handles GPS and address selection. With no keyboard
+      // transition, the map must not overwrite the editor's offset afterwards.
+      final editor = tester.widget<PointOfInterestEditor>(
+        find.byType(PointOfInterestEditor),
+      );
+      editor.onLocationChanged(defaultLocation);
+      await tester.pumpAndSettle();
+      final camera = tester
+          .widget<LocationMap>(find.byType(LocationMap))
+          .controller!
+          .camera;
+      final selectedOffset = camera.latLngToScreenOffset(defaultLocation);
+      expect(selectedOffset.dy, greaterThan(0));
+      expect(selectedOffset.dy, lessThan(camera.nonRotatedSize.height * 0.42));
       await tester.tap(find.byIcon(Icons.arrow_back_rounded));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Descartar'));
       await tester.pumpAndSettle();
 
       Future<void> expandPoints() async {

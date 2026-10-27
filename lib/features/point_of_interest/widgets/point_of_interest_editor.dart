@@ -43,6 +43,7 @@ class PointOfInterestEditor extends StatefulWidget {
 class PointOfInterestEditorState extends State<PointOfInterestEditor> {
   final _formKey = GlobalKey<FormState>();
   final _addressController = TextEditingController();
+  final FocusNode _addressFocusNode = FocusNode();
 
   late final TextEditingController _nameController;
   late double _radius;
@@ -95,6 +96,7 @@ class PointOfInterestEditorState extends State<PointOfInterestEditor> {
   void dispose() {
     _nameController.dispose();
     _addressController.dispose();
+    _addressFocusNode.dispose();
     _colorScrollController.dispose();
 
     super.dispose();
@@ -156,8 +158,22 @@ class PointOfInterestEditorState extends State<PointOfInterestEditor> {
     }
   }
 
+  Future<LatLng?> _searchOrigin() async {
+    try {
+      final permission = await _locationService.checkPermission();
+      if (permission != LocationPermissionStatus.whileInUse &&
+          permission != LocationPermissionStatus.always) {
+        return null;
+      }
+      final location = await _locationService.getCurrentLocation();
+      return LatLng(location.latitude, location.longitude);
+    } catch (_) {
+      return null;
+    }
+  }
+
   Future<void> _searchAddress() async {
-    if (_addressController.text.trim().isEmpty) {
+    if (_searching || _addressController.text.trim().isEmpty) {
       return;
     }
 
@@ -166,7 +182,13 @@ class PointOfInterestEditorState extends State<PointOfInterestEditor> {
     });
 
     try {
-      final results = await _geocodingService.search(_addressController.text);
+      final query = _addressController.text;
+      final origin = await _searchOrigin().timeout(
+        const Duration(seconds: 3),
+        onTimeout: () => null,
+      );
+      if (!mounted) return;
+      final results = await _geocodingService.search(query, near: origin);
 
       if (!mounted) {
         return;
@@ -372,6 +394,8 @@ class PointOfInterestEditorState extends State<PointOfInterestEditor> {
                   Expanded(
                     child: GlobalTextField(
                       controller: _addressController,
+                      focusNode: _addressFocusNode,
+                      textInputAction: TextInputAction.search,
                       label: 'Dirección',
                       floatingLabelBehavior: FloatingLabelBehavior.always,
                       labelStyle: const TextStyle(color: AppColors.hint),
@@ -382,7 +406,8 @@ class PointOfInterestEditorState extends State<PointOfInterestEditor> {
                       ),
                       onSubmitted: (_) => _searchAddress(),
                       suffixIcon: IconButton(
-                        onPressed: _searching ? null : _searchAddress,
+                        tooltip: 'Escribir dirección',
+                        onPressed: () => _addressFocusNode.requestFocus(),
                         icon: _searching
                             ? const SizedBox.square(
                                 dimension: 20,
@@ -394,6 +419,47 @@ class PointOfInterestEditorState extends State<PointOfInterestEditor> {
                   ),
                 ],
               ),
+              for (final result in _results) ...[
+                const SizedBox(height: 12),
+                Card(
+                  margin: EdgeInsets.zero,
+                  color: AppColors.cardColor,
+                  elevation: 0,
+                  clipBehavior: Clip.antiAlias,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12),
+                    side: const BorderSide(color: AppColors.border),
+                  ),
+                  child: InkWell(
+                    onTap: () {
+                      FocusScope.of(context).unfocus();
+                      _addressController.text = result.displayName;
+                      widget.onLocationChanged(
+                        LatLng(result.latitude, result.longitude),
+                      );
+
+                      setState(() {
+                        _results = [result];
+                      });
+                    },
+                    child: ListTile(
+                      contentPadding: const EdgeInsets.symmetric(
+                        horizontal: 14,
+                        vertical: 4,
+                      ),
+                      leading: const Icon(
+                        Icons.location_on_outlined,
+                        color: AppColors.primary,
+                      ),
+                      title: Text(
+                        result.displayName,
+                        maxLines: 3,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                  ),
+                ),
+              ],
               TextButton.icon(
                 onPressed: _useCurrentLocation,
                 icon: const Icon(Icons.my_location),
@@ -521,45 +587,6 @@ class PointOfInterestEditorState extends State<PointOfInterestEditor> {
                   ],
                 ),
               ),
-              for (final result in _results) ...[
-                const SizedBox(height: 12),
-                Card(
-                  margin: EdgeInsets.zero,
-                  color: AppColors.cardColor,
-                  elevation: 0,
-                  clipBehavior: Clip.antiAlias,
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(12),
-                    side: const BorderSide(color: AppColors.border),
-                  ),
-                  child: InkWell(
-                    onTap: () {
-                      widget.onLocationChanged(
-                        LatLng(result.latitude, result.longitude),
-                      );
-
-                      setState(() {
-                        _results = [];
-                      });
-                    },
-                    child: ListTile(
-                      contentPadding: const EdgeInsets.symmetric(
-                        horizontal: 14,
-                        vertical: 4,
-                      ),
-                      leading: const Icon(
-                        Icons.location_on_outlined,
-                        color: AppColors.primary,
-                      ),
-                      title: Text(
-                        result.displayName,
-                        maxLines: 3,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                    ),
-                  ),
-                ),
-              ],
               const SizedBox(height: 16),
               Center(
                 child: SizedBox(

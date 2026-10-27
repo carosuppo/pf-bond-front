@@ -17,6 +17,8 @@ class GlobalTextField extends StatelessWidget {
   final TextAlign textAlign;
   final ValueChanged<String>? onSubmitted;
   final Widget? suffixIcon;
+  final FocusNode? focusNode;
+  final TextInputAction? textInputAction;
   final FloatingLabelBehavior? floatingLabelBehavior;
   final TextStyle? labelStyle;
   final TextStyle? floatingLabelStyle;
@@ -37,6 +39,8 @@ class GlobalTextField extends StatelessWidget {
     this.textAlign = TextAlign.start,
     this.onSubmitted,
     this.suffixIcon,
+    this.focusNode,
+    this.textInputAction,
     this.floatingLabelBehavior,
     this.labelStyle,
     this.floatingLabelStyle,
@@ -47,6 +51,8 @@ class GlobalTextField extends StatelessWidget {
   Widget build(BuildContext context) {
     return TextFormField(
       controller: controller,
+      focusNode: focusNode,
+      textInputAction: textInputAction,
       enabled: enabled,
       textCapitalization: textCapitalization,
       maxLength: maxLength,

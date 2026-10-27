@@ -11,6 +11,23 @@ class PointOfInterestSheet extends StatelessWidget {
   static const minChildSize = 0.12;
   static const maxChildSize = 0.58;
 
+  static double minimumSize(BuildContext context, double availableHeight) {
+    final title = TextPainter(
+      text: const TextSpan(
+        text: 'Punto de interés',
+        style: TextStyle(fontSize: 19, fontWeight: FontWeight.w600),
+      ),
+      textDirection: Directionality.of(context),
+      textScaler: MediaQuery.textScalerOf(context),
+      maxLines: 1,
+    )..layout();
+    // Handle (28), heading padding (8), at least a 48px button, and breathing room.
+    final headerHeight = 28 + 8 + (title.height > 48 ? title.height : 48) + 8;
+    title.dispose();
+    if (availableHeight <= 0) return minChildSize;
+    return (headerHeight / availableHeight).clamp(minChildSize, 1.0);
+  }
+
   final DraggableScrollableController controller;
   final GlobalKey<PointOfInterestEditorState> editorKey;
   final PointOfInterest? editingPoint;
@@ -49,78 +66,94 @@ class PointOfInterestSheet extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Positioned.fill(
-      child: DraggableScrollableSheet(
-        controller: controller,
-        initialChildSize: maxChildSize,
-        minChildSize: minChildSize,
-        maxChildSize: maxChildSize,
-        snap: true,
-        snapSizes: const [minChildSize, maxChildSize],
-        builder: (context, scrollController) {
-          onScrollControllerChanged(scrollController);
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          final minimum = minimumSize(context, constraints.maxHeight);
+          final maximum = minimum > maxChildSize ? minimum : maxChildSize;
+          return DraggableScrollableSheet(
+            controller: controller,
+            initialChildSize: maximum,
+            minChildSize: minimum,
+            maxChildSize: maximum,
+            snap: true,
 
-          return Material(
-            color: AppColors.background,
-            elevation: 12,
-            borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
-            clipBehavior: Clip.antiAlias,
-            child: Column(
-              children: [
-                GestureDetector(
-                  behavior: HitTestBehavior.opaque,
-                  onVerticalDragUpdate: onDragUpdate,
-                  onVerticalDragEnd: onDragEnd,
-                  child: Padding(
-                    padding: const EdgeInsets.only(top: 10, bottom: 14),
-                    child: Center(
-                      child: Container(
-                        width: 36,
-                        height: 4,
-                        decoration: BoxDecoration(
-                          color: AppColors.mutedText,
-                          borderRadius: BorderRadius.circular(2),
+            builder: (context, scrollController) {
+              onScrollControllerChanged(scrollController);
+
+              return Material(
+                color: AppColors.background,
+                elevation: 12,
+                borderRadius: const BorderRadius.vertical(
+                  top: Radius.circular(20),
+                ),
+                clipBehavior: Clip.antiAlias,
+                child: Column(
+                  children: [
+                    GestureDetector(
+                      behavior: HitTestBehavior.opaque,
+                      onVerticalDragUpdate: onDragUpdate,
+                      onVerticalDragEnd: onDragEnd,
+                      child: Padding(
+                        padding: const EdgeInsets.only(top: 10, bottom: 14),
+                        child: Center(
+                          child: Container(
+                            width: 36,
+                            height: 4,
+                            decoration: BoxDecoration(
+                              color: AppColors.mutedText,
+                              borderRadius: BorderRadius.circular(2),
+                            ),
+                          ),
                         ),
                       ),
                     ),
-                  ),
-                ),
-                Padding(
-                  padding: const EdgeInsets.fromLTRB(12, 4, 20, 4),
-                  child: Row(
-                    children: [
-                      IconButton(
-                        onPressed: () => editorKey.currentState?.requestClose(),
-                        icon: const Icon(Icons.arrow_back_rounded),
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(12, 4, 20, 4),
+                      child: Row(
+                        children: [
+                          IconButton(
+                            onPressed: () =>
+                                editorKey.currentState?.requestClose(),
+                            icon: const Icon(Icons.arrow_back_rounded),
+                          ),
+                          const Icon(
+                            Icons.flag_rounded,
+                            color: AppColors.primary,
+                          ),
+                          const SizedBox(width: 8),
+                          const Expanded(
+                            child: Text(
+                              'Punto de interés',
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: TextStyle(
+                                color: AppColors.text,
+                                fontSize: 19,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                          ),
+                        ],
                       ),
-                      const Icon(Icons.flag_rounded, color: AppColors.primary),
-                      const SizedBox(width: 8),
-                      const Text(
-                        'Punto de interés',
-                        style: TextStyle(
-                          color: AppColors.text,
-                          fontSize: 19,
-                          fontWeight: FontWeight.w600,
-                        ),
+                    ),
+                    Expanded(
+                      child: PointOfInterestEditor(
+                        key: editorKey,
+                        scrollController: scrollController,
+                        initial: editingPoint,
+                        selectedLocation: draftLocation,
+                        onLocationChanged: onLocationChanged,
+                        onColorChanged: onColorChanged,
+                        onRadiusChanged: onRadiusChanged,
+                        onCreate: onCreate,
+                        onUpdate: onUpdate,
+                        onClosed: onClosed,
                       ),
-                    ],
-                  ),
+                    ),
+                  ],
                 ),
-                Expanded(
-                  child: PointOfInterestEditor(
-                    key: editorKey,
-                    scrollController: scrollController,
-                    initial: editingPoint,
-                    selectedLocation: draftLocation,
-                    onLocationChanged: onLocationChanged,
-                    onColorChanged: onColorChanged,
-                    onRadiusChanged: onRadiusChanged,
-                    onCreate: onCreate,
-                    onUpdate: onUpdate,
-                    onClosed: onClosed,
-                  ),
-                ),
-              ],
-            ),
+              );
+            },
           );
         },
       ),
