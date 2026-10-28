@@ -79,8 +79,18 @@ class SelectedDocumentFile {
   const SelectedDocumentFile(this.name, this.mimeType, this.bytes);
 }
 
+class DocumentStatus {
+  final int version;
+  final String mimeType;
+  const DocumentStatus(this.version, this.mimeType);
+  factory DocumentStatus.fromJson(Map<String, dynamic> json) =>
+      DocumentStatus(json['version'] as int, json['mimeType'] as String);
+  bool get isPdf => mimeType == 'application/pdf';
+}
+
 class DocumentPreview {
   final Uint8List image;
   final int pages;
-  const DocumentPreview(this.image, this.pages);
+  final DocumentStatus status;
+  const DocumentPreview(this.image, this.pages, this.status);
 }

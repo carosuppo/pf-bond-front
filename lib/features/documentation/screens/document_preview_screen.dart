@@ -24,6 +24,7 @@ class _DocumentPreviewScreenState extends State<DocumentPreviewScreen>
   String? _error;
   int _page = 0, _generation = 0;
   bool _loading = false;
+  bool _checking = false, _suspended = false;
   Timer? _refresh;
   @override
   void initState() {
@@ -31,7 +32,7 @@ class _DocumentPreviewScreenState extends State<DocumentPreviewScreen>
     WidgetsBinding.instance.addObserver(this);
     _load();
     _refresh = Timer.periodic(const Duration(seconds: 30), (Timer timer) {
-      if (!_loading) _load();
+      if (!_checking) _load(revalidate: true);
     });
   }
 
@@ -51,46 +52,74 @@ class _DocumentPreviewScreenState extends State<DocumentPreviewScreen>
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
+    _refresh?.cancel();
     if (state == AppLifecycleState.resumed) {
-      _load();
+      _load(revalidate: true);
     } else {
       _generation++;
-      _refresh?.cancel();
       setState(() {
-        _evict();
+        // Keep only the in-memory preview, hidden until access is revalidated.
+        if (_preview != null) MemoryImage(_preview!.image).evict();
+        _suspended = true;
         _loading = false;
+        _checking = false;
       });
     }
     if (state == AppLifecycleState.resumed) {
       _refresh = Timer.periodic(const Duration(seconds: 30), (Timer timer) {
-        if (!_loading) _load();
+        if (!_checking) _load(revalidate: true);
       });
     }
   }
 
-  Future<void> _load() async {
+  Future<void> _load({bool revalidate = false}) async {
     final int generation = ++_generation;
     setState(() {
-      _evict();
-      _loading = true;
+      if (!revalidate) _evict();
+      _loading = _preview == null;
+      _checking = true;
       _error = null;
     });
     try {
+      final DocumentStatus status = await widget.service.status(
+        widget.groupId,
+        widget.document.id,
+      );
+      if (!mounted || generation != _generation) return;
+      if (revalidate && _preview?.status.version == status.version) {
+        setState(() => _suspended = false);
+        return;
+      }
+      setState(() {
+        _evict();
+        _loading = true;
+      });
       final DocumentPreview preview = await widget.service.preview(
         widget.groupId,
         widget.document,
         _page,
+        checkedStatus: status,
       );
       if (mounted && generation == _generation) {
-        setState(() => _preview = preview);
+        setState(() {
+          _preview = preview;
+          _suspended = false;
+        });
       }
     } catch (e) {
       if (mounted && generation == _generation) {
-        setState(() => _error = e.toString());
+        setState(() {
+          _evict();
+          _error = e.toString();
+          _suspended = false;
+        });
       }
     } finally {
       if (mounted && generation == _generation) {
-        setState(() => _loading = false);
+        setState(() {
+          _loading = false;
+          _checking = false;
+        });
       }
     }
   }
@@ -104,7 +133,7 @@ class _DocumentPreviewScreenState extends State<DocumentPreviewScreen>
         Expanded(
           child: _loading
               ? const Center(child: CircularProgressIndicator())
-              : _preview != null
+              : _preview != null && !_suspended
               ? InteractiveViewer(
                   maxScale: 5,
                   child: Center(
@@ -135,7 +164,7 @@ class _DocumentPreviewScreenState extends State<DocumentPreviewScreen>
                   ),
                 ),
         ),
-        if (widget.document.isPdf && _preview != null)
+        if (_preview?.status.isPdf == true && !_suspended)
           SafeArea(
             child: Row(
               mainAxisAlignment: MainAxisAlignment.center,

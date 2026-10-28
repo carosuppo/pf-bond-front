@@ -25,6 +25,12 @@ class FakeApi extends ApiClient {
   Future<Map<String, dynamic>> authenticatedGet(String path) async {
     requests.add(path);
     if (fail) throw Exception('No pertenecés a este grupo.');
+    if (path.endsWith('/status')) {
+      return <String, dynamic>{
+        'version': 1,
+        'mimeType': path.contains('/pdf/') ? 'application/pdf' : 'image/png',
+      };
+    }
     return <String, dynamic>{
       'folders': removed
           ? <Map<String, String>>[]
@@ -297,8 +303,10 @@ void main() {
       api.fail = true;
       await expectLater(service.preview(1, pdf, 0), throwsException);
       expect(
-        api.requests.where((String path) => path.endsWith('/content')).length,
-        3,
+        api.requests
+            .where((String path) => path.contains('/content?version='))
+            .length,
+        2,
       );
       TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
           .setMockMethodCallHandler(channel, null);

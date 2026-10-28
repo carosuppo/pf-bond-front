@@ -99,16 +99,26 @@ class DocumentationService {
     return file;
   }
 
+  Future<DocumentStatus> status(int groupId, String documentId) async =>
+      DocumentStatus.fromJson(
+        await api.authenticatedGet(
+          '${_base(groupId)}/documents/$documentId/status',
+        ),
+      );
+
   Future<DocumentPreview> preview(
     int groupId,
     FamilyDocument document,
-    int page,
-  ) async {
+    int page, {
+    DocumentStatus? checkedStatus,
+  }) async {
     // Each page/open rechecks permissions. No downloaded bytes are stored on disk by Dart.
+    final DocumentStatus current =
+        checkedStatus ?? await status(groupId, document.id);
     final Uint8List bytes = await api.authenticatedBytes(
-      '${_base(groupId)}/documents/${document.id}/content',
+      '${_base(groupId)}/documents/${document.id}/content?version=${current.version}',
     );
-    if (!document.isPdf) return DocumentPreview(bytes, 1);
+    if (!current.isPdf) return DocumentPreview(bytes, 1, current);
     final Map<String, dynamic>? result = await _channel
         .invokeMapMethod<String, dynamic>('renderPdf', <String, dynamic>{
           'bytes': bytes,
@@ -118,6 +128,7 @@ class DocumentationService {
     return DocumentPreview(
       result['image'] as Uint8List,
       result['pages'] as int,
+      current,
     );
   }
 }
