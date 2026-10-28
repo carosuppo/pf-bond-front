@@ -1,8 +1,11 @@
 import 'package:flutter/material.dart';
 
 import '../models/create_expense_account_model.request.dart';
+import '../models/create_expense_model.request.dart';
 import '../models/expense_account_detail_model.response.dart';
 import '../models/expense_account_model.response.dart';
+import '../models/expense_model.response.dart';
+import '../models/expense_split_type.dart';
 import '../models/my_expense_account_model.response.dart';
 import '../services/expense_account_service.dart';
 
@@ -21,6 +24,7 @@ class ExpenseAccountProvider extends ChangeNotifier {
   bool isDetailLoading = false;
   String? detailErrorMessage;
   int? _detailAccountId;
+  ExpenseResponseModel? createdExpense;
   int _sessionVersion = 0;
 
   Future<bool> createExpenseAccount({
@@ -75,6 +79,7 @@ class ExpenseAccountProvider extends ChangeNotifier {
     isDetailLoading = false;
     detailErrorMessage = null;
     _detailAccountId = null;
+    createdExpense = null;
     notifyListeners();
   }
 
@@ -99,15 +104,22 @@ class ExpenseAccountProvider extends ChangeNotifier {
     }
   }
 
-  Future<void> loadAccountDetail({required int accountId}) async {
+  Future<void> loadAccountDetail({
+    required int accountId,
+    bool force = false,
+  }) async {
     final sessionVersion = _sessionVersion;
-    if (_detailAccountId == accountId && accountDetail != null) {
+    final hasLoadedDetail =
+        _detailAccountId == accountId && accountDetail != null;
+    if (hasLoadedDetail && !force) {
       return;
     }
     _detailAccountId = accountId;
-    isDetailLoading = true;
     detailErrorMessage = null;
-    accountDetail = null;
+    if (!hasLoadedDetail) {
+      isDetailLoading = true;
+      accountDetail = null;
+    }
     notifyListeners();
 
     try {
@@ -120,7 +132,9 @@ class ExpenseAccountProvider extends ChangeNotifier {
     } catch (error) {
       if (sessionVersion != _sessionVersion) return;
       if (_detailAccountId != accountId) return;
-      detailErrorMessage = error.toString().replaceFirst('Exception: ', '');
+      if (!hasLoadedDetail) {
+        detailErrorMessage = error.toString().replaceFirst('Exception: ', '');
+      }
     } finally {
       if (sessionVersion == _sessionVersion && _detailAccountId == accountId) {
         isDetailLoading = false;
@@ -135,5 +149,56 @@ class ExpenseAccountProvider extends ChangeNotifier {
     isDetailLoading = false;
     detailErrorMessage = null;
     notifyListeners();
+  }
+
+  Future<bool> createExpense({
+    required int accountId,
+    String? title,
+    required int amountCents,
+    required int payerMemberId,
+    required ExpenseSplitType splitType,
+    List<int>? participantIds,
+    List<ExpenseShareRequestModel>? shares,
+  }) async {
+    final sessionVersion = _sessionVersion;
+    isLoading = true;
+    errorMessage = null;
+    createdExpense = null;
+
+    notifyListeners();
+
+    try {
+      final request = CreateExpenseRequestModel(
+        title: title,
+        amountCents: amountCents,
+        payerMemberId: payerMemberId,
+        splitType: splitType,
+        participantIds: participantIds,
+        shares: shares,
+      );
+
+      final created = await _expenseAccountService.createExpense(
+        accountId: accountId,
+        request: request,
+      );
+      if (sessionVersion != _sessionVersion) return false;
+      createdExpense = created;
+
+      if (_detailAccountId == accountId) {
+        await loadAccountDetail(accountId: accountId, force: true);
+        if (sessionVersion != _sessionVersion) return false;
+      }
+
+      return true;
+    } catch (error) {
+      if (sessionVersion != _sessionVersion) return false;
+      errorMessage = error.toString().replaceFirst('Exception: ', '');
+      return false;
+    } finally {
+      if (sessionVersion == _sessionVersion) {
+        isLoading = false;
+        notifyListeners();
+      }
+    }
   }
 }

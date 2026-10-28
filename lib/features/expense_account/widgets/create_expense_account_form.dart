@@ -15,6 +15,7 @@ import '../../group/models/get_groups_model.response.dart';
 import '../../group/models/get_member_model.response.dart';
 import '../../group/providers/group_provider.dart';
 import '../providers/expense_account_provider.dart';
+import 'member_check_tile.dart';
 
 class CreateExpenseAccountForm extends StatefulWidget {
   final int? groupId;
@@ -1165,8 +1166,9 @@ class _MembersSectionState extends State<_MembersSection> {
               : Column(
                   children: [
                     for (final member in filteredMembers)
-                      _MemberCheckTile(
-                        member: member,
+                      MemberCheckTile(
+                        name: member.name,
+                        photoUrl: member.profilePhoto,
                         selected: widget.selectedIds.contains(member.id),
                         enabled: widget.enabled,
                         onChanged: (selected) =>
@@ -1197,81 +1199,6 @@ class _MembersSectionState extends State<_MembersSection> {
           ),
         ),
       ],
-    );
-  }
-}
-
-class _MemberCheckTile extends StatelessWidget {
-  const _MemberCheckTile({
-    required this.member,
-    required this.selected,
-    required this.enabled,
-    required this.onChanged,
-  });
-
-  final GetMemberResponseModel member;
-  final bool selected;
-  final bool enabled;
-  final ValueChanged<bool> onChanged;
-
-  String get _initials {
-    final parts = member.name.trim().split(RegExp(r'\s+'));
-    if (parts.isEmpty || parts.first.isEmpty) return '?';
-    final first = parts.first[0];
-    final second = parts.length > 1 ? parts.last[0] : '';
-    return (first + second).toUpperCase();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return InkWell(
-      onTap: enabled ? () => onChanged(!selected) : null,
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 150),
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-        color: selected
-            ? AppColors.primary.withValues(alpha: 0.08)
-            : Colors.transparent,
-        child: Row(
-          children: [
-            CircleAvatar(
-              radius: 20,
-              backgroundColor: selected
-                  ? AppColors.primary
-                  : AppColors.primary.withValues(alpha: 0.15),
-              child: Text(
-                _initials,
-                style: TextStyle(
-                  color: selected ? Colors.white : AppColors.primary,
-                  fontWeight: FontWeight.bold,
-                  fontSize: 14,
-                ),
-              ),
-            ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Text(
-                member.name,
-                style: TextStyle(
-                  color: AppColors.text,
-                  fontSize: 15,
-                  fontWeight: selected ? FontWeight.w600 : FontWeight.normal,
-                ),
-              ),
-            ),
-            const SizedBox(width: 8),
-            AnimatedSwitcher(
-              duration: const Duration(milliseconds: 150),
-              child: Icon(
-                selected ? Icons.check_circle : Icons.circle_outlined,
-                key: ValueKey(selected),
-                color: selected ? AppColors.primary : AppColors.mutedText,
-                size: 24,
-              ),
-            ),
-          ],
-        ),
-      ),
     );
   }
 }

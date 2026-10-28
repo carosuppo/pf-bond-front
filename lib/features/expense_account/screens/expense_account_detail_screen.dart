@@ -6,14 +6,14 @@ import '../../../core/theme/app_colors.dart';
 import '../../../core/widgets/app_screen_header.dart';
 import '../../../core/widgets/avatar_stack.dart';
 import '../../../core/widgets/buttons/app_primary_button.dart';
-import '../../../core/widgets/status_pill.dart';
+import '../../../core/widgets/buttons/app_secondary_button.dart';
 import '../../../core/widgets/user_avatar.dart';
-import '../widgets/account_header_card.dart';
 import '../../group/providers/group_provider.dart';
 import '../formatters/money_formatter.dart';
 import '../models/balance_status.dart';
 import '../models/expense_account_detail_model.response.dart';
 import '../providers/expense_account_provider.dart';
+import '../widgets/account_header_card.dart';
 
 class ExpenseAccountDetailScreen extends StatelessWidget {
   const ExpenseAccountDetailScreen({super.key, required this.accountId});
@@ -49,7 +49,7 @@ class _SummaryContentState extends State<_SummaryContent> {
       if (!mounted) {
         return;
       }
-      _provider.loadAccountDetail(accountId: widget.accountId);
+      _provider.loadAccountDetail(accountId: widget.accountId, force: true);
     });
   }
 
@@ -69,6 +69,13 @@ class _SummaryContentState extends State<_SummaryContent> {
   Future<void> _goToMovements() async {
     await Navigator.of(context).pushNamed(
       AppRoutes.expenseAccountMovements,
+      arguments: {'accountId': widget.accountId},
+    );
+  }
+
+  Future<void> _goToCreateExpense() async {
+    await Navigator.of(context).pushNamed(
+      AppRoutes.createExpense,
       arguments: {'accountId': widget.accountId},
     );
   }
@@ -105,6 +112,7 @@ class _SummaryContentState extends State<_SummaryContent> {
                 detail: detail,
                 onBalanceTap: _goToBalance,
                 onMovementsTap: _goToMovements,
+                onCreateExpenseTap: _goToCreateExpense,
               );
             },
           ),
@@ -153,21 +161,16 @@ class _SummaryBody extends StatelessWidget {
     required this.detail,
     required this.onBalanceTap,
     required this.onMovementsTap,
+    required this.onCreateExpenseTap,
   });
 
   final ExpenseAccountDetailResponseModel detail;
   final VoidCallback onBalanceTap;
   final VoidCallback onMovementsTap;
+  final VoidCallback onCreateExpenseTap;
 
   @override
   Widget build(BuildContext context) {
-    final expensesCount = detail.movements
-        .where((movement) => movement.kind == 'EXPENSE')
-        .length;
-    final paymentsCount = detail.movements
-        .where((movement) => movement.kind == 'PAYMENT')
-        .length;
-
     return SingleChildScrollView(
       padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
       child: Column(
@@ -180,28 +183,13 @@ class _SummaryBody extends StatelessWidget {
           ),
           const SizedBox(height: 12),
           _BalanceCard(detail: detail, onBalanceTap: onBalanceTap),
-          const SizedBox(height: 12),
-          Row(
-            children: [
-              Expanded(
-                child: _StatCard(
-                  icon: Icons.receipt_long_outlined,
-                  count: expensesCount,
-                  label: 'Gastos',
-                ),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: _StatCard(
-                  icon: Icons.payments_outlined,
-                  count: paymentsCount,
-                  label: 'Pagos',
-                ),
-              ),
-            ],
-          ),
           const SizedBox(height: 20),
           AppPrimaryButton(text: 'Ver movimientos', onPressed: onMovementsTap),
+          const SizedBox(height: 12),
+          AppSecondaryButton(
+            text: 'Registrar gasto',
+            onPressed: onCreateExpenseTap,
+          ),
         ],
       ),
     );
@@ -241,19 +229,19 @@ class _BalanceCard extends StatelessWidget {
         children: [
           Row(
             children: [
-              const Expanded(
+              Expanded(
                 child: Text(
-                  'Saldo de la cuenta',
-                  style: TextStyle(
+                  detail.myStatus == BalanceStatus.aFavor
+                      ? 'Te deben'
+                      : detail.myStatus == BalanceStatus.enContra
+                      ? 'Debés'
+                      : 'Saldado',
+                  style: const TextStyle(
                     color: AppColors.text,
                     fontSize: 15,
                     fontWeight: FontWeight.w600,
                   ),
                 ),
-              ),
-              StatusPill(
-                text: detail.myStatus.label,
-                color: detail.myStatus.color,
               ),
             ],
           ),
@@ -266,10 +254,6 @@ class _BalanceCard extends StatelessWidget {
               fontWeight: FontWeight.bold,
             ),
           ),
-          if (detail.myStatus != BalanceStatus.saldado) ...[
-            const SizedBox(height: 8),
-            _DebtsPill(detail: detail),
-          ],
           const SizedBox(height: 14),
           _MembersPreview(
             memberIds: detail.members
@@ -317,26 +301,6 @@ class _TextActionButton extends StatelessWidget {
           ),
         ),
       ),
-    );
-  }
-}
-
-class _DebtsPill extends StatelessWidget {
-  const _DebtsPill({required this.detail});
-
-  final ExpenseAccountDetailResponseModel detail;
-
-  @override
-  Widget build(BuildContext context) {
-    final isOwed = detail.myStatus == BalanceStatus.aFavor;
-    final total = isOwed
-        ? detail.debtsToMe.fold<int>(0, (sum, debt) => sum + debt.amountCents)
-        : detail.myDebts.fold<int>(0, (sum, debt) => sum + debt.amountCents);
-
-    return StatusPill(
-      text:
-          '${isOwed ? 'Te deben' : 'Debés'} ${MoneyFormatter.formatCentsShort(total)}',
-      color: detail.myStatus.color,
     );
   }
 }
@@ -429,49 +393,6 @@ class _MembersPreviewState extends State<_MembersPreview> {
             ),
         ],
       ],
-    );
-  }
-}
-
-class _StatCard extends StatelessWidget {
-  const _StatCard({
-    required this.icon,
-    required this.count,
-    required this.label,
-  });
-
-  final IconData icon;
-  final int count;
-  final String label;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 18),
-      decoration: BoxDecoration(
-        color: AppColors.cardColor,
-        borderRadius: BorderRadius.circular(18),
-        border: Border.all(color: AppColors.border),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Icon(icon, color: AppColors.mutedText, size: 24),
-          const SizedBox(height: 10),
-          Text(
-            '$count',
-            style: const TextStyle(
-              color: AppColors.text,
-              fontSize: 22,
-              fontWeight: FontWeight.bold,
-            ),
-          ),
-          Text(
-            label,
-            style: const TextStyle(color: AppColors.mutedText, fontSize: 13),
-          ),
-        ],
-      ),
     );
   }
 }

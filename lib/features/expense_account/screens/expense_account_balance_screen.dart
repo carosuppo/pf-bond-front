@@ -3,15 +3,14 @@ import 'package:provider/provider.dart';
 
 import '../../../core/theme/app_colors.dart';
 import '../../../core/widgets/app_screen_header.dart';
-import '../../../core/widgets/avatar_stack.dart';
-import '../../../core/widgets/status_pill.dart';
 import '../../../core/widgets/user_avatar.dart';
-import '../widgets/account_header_card.dart';
 import '../../group/providers/group_provider.dart';
+import '../balance/member_debt_trace.dart';
 import '../formatters/money_formatter.dart';
 import '../models/balance_status.dart';
 import '../models/expense_account_detail_model.response.dart';
 import '../providers/expense_account_provider.dart';
+import '../widgets/account_header_card.dart';
 
 class ExpenseAccountBalanceScreen extends StatelessWidget {
   const ExpenseAccountBalanceScreen({super.key, required this.accountId});
@@ -46,6 +45,7 @@ class _BalanceContentState extends State<_BalanceContent> {
       }
       context.read<ExpenseAccountProvider>().loadAccountDetail(
         accountId: widget.accountId,
+        force: true,
       );
     });
   }
@@ -86,7 +86,8 @@ class _BalanceContentState extends State<_BalanceContent> {
                 );
               }
 
-              return _BalanceBody(detail: detail);
+              final d = detail;
+              return _BalanceBody(detail: d);
             },
           ),
         ),
@@ -102,8 +103,16 @@ class _BalanceBody extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final isOwed = detail.myStatus == BalanceStatus.aFavor;
-    final isDebtor = detail.myStatus == BalanceStatus.enContra;
+    final traces = calculateMemberDebtTraces(
+      myMemberId: detail.myMemberId,
+      movements: detail.movements,
+    );
+    final debtsToMe = traces
+        .where((trace) => trace.netBalanceCents > 0)
+        .toList(growable: false);
+    final myDebts = traces
+        .where((trace) => trace.netBalanceCents < 0)
+        .toList(growable: false);
 
     return SingleChildScrollView(
       padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
@@ -112,19 +121,43 @@ class _BalanceBody extends StatelessWidget {
         children: [
           _BalanceHeaderCard(detail: detail),
           const SizedBox(height: 20),
-          if (isOwed)
-            _DebtList(
-              title: '¿Quién te debe?',
-              debts: detail.debtsToMe,
-              groupId: detail.groupId,
-            )
-          else if (isDebtor)
-            _DebtList(
-              title: '¿A quién le debés?',
-              debts: detail.myDebts,
-              groupId: detail.groupId,
-            )
-          else
+          if (debtsToMe.isNotEmpty) ...[
+            Text(
+              '¿Quién te debe?',
+              style: const TextStyle(
+                color: AppColors.text,
+                fontSize: 15,
+                fontWeight: FontWeight.bold,
+                fontStyle: FontStyle.italic,
+              ),
+            ),
+            const SizedBox(height: 8),
+            for (final debt in debtsToMe)
+              _MemberDebtTile(
+                trace: debt,
+                myMemberId: detail.myMemberId,
+                groupId: detail.groupId,
+              ),
+          ],
+          if (myDebts.isNotEmpty) ...[
+            Text(
+              '¿A quién le debés?',
+              style: const TextStyle(
+                color: AppColors.text,
+                fontSize: 15,
+                fontWeight: FontWeight.bold,
+                fontStyle: FontStyle.italic,
+              ),
+            ),
+            const SizedBox(height: 8),
+            for (final debt in myDebts)
+              _MemberDebtTile(
+                trace: debt,
+                myMemberId: detail.myMemberId,
+                groupId: detail.groupId,
+              ),
+          ],
+          if (traces.isEmpty)
             Container(
               width: double.infinity,
               padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 24),
@@ -161,6 +194,15 @@ class _BalanceHeaderCard extends StatelessWidget {
         ),
         const SizedBox(height: 14),
         Text(
+          'Saldo neto ${_saldoNetoLabel(detail.myStatus)}',
+          style: const TextStyle(
+            color: AppColors.mutedText,
+            fontSize: 13,
+            fontWeight: FontWeight.w500,
+          ),
+        ),
+        const SizedBox(height: 4),
+        Text(
           MoneyFormatter.formatCentsShort(detail.myBalanceCents),
           style: TextStyle(
             color: detail.myStatus.color,
@@ -168,108 +210,198 @@ class _BalanceHeaderCard extends StatelessWidget {
             fontWeight: FontWeight.bold,
           ),
         ),
-        if (detail.myStatus != BalanceStatus.saldado) ...[
-          const SizedBox(height: 8),
-          StatusPill(
-            text:
-                '${detail.myStatus == BalanceStatus.aFavor ? 'Te deben' : 'Debés'} '
-                '${MoneyFormatter.formatCentsShort(detail.myStatus == BalanceStatus.aFavor ? detail.debtsToMe.fold<int>(0, (sum, debt) => sum + debt.amountCents) : detail.myDebts.fold<int>(0, (sum, debt) => sum + debt.amountCents))}',
-            color: detail.myStatus.color,
-          ),
-        ],
       ],
     );
   }
+
+  String _saldoNetoLabel(BalanceStatus status) {
+    switch (status) {
+      case BalanceStatus.aFavor:
+        return 'a tu favor';
+      case BalanceStatus.enContra:
+        return 'en contra';
+      case BalanceStatus.saldado:
+        return 'saldado';
+    }
+  }
 }
 
-class _DebtList extends StatelessWidget {
-  const _DebtList({
-    required this.title,
-    required this.debts,
+class _MemberDebtTile extends StatelessWidget {
+  const _MemberDebtTile({
+    required this.trace,
+    required this.myMemberId,
     required this.groupId,
   });
 
-  final String title;
-  final List<AccountDebtModel> debts;
+  final MemberDebtTrace trace;
+  final int myMemberId;
   final int groupId;
 
-  AvatarStackItem _item(BuildContext context, int memberId) {
-    final details = context.read<GroupProvider>().groupDetails;
+  int get memberId => trace.memberId;
+  bool get isOwed => trace.netBalanceCents > 0;
 
+  String _nombreMiembro(BuildContext context) {
+    final details = context.read<GroupProvider>().groupDetails;
     if (details != null && details.id == groupId) {
       for (final member in details.members) {
         if (member.id == memberId) {
-          return AvatarStackItem(
-            name: member.name,
-            photoUrl: member.profilePhoto,
-          );
+          return member.name;
         }
       }
     }
+    return 'Miembro';
+  }
 
-    return const AvatarStackItem(name: 'Miembro');
+  String _etiquetaMovimiento(AccountMovementModel movement) {
+    if (movement.kind == 'EXPENSE') {
+      return movement.payerMemberId == myMemberId
+          ? 'Adelantaste su parte'
+          : 'Tu parte del gasto';
+    }
+
+    if (movement.fromMemberId == myMemberId) {
+      return 'Pago realizado · reduce tu deuda';
+    }
+    return 'Pago recibido · reduce lo que te deben';
+  }
+
+  String _fecha(DateTime fecha) {
+    return '${fecha.day.toString().padLeft(2, '0')}/${fecha.month.toString().padLeft(2, '0')}/${fecha.year}';
   }
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
+    final nombre = _nombreMiembro(context);
+    final amountCents = trace.netBalanceCents.abs();
 
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        Text(
-          title,
-          style: theme.textTheme.titleMedium?.copyWith(
+    return Card(
+      margin: const EdgeInsets.only(bottom: 12),
+      color: AppColors.cardColor,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(14),
+        side: BorderSide(color: AppColors.border),
+      ),
+      child: ExpansionTile(
+        leading: UserAvatar(name: nombre, radius: 20),
+        title: Text(
+          nombre,
+          style: const TextStyle(
             color: AppColors.text,
-            fontWeight: FontWeight.bold,
-            fontStyle: FontStyle.italic,
+            fontSize: 15,
+            fontWeight: FontWeight.w600,
           ),
         ),
-        const SizedBox(height: 8),
-        Material(
-          clipBehavior: Clip.antiAlias,
-          borderRadius: BorderRadius.circular(14),
-          color: AppColors.fieldColor,
-          child: Column(
-            children: [
-              for (final debt in debts)
-                _DebtRow(
-                  item: _item(context, debt.memberId),
-                  amountCents: debt.amountCents,
-                ),
-            ],
-          ),
+        subtitle: Text(
+          '${isOwed ? 'Te debe (neto)' : 'Le debés (neto)'} '
+          '${MoneyFormatter.formatCentsShort(amountCents)}',
+          style: const TextStyle(color: AppColors.mutedText, fontSize: 13),
         ),
-      ],
+        children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                for (final movement in trace.movements)
+                  _MovementRow(
+                    movement: movement.movement,
+                    label: _etiquetaMovimiento(movement.movement),
+                    date: _fecha(movement.movement.createdAt),
+                    balanceChangeCents: movement.balanceChangeCents,
+                    balanceAfterCents: movement.balanceAfterCents,
+                  ),
+              ],
+            ),
+          ),
+        ],
+      ),
     );
   }
 }
 
-class _DebtRow extends StatelessWidget {
-  const _DebtRow({required this.item, required this.amountCents});
+class _MovementRow extends StatelessWidget {
+  const _MovementRow({
+    required this.movement,
+    required this.label,
+    required this.date,
+    required this.balanceChangeCents,
+    required this.balanceAfterCents,
+  });
 
-  final AvatarStackItem item;
-  final int amountCents;
+  final AccountMovementModel movement;
+  final String label;
+  final String date;
+  final int balanceChangeCents;
+  final int balanceAfterCents;
+
+  String _movementTitle() {
+    final title = movement.title?.trim();
+    if (title != null && title.isNotEmpty) {
+      return title;
+    }
+    return movement.kind == 'EXPENSE' ? 'Gasto sin título' : 'Pago';
+  }
+
+  String _balanceLabel() {
+    if (balanceAfterCents > 0) {
+      return 'Después: te debe ${MoneyFormatter.formatCentsShort(balanceAfterCents)}';
+    }
+    if (balanceAfterCents < 0) {
+      return 'Después: le debés ${MoneyFormatter.formatCentsShort(balanceAfterCents.abs())}';
+    }
+    return 'Después: quedan saldados';
+  }
 
   @override
   Widget build(BuildContext context) {
+    final signedChange = balanceChangeCents > 0
+        ? '+${MoneyFormatter.formatCentsShort(balanceChangeCents)}'
+        : '−${MoneyFormatter.formatCentsShort(balanceChangeCents.abs())}';
+
     return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+      padding: const EdgeInsets.symmetric(vertical: 8),
       child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          UserAvatar(name: item.name, photoUrl: item.photoUrl, radius: 20),
-          const SizedBox(width: 12),
           Expanded(
-            child: Text(
-              item.name,
-              style: const TextStyle(color: AppColors.text, fontSize: 15),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  _movementTitle(),
+                  style: const TextStyle(
+                    color: AppColors.text,
+                    fontSize: 14,
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  '$label · $date',
+                  style: const TextStyle(
+                    color: AppColors.mutedText,
+                    fontSize: 12,
+                  ),
+                ),
+                const SizedBox(height: 3),
+                Text(
+                  _balanceLabel(),
+                  style: const TextStyle(
+                    color: AppColors.mutedText,
+                    fontSize: 11,
+                  ),
+                ),
+              ],
             ),
           ),
+          const SizedBox(width: 8),
           Text(
-            MoneyFormatter.formatCentsShort(amountCents),
-            style: const TextStyle(
-              color: AppColors.text,
-              fontSize: 15,
+            signedChange,
+            style: TextStyle(
+              color: balanceChangeCents > 0
+                  ? AppColors.success
+                  : AppColors.error,
+              fontSize: 14,
               fontWeight: FontWeight.w600,
             ),
           ),

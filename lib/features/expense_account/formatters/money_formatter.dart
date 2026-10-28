@@ -37,4 +37,32 @@ class MoneyFormatter {
 
     return buffer.toString();
   }
+
+  /// Convierte un importe escrito al estilo argentino a centavos:
+  /// '1.234,50' -> 123450. Acepta coma o punto como separador decimal.
+  /// Devuelve null si el texto no representa un importe válido.
+  static int? parseCents(String value) {
+    var normalized = value.trim().replaceAll(' ', '').replaceAll('\$', '');
+
+    if (normalized.isEmpty) {
+      return null;
+    }
+
+    final hasComma = normalized.contains(',');
+    final hasDot = normalized.contains('.');
+
+    if (hasComma && hasDot) {
+      normalized = normalized.replaceAll('.', '').replaceAll(',', '.');
+    } else if (hasComma) {
+      normalized = normalized.replaceAll(',', '.');
+    }
+
+    final amount = double.tryParse(normalized);
+
+    if (amount == null || amount.isNaN || amount.isInfinite || amount <= 0) {
+      return null;
+    }
+
+    return (amount * 100).round();
+  }
 }

@@ -6,6 +6,7 @@ import '../../features/auth/screens/login_screen.dart';
 import '../../features/auth/screens/register_screen.dart';
 import '../../features/event/screens/create_event_screen.dart';
 import '../../features/expense_account/screens/create_expense_account_screen.dart';
+import '../../features/expense_account/screens/create_expense_screen.dart';
 import '../../features/expense_account/screens/expense_account_balance_screen.dart';
 import '../../features/expense_account/screens/expense_account_detail_screen.dart';
 import '../../features/expense_account/screens/expense_account_movements_screen.dart';
@@ -164,6 +165,15 @@ class AppRouter {
           builder: (_) => ExpenseAccountMovementsScreen(
             accountId: movementsArgs['accountId'] as int,
           ),
+          settings: settings,
+        );
+
+      case AppRoutes.createExpense:
+        final expenseArgs = settings.arguments as Map<String, dynamic>;
+
+        return MaterialPageRoute(
+          builder: (_) =>
+              CreateExpenseScreen(accountId: expenseArgs['accountId'] as int),
           settings: settings,
         );
 

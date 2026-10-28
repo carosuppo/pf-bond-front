@@ -20,6 +20,20 @@ class AccountMemberBalanceModel {
   }
 }
 
+class AccountShareModel {
+  final int memberId;
+  final int amountCents;
+
+  const AccountShareModel({required this.memberId, required this.amountCents});
+
+  factory AccountShareModel.fromJson(Map<String, dynamic> json) {
+    return AccountShareModel(
+      memberId: json['memberId'] as int,
+      amountCents: json['amountCents'] as int,
+    );
+  }
+}
+
 class AccountDebtModel {
   final int memberId;
   final int amountCents;
@@ -35,12 +49,47 @@ class AccountDebtModel {
 }
 
 class AccountMovementModel {
+  final int id;
   final String kind;
+  final String? title;
+  final int amountCents;
+  final int? payerMemberId;
+  final int? fromMemberId;
+  final int? toMemberId;
+  final DateTime createdAt;
+  final List<AccountShareModel> shares;
 
-  const AccountMovementModel({required this.kind});
+  const AccountMovementModel({
+    required this.id,
+    required this.kind,
+    this.title,
+    required this.amountCents,
+    this.payerMemberId,
+    this.fromMemberId,
+    this.toMemberId,
+    required this.createdAt,
+    this.shares = const [],
+  });
 
   factory AccountMovementModel.fromJson(Map<String, dynamic> json) {
-    return AccountMovementModel(kind: json['kind'] as String);
+    return AccountMovementModel(
+      id: json['id'] as int,
+      kind: json['kind'] as String,
+      title: json['title'] as String?,
+      amountCents: json['amountCents'] as int,
+      payerMemberId: json['payerMemberId'] as int?,
+      fromMemberId: json['fromMemberId'] as int?,
+      toMemberId: json['toMemberId'] as int?,
+      createdAt: DateTime.parse(json['createdAt'] as String),
+      shares:
+          (json['shares'] as List<dynamic>?)
+              ?.map(
+                (share) =>
+                    AccountShareModel.fromJson(share as Map<String, dynamic>),
+              )
+              .toList(growable: false) ??
+          [],
+    );
   }
 }
 
@@ -52,6 +101,7 @@ class ExpenseAccountDetailResponseModel {
   final int? eventId;
   final String? eventName;
   final List<AccountMemberBalanceModel> members;
+  final int myMemberId;
   final int myBalanceCents;
   final BalanceStatus myStatus;
   final List<AccountDebtModel> debtsToMe;
@@ -66,6 +116,7 @@ class ExpenseAccountDetailResponseModel {
     this.eventId,
     this.eventName,
     required this.members,
+    required this.myMemberId,
     required this.myBalanceCents,
     required this.myStatus,
     required this.debtsToMe,
@@ -90,6 +141,7 @@ class ExpenseAccountDetailResponseModel {
             ),
           )
           .toList(growable: false),
+      myMemberId: json['myMemberId'] as int,
       myBalanceCents: json['myBalanceCents'] as int,
       myStatus: balanceStatusFromString(json['myStatus'] as String),
       debtsToMe: (json['debtsToMe'] as List<dynamic>)

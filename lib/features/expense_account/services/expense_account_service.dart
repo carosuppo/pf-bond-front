@@ -1,7 +1,9 @@
 import '../../../core/network/api_client.dart';
 import '../models/create_expense_account_model.request.dart';
+import '../models/create_expense_model.request.dart';
 import '../models/expense_account_detail_model.response.dart';
 import '../models/expense_account_model.response.dart';
+import '../models/expense_model.response.dart';
 import '../models/my_expense_account_model.response.dart';
 
 class ExpenseAccountService {
@@ -33,5 +35,16 @@ class ExpenseAccountService {
       '/expense-account/$accountId',
     );
     return ExpenseAccountDetailResponseModel.fromJson(response);
+  }
+
+  Future<ExpenseResponseModel> createExpense({
+    required int accountId,
+    required CreateExpenseRequestModel request,
+  }) async {
+    final response = await _apiClient.authenticatedPost(
+      '/expense-account/$accountId/expense',
+      request.toJson(),
+    );
+    return ExpenseResponseModel.fromJson(response);
   }
 }
