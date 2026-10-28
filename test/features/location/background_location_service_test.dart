@@ -25,7 +25,7 @@ class _FakeGateway implements ForegroundTaskGateway {
 
   @override
   Future<void> stop() async {
-    stops++;
+    if (running) stops++;
     running = false;
   }
 

@@ -33,7 +33,8 @@ class MapScreen extends ConsumerStatefulWidget {
   ConsumerState<MapScreen> createState() => _MapScreenState();
 }
 
-class _MapScreenState extends ConsumerState<MapScreen> {
+class _MapScreenState extends ConsumerState<MapScreen>
+    with WidgetsBindingObserver {
   late final GroupProvider _groupProvider;
   late final LocationProvider _locationNotifier;
   late final PointOfInterestProvider _pointProvider;
@@ -66,6 +67,7 @@ class _MapScreenState extends ConsumerState<MapScreen> {
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
 
     _groupProvider = context.read<GroupProvider>();
     _locationNotifier = ref.read(locationProvider.notifier);
@@ -280,11 +282,23 @@ class _MapScreenState extends ConsumerState<MapScreen> {
     }
   }
 
+  double get _poiMinimumSize => PointOfInterestSheet.minimumSize(
+    context,
+    _poiSheetController.isAttached
+        ? _poiSheetController.sizeToPixels(1)
+        : MediaQuery.sizeOf(context).height,
+  );
+
+  double get _poiMaximumSize =>
+      _poiMinimumSize > PointOfInterestSheet.maxChildSize
+      ? _poiMinimumSize
+      : PointOfInterestSheet.maxChildSize;
+
   void _collapsePoiSheet() {
     if (!_poiSheetController.isAttached) return;
 
     _poiSheetController.animateTo(
-      PointOfInterestSheet.minChildSize,
+      _poiMinimumSize,
       duration: const Duration(milliseconds: 250),
       curve: Curves.easeOut,
     );
@@ -302,7 +316,7 @@ class _MapScreenState extends ConsumerState<MapScreen> {
     if (!_poiSheetController.isAttached) return;
 
     _poiSheetController.animateTo(
-      PointOfInterestSheet.maxChildSize,
+      _poiMaximumSize,
       duration: const Duration(milliseconds: 250),
       curve: Curves.easeOut,
     );
@@ -312,12 +326,8 @@ class _MapScreenState extends ConsumerState<MapScreen> {
     if (!_poiSheetController.isAttached) return;
 
     final delta = details.primaryDelta ?? 0;
-    final minPixels = _poiSheetController.sizeToPixels(
-      PointOfInterestSheet.minChildSize,
-    );
-    final maxPixels = _poiSheetController.sizeToPixels(
-      PointOfInterestSheet.maxChildSize,
-    );
+    final minPixels = _poiSheetController.sizeToPixels(_poiMinimumSize);
+    final maxPixels = _poiSheetController.sizeToPixels(_poiMaximumSize);
     final nextPixels = (_poiSheetController.pixels - delta)
         .clamp(minPixels, maxPixels)
         .toDouble();
@@ -340,10 +350,7 @@ class _MapScreenState extends ConsumerState<MapScreen> {
       return;
     }
 
-    final middleSize =
-        (PointOfInterestSheet.minChildSize +
-            PointOfInterestSheet.maxChildSize) /
-        2;
+    final middleSize = (_poiMinimumSize + _poiMaximumSize) / 2;
 
     if (_poiSheetController.size < middleSize) {
       _collapsePoiSheet();
@@ -572,8 +579,35 @@ class _MapScreenState extends ConsumerState<MapScreen> {
     );
   }
 
+  void _focusDraftLocation() {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      final point = _draftLocation;
+      if (!mounted ||
+          !_editing ||
+          point == null ||
+          !_poiSheetController.isAttached) {
+        return;
+      }
+      final height = _mapController.camera.nonRotatedSize.height;
+      final sheetHeight = _poiSheetController.size * height;
+      final top = MediaQuery.paddingOf(context).top + 72;
+      final visibleHeight = height - sheetHeight;
+      final targetY = (top.clamp(0.0, visibleHeight) + visibleHeight) / 2;
+      _mapController.move(point, 16, offset: Offset(0, targetY - height / 2));
+    });
+  }
+
+  @override
+  void didChangeMetrics() {
+    // Reframe after the keyboard closes or the available viewport changes.
+    if (_editing && _draftLocation != null) {
+      _focusDraftLocation();
+    }
+  }
+
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     _groupProvider.removeListener(_onGroupChanged);
     _pointProvider.removeListener(_onPointsChanged);
     _navigation.removeListener(_onNavigationChanged);
@@ -637,6 +671,7 @@ class _MapScreenState extends ConsumerState<MapScreen> {
                             authProvider.authResponse?.user.profilePhoto,
                         ownProfileName: authProvider.authResponse?.user.name,
                         points: pointProvider.points,
+                        autoCenter: !_editing,
                         previewColor: _draftColor,
                         previewPoint: _editing ? _draftLocation : null,
                         previewRadius: _editing && _draftLocation != null
@@ -657,7 +692,7 @@ class _MapScreenState extends ConsumerState<MapScreen> {
                             ? null
                             : _selectPoint,
                         indicatorBottomFraction: _editing
-                            ? PointOfInterestSheet.maxChildSize
+                            ? _poiMaximumSize
                             : groupProvider.groupDetails == null
                             ? 0
                             : _sheetExpanded
@@ -782,7 +817,8 @@ class _MapScreenState extends ConsumerState<MapScreen> {
                       _draftLocation = point;
                     });
 
-                    _mapController.move(point, 16);
+                    FocusScope.of(context).unfocus();
+                    _focusDraftLocation();
                   },
                   onColorChanged: (color) =>
                       setState(() => _draftColor = color),
