@@ -596,4 +596,28 @@ class GroupProvider extends ChangeNotifier {
       }
     }
   }
+
+  /// Obtiene los datos de un grupo para mostrar una cuenta sin cambiar el
+  /// grupo activo ni el estado compartido de sus detalles.
+  Future<GetGroupResponseModel?> getGroupDetailsForAccount({
+    required int groupId,
+  }) async {
+    final sessionVersion = _sessionVersion;
+    final currentDetails = groupDetails;
+    if (currentDetails?.id == groupId) {
+      return currentDetails;
+    }
+
+    final loadedDetails = await _groupService.getGroup(groupId: groupId);
+    if (sessionVersion != _sessionVersion) {
+      return null;
+    }
+    if (loadedDetails.id != groupId) {
+      throw FormatException(
+        'El grupo recibido no coincide con el grupo de la cuenta.',
+      );
+    }
+
+    return loadedDetails;
+  }
 }

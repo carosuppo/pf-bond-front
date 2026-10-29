@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
@@ -9,6 +11,7 @@ import '../../../core/widgets/buttons/app_secondary_button.dart';
 import '../../../core/widgets/discard_changes_dialog.dart';
 import '../../../core/widgets/global_text_field.dart';
 import '../../auth/providers/auth_provider.dart';
+import '../../group/models/get_group_model.response.dart';
 import '../../group/providers/group_provider.dart';
 import '../formatters/expense_split.dart';
 import '../formatters/money_formatter.dart';
@@ -41,6 +44,10 @@ class _CreateExpenseFormState extends State<CreateExpenseForm> {
   final Map<int, TextEditingController> _customAmountControllers = {};
 
   int? _payerMemberId;
+  GetGroupResponseModel? _accountGroupDetails;
+  int? _requestedGroupId;
+  bool _isGroupDetailsLoading = false;
+  String? _groupDetailsError;
   ExpenseSplitType _splitType = ExpenseSplitType.equal;
   final Set<int> _selectedParticipantIds = {};
 
@@ -55,10 +62,55 @@ class _CreateExpenseFormState extends State<CreateExpenseForm> {
       context.read<ExpenseAccountProvider>().loadAccountDetail(
         accountId: widget.accountId,
       );
+    });
+  }
+
+  void _ensureAccountGroupLoaded(int groupId) {
+    if (_requestedGroupId == groupId) {
+      return;
+    }
+
+    _requestedGroupId = groupId;
+    _accountGroupDetails = null;
+    _isGroupDetailsLoading = true;
+    _groupDetailsError = null;
+    unawaited(_loadAccountGroupDetails(groupId));
+  }
+
+  Future<void> _loadAccountGroupDetails(int groupId) async {
+    try {
+      final groupDetails = await context
+          .read<GroupProvider>()
+          .getGroupDetailsForAccount(groupId: groupId);
+      if (!mounted || _requestedGroupId != groupId) {
+        return;
+      }
+
       setState(() {
+        _accountGroupDetails = groupDetails;
+        _isGroupDetailsLoading = false;
+        _groupDetailsError = groupDetails == null
+            ? 'No se pudo cargar el grupo de esta cuenta.'
+            : null;
         _payerMemberId ??= _defaultPayerId();
       });
+    } catch (error) {
+      if (!mounted || _requestedGroupId != groupId) {
+        return;
+      }
+
+      setState(() {
+        _isGroupDetailsLoading = false;
+        _groupDetailsError = error.toString().replaceFirst('Exception: ', '');
+      });
+    }
+  }
+
+  void _retryAccountGroupLoad(int groupId) {
+    setState(() {
+      _requestedGroupId = null;
     });
+    _ensureAccountGroupLoaded(groupId);
   }
 
   @override
@@ -73,7 +125,7 @@ class _CreateExpenseFormState extends State<CreateExpenseForm> {
 
   int? _defaultPayerId() {
     final currentUserId = context.read<AuthProvider>().authResponse?.user.id;
-    final groupDetails = context.read<GroupProvider>().groupDetails;
+    final groupDetails = _accountGroupDetails;
     final detail = context.read<ExpenseAccountProvider>().accountDetail;
 
     if (currentUserId == null || groupDetails == null || detail == null) {
@@ -97,14 +149,13 @@ class _CreateExpenseFormState extends State<CreateExpenseForm> {
   List<_MemberInfo> _accountMembers() {
     final detail = context.read<ExpenseAccountProvider>().accountDetail;
 
-    if (detail == null) {
+    final groupDetails = _accountGroupDetails;
+    if (detail == null || groupDetails?.id != detail.groupId) {
       return const [];
     }
 
-    final groupDetails = context.read<GroupProvider>().groupDetails;
     final byId = {
-      if (groupDetails != null && groupDetails.id == detail.groupId)
-        for (final member in groupDetails.members) member.id: member,
+      for (final member in groupDetails!.members) member.id: member,
     };
 
     return [
@@ -557,6 +608,9 @@ class _CreateExpenseFormState extends State<CreateExpenseForm> {
   Widget build(BuildContext context) {
     final provider = context.watch<ExpenseAccountProvider>();
     final detail = provider.accountDetail;
+    if (detail != null) {
+      _ensureAccountGroupLoaded(detail.groupId);
+    }
     final isLoading = provider.isLoading;
 
     final theme = Theme.of(context);
@@ -607,6 +661,43 @@ class _CreateExpenseFormState extends State<CreateExpenseForm> {
                     return const Center(
                       child: CircularProgressIndicator(
                         color: AppColors.primary,
+                      ),
+                    );
+                  }
+
+                  if (_isGroupDetailsLoading) {
+                    return const Center(
+                      child: CircularProgressIndicator(
+                        color: AppColors.primary,
+                      ),
+                    );
+                  }
+
+                  if (_groupDetailsError != null ||
+                      _accountGroupDetails?.id != detail.groupId) {
+                    return Center(
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 32),
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Text(
+                              _groupDetailsError ??
+                                  'No se pudo cargar el grupo de esta cuenta.',
+                              textAlign: TextAlign.center,
+                              style: const TextStyle(
+                                color: AppColors.mutedText,
+                                fontSize: 14,
+                              ),
+                            ),
+                            const SizedBox(height: 12),
+                            OutlinedButton(
+                              onPressed: () =>
+                                  _retryAccountGroupLoad(detail.groupId),
+                              child: const Text('Reintentar'),
+                            ),
+                          ],
+                        ),
                       ),
                     );
                   }

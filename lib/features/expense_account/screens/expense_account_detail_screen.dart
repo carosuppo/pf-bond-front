@@ -8,11 +8,12 @@ import '../../../core/widgets/avatar_stack.dart';
 import '../../../core/widgets/buttons/app_primary_button.dart';
 import '../../../core/widgets/buttons/app_secondary_button.dart';
 import '../../../core/widgets/user_avatar.dart';
-import '../../group/providers/group_provider.dart';
+import '../../group/models/get_group_model.response.dart';
 import '../formatters/money_formatter.dart';
 import '../models/balance_status.dart';
 import '../models/expense_account_detail_model.response.dart';
 import '../providers/expense_account_provider.dart';
+import '../widgets/account_group_details_loader.dart';
 import '../widgets/account_header_card.dart';
 
 class ExpenseAccountDetailScreen extends StatelessWidget {
@@ -323,10 +324,12 @@ class _MembersPreview extends StatefulWidget {
 class _MembersPreviewState extends State<_MembersPreview> {
   bool _expanded = false;
 
-  List<AvatarStackItem> _items(BuildContext context, {bool all = false}) {
-    final details = context.watch<GroupProvider>().groupDetails;
+  List<AvatarStackItem> _items(
+    GetGroupResponseModel details, {
+    bool all = false,
+  }) {
     final byId = {
-      if (details != null && details.id == widget.groupId)
+      if (details.id == widget.groupId)
         for (final member in details.members) member.id: member,
     };
     final ids = all ? widget.memberIds : widget.previewIds.take(5);
@@ -340,8 +343,7 @@ class _MembersPreviewState extends State<_MembersPreview> {
     ];
   }
 
-  @override
-  Widget build(BuildContext context) {
+  Widget _buildPreview(GetGroupResponseModel details) {
     return Column(
       children: [
         Material(
@@ -353,7 +355,7 @@ class _MembersPreviewState extends State<_MembersPreview> {
               padding: const EdgeInsets.symmetric(vertical: 4),
               child: Row(
                 children: [
-                  AvatarStack(items: _items(context)),
+                  AvatarStack(items: _items(details)),
                   const Spacer(),
                   Icon(
                     _expanded
@@ -368,7 +370,7 @@ class _MembersPreviewState extends State<_MembersPreview> {
         ),
         if (_expanded) ...[
           const SizedBox(height: 8),
-          for (final item in _items(context, all: true))
+          for (final item in _items(details, all: true))
             Padding(
               padding: const EdgeInsets.symmetric(vertical: 6),
               child: Row(
@@ -393,6 +395,33 @@ class _MembersPreviewState extends State<_MembersPreview> {
             ),
         ],
       ],
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AccountGroupDetailsLoader(
+      groupId: widget.groupId,
+      builder: (context, details, isLoading, error) {
+        if (isLoading) {
+          return const SizedBox(
+            height: 48,
+            child: Center(
+              child: CircularProgressIndicator(
+                color: AppColors.primary,
+                strokeWidth: 2,
+              ),
+            ),
+          );
+        }
+        if (details == null) {
+          return const Text(
+            'No se pudo cargar el grupo de esta cuenta.',
+            style: TextStyle(color: AppColors.mutedText, fontSize: 13),
+          );
+        }
+        return _buildPreview(details);
+      },
     );
   }
 }

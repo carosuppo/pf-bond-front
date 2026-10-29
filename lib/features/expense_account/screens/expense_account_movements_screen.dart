@@ -4,10 +4,11 @@ import 'package:provider/provider.dart';
 import '../../../core/routes/app_routes.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/widgets/app_screen_header.dart';
-import '../../group/providers/group_provider.dart';
+import '../../group/models/get_group_model.response.dart';
 import '../balance/member_debt_trace.dart';
 import '../models/expense_account_detail_model.response.dart';
 import '../providers/expense_account_provider.dart';
+import '../widgets/account_group_details_loader.dart';
 import '../widgets/account_movement_card.dart';
 
 class ExpenseAccountMovementsScreen extends StatelessWidget {
@@ -115,6 +116,49 @@ class _MovementsTabs extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    return AccountGroupDetailsLoader(
+      groupId: detail.groupId,
+      builder: (context, groupDetails, isLoading, error) {
+        if (isLoading) {
+          return const Center(
+            child: CircularProgressIndicator(color: AppColors.primary),
+          );
+        }
+        if (groupDetails == null) {
+          return const Center(
+            child: Padding(
+              padding: EdgeInsets.symmetric(horizontal: 32),
+              child: Text(
+                'No se pudo cargar el grupo de esta cuenta.',
+                textAlign: TextAlign.center,
+                style: TextStyle(color: AppColors.mutedText, fontSize: 14),
+              ),
+            ),
+          );
+        }
+        return _MovementsTabsContent(
+          detail: detail,
+          groupDetails: groupDetails,
+        );
+      },
+    );
+  }
+}
+
+class _MovementsTabsContent extends StatelessWidget {
+  const _MovementsTabsContent({
+    required this.detail,
+    required this.groupDetails,
+  });
+
+  final ExpenseAccountDetailResponseModel detail;
+  final GetGroupResponseModel groupDetails;
+
+  @override
+  Widget build(BuildContext context) {
+    final memberNames = {
+      for (final member in groupDetails.members) member.id: member.name,
+    };
     final expenses = detail.movements
         .where(
           (movement) =>
@@ -152,14 +196,14 @@ class _MovementsTabs extends StatelessWidget {
                 _MovementsList(
                   emptyMessage: 'Todavía no hay gastos en esta cuenta.',
                   movements: expenses,
-                  groupId: detail.groupId,
                   memberId: detail.myMemberId,
+                  memberNames: memberNames,
                 ),
                 _MovementsList(
                   emptyMessage: 'Todavía no hay pagos en esta cuenta.',
                   movements: payments,
-                  groupId: detail.groupId,
                   memberId: detail.myMemberId,
+                  memberNames: memberNames,
                 ),
               ],
             ),
@@ -174,27 +218,17 @@ class _MovementsList extends StatelessWidget {
   const _MovementsList({
     required this.emptyMessage,
     required this.movements,
-    required this.groupId,
     required this.memberId,
+    required this.memberNames,
   });
 
   final String emptyMessage;
   final List<AccountMovementModel> movements;
-  final int groupId;
   final int memberId;
+  final Map<int, String> memberNames;
 
-  Map<int, String> _memberNames(BuildContext context) {
-    final groupDetails = context.watch<GroupProvider>().groupDetails;
-
-    if (groupDetails == null || groupDetails.id != groupId) {
-      return const {};
-    }
-
-    return {for (final member in groupDetails.members) member.id: member.name};
-  }
-
-  String _memberName(Map<int, String> names, int? memberId) {
-    return names[memberId] ?? 'Miembro';
+  String _memberName(int? memberId) {
+    return memberNames[memberId] ?? 'Miembro';
   }
 
   String _title(AccountMovementModel movement) {
@@ -207,7 +241,7 @@ class _MovementsList extends StatelessWidget {
     return movement.kind == 'EXPENSE' ? 'Gasto' : 'Pago';
   }
 
-  String _subtitle(AccountMovementModel movement, Map<int, String> names) {
+  String _subtitle(AccountMovementModel movement) {
     if (movement.kind == 'EXPENSE') {
       final memberShare = movement.shares.where(
         (share) => share.memberId == memberId && share.amountCents > 0,
@@ -216,15 +250,15 @@ class _MovementsList extends StatelessWidget {
         return 'Tu parte · pagaste vos';
       }
       if (memberShare.isNotEmpty) {
-        return 'Tu parte · pagó ${_memberName(names, movement.payerMemberId)}';
+        return 'Tu parte · pagó ${_memberName(movement.payerMemberId)}';
       }
       return 'Adelantaste · pagaste vos';
     }
 
     if (movement.fromMemberId == memberId) {
-      return 'Pagaste a ${_memberName(names, movement.toMemberId)}';
+      return 'Pagaste a ${_memberName(movement.toMemberId)}';
     }
-    return '${_memberName(names, movement.fromMemberId)} te pagó';
+    return '${_memberName(movement.fromMemberId)} te pagó';
   }
 
   @override
@@ -263,8 +297,6 @@ class _MovementsList extends StatelessWidget {
       );
     }
 
-    final names = _memberNames(context);
-
     return ListView.builder(
       padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
       itemCount: movements.length,
@@ -278,7 +310,7 @@ class _MovementsList extends StatelessWidget {
               : Icons.payments_outlined,
           accentColor: isExpense ? AppColors.primary : AppColors.success,
           title: _title(movement),
-          subtitle: _subtitle(movement, names),
+          subtitle: _subtitle(movement),
           amountCents: memberMovementAmountCents(movement, memberId) ?? 0,
           createdAt: movement.createdAt,
         );

@@ -4,12 +4,13 @@ import 'package:provider/provider.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/widgets/app_screen_header.dart';
 import '../../../core/widgets/user_avatar.dart';
-import '../../group/providers/group_provider.dart';
+import '../../group/models/get_group_model.response.dart';
 import '../balance/member_debt_trace.dart';
 import '../formatters/money_formatter.dart';
 import '../models/balance_status.dart';
 import '../models/expense_account_detail_model.response.dart';
 import '../providers/expense_account_provider.dart';
+import '../widgets/account_group_details_loader.dart';
 import '../widgets/account_header_card.dart';
 
 class ExpenseAccountBalanceScreen extends StatelessWidget {
@@ -103,6 +104,40 @@ class _BalanceBody extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    return AccountGroupDetailsLoader(
+      groupId: detail.groupId,
+      builder: (context, groupDetails, isLoading, error) {
+        if (isLoading) {
+          return const Center(
+            child: CircularProgressIndicator(color: AppColors.primary),
+          );
+        }
+        if (groupDetails == null) {
+          return const Center(
+            child: Padding(
+              padding: EdgeInsets.symmetric(horizontal: 32),
+              child: Text(
+                'No se pudo cargar el grupo de esta cuenta.',
+                textAlign: TextAlign.center,
+                style: TextStyle(color: AppColors.mutedText, fontSize: 14),
+              ),
+            ),
+          );
+        }
+        return _BalanceBodyContent(detail: detail, groupDetails: groupDetails);
+      },
+    );
+  }
+}
+
+class _BalanceBodyContent extends StatelessWidget {
+  const _BalanceBodyContent({required this.detail, required this.groupDetails});
+
+  final ExpenseAccountDetailResponseModel detail;
+  final GetGroupResponseModel groupDetails;
+
+  @override
+  Widget build(BuildContext context) {
     final traces = calculateMemberDebtTraces(
       myMemberId: detail.myMemberId,
       movements: detail.movements,
@@ -136,7 +171,7 @@ class _BalanceBody extends StatelessWidget {
               _MemberDebtTile(
                 trace: debt,
                 myMemberId: detail.myMemberId,
-                groupId: detail.groupId,
+                groupDetails: groupDetails,
               ),
           ],
           if (myDebts.isNotEmpty) ...[
@@ -154,7 +189,7 @@ class _BalanceBody extends StatelessWidget {
               _MemberDebtTile(
                 trace: debt,
                 myMemberId: detail.myMemberId,
-                groupId: detail.groupId,
+                groupDetails: groupDetails,
               ),
           ],
           if (traces.isEmpty)
@@ -230,23 +265,20 @@ class _MemberDebtTile extends StatelessWidget {
   const _MemberDebtTile({
     required this.trace,
     required this.myMemberId,
-    required this.groupId,
+    required this.groupDetails,
   });
 
   final MemberDebtTrace trace;
   final int myMemberId;
-  final int groupId;
+  final GetGroupResponseModel groupDetails;
 
   int get memberId => trace.memberId;
   bool get isOwed => trace.netBalanceCents > 0;
 
-  String _nombreMiembro(BuildContext context) {
-    final details = context.read<GroupProvider>().groupDetails;
-    if (details != null && details.id == groupId) {
-      for (final member in details.members) {
-        if (member.id == memberId) {
-          return member.name;
-        }
+  String _nombreMiembro() {
+    for (final member in groupDetails.members) {
+      if (member.id == memberId) {
+        return member.name;
       }
     }
     return 'Miembro';
@@ -271,7 +303,7 @@ class _MemberDebtTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final nombre = _nombreMiembro(context);
+    final nombre = _nombreMiembro();
     final amountCents = trace.netBalanceCents.abs();
 
     return Card(
