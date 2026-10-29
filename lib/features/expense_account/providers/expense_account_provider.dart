@@ -9,6 +9,7 @@ import '../models/expense_model.response.dart';
 import '../models/expense_split_type.dart';
 import '../models/my_expense_account_model.response.dart';
 import '../models/pending_expense_share_model.response.dart';
+import '../models/update_expense_account_model.request.dart';
 import '../services/expense_account_service.dart';
 
 class ExpenseAccountProvider extends ChangeNotifier {
@@ -19,6 +20,9 @@ class ExpenseAccountProvider extends ChangeNotifier {
   bool isLoading = false;
   String? errorMessage;
   ExpenseAccountResponseModel? expenseAccount;
+  ExpenseAccountResponseModel? updatedExpenseAccount;
+  bool isUpdatingExpenseAccount = false;
+  String? updateExpenseAccountErrorMessage;
   List<MyExpenseAccountResponseModel> accounts = [];
   bool isAccountsLoading = false;
   String? accountsErrorMessage;
@@ -33,9 +37,18 @@ class ExpenseAccountProvider extends ChangeNotifier {
   List<ExpensePaymentResponseModel> registeredExpensePayments = [];
   bool isRegisteringExpensePayments = false;
   String? paymentRegistrationErrorMessage;
+  bool isDeletingExpenseAccount = false;
+  String? _deleteExpenseAccountErrorMessage;
+  int? _deleteExpenseAccountErrorAccountId;
   int? _pendingSharesAccountId;
   bool _hasLoadedPendingShares = false;
   int _sessionVersion = 0;
+  final Set<int> _deletedAccountIds = {};
+
+  String? get deleteExpenseAccountErrorMessage =>
+      _deleteExpenseAccountErrorAccountId == _detailAccountId
+      ? _deleteExpenseAccountErrorMessage
+      : null;
 
   Future<bool> createExpenseAccount({
     required int groupId,
@@ -77,11 +90,119 @@ class ExpenseAccountProvider extends ChangeNotifier {
     }
   }
 
+  Future<bool> updateExpenseAccount({
+    required int accountId,
+    required UpdateExpenseAccountRequestModel request,
+  }) async {
+    if (isUpdatingExpenseAccount) return false;
+
+    final sessionVersion = _sessionVersion;
+    isUpdatingExpenseAccount = true;
+    updateExpenseAccountErrorMessage = null;
+    updatedExpenseAccount = null;
+    notifyListeners();
+
+    try {
+      final updated = await _expenseAccountService.updateExpenseAccount(
+        accountId: accountId,
+        request: request,
+      );
+      if (sessionVersion != _sessionVersion) return false;
+      updatedExpenseAccount = updated;
+
+      await loadAccounts();
+      if (sessionVersion != _sessionVersion) return false;
+
+      final currentDetail = accountDetail;
+      if (currentDetail?.id == accountId &&
+          !updated.memberIds.contains(currentDetail!.myMemberId)) {
+        clearDetail();
+      } else {
+        await loadAccountDetail(accountId: accountId, force: true);
+        if (sessionVersion != _sessionVersion) return false;
+      }
+
+      return true;
+    } catch (error) {
+      if (sessionVersion != _sessionVersion) return false;
+      updateExpenseAccountErrorMessage = error.toString().replaceFirst(
+        'Exception: ',
+        '',
+      );
+      return false;
+    } finally {
+      if (sessionVersion == _sessionVersion) {
+        isUpdatingExpenseAccount = false;
+        notifyListeners();
+      }
+    }
+  }
+
+  Future<bool> deleteExpenseAccount({required int accountId}) async {
+    if (isDeletingExpenseAccount || _deletedAccountIds.contains(accountId)) {
+      return false;
+    }
+
+    final sessionVersion = _sessionVersion;
+    isDeletingExpenseAccount = true;
+    _deleteExpenseAccountErrorMessage = null;
+    _deleteExpenseAccountErrorAccountId = accountId;
+    notifyListeners();
+
+    try {
+      await _expenseAccountService.deleteExpenseAccount(accountId: accountId);
+      if (sessionVersion != _sessionVersion) return false;
+
+      _deletedAccountIds.add(accountId);
+      accounts = accounts
+          .where((account) => account.id != accountId)
+          .toList(growable: false);
+
+      if (_detailAccountId == accountId) {
+        _detailAccountId = null;
+        accountDetail = null;
+        isDetailLoading = false;
+        detailErrorMessage = null;
+      }
+      if (_pendingSharesAccountId == accountId) {
+        _pendingSharesAccountId = null;
+        _hasLoadedPendingShares = false;
+        pendingExpenseShares = [];
+        isPendingExpenseSharesLoading = false;
+        pendingExpenseSharesErrorMessage = null;
+      }
+      if (expenseAccount?.id == accountId) expenseAccount = null;
+      if (updatedExpenseAccount?.id == accountId) updatedExpenseAccount = null;
+      registeredExpensePayments = [];
+      notifyListeners();
+
+      await loadAccounts();
+      if (sessionVersion != _sessionVersion) return false;
+      return true;
+    } catch (error) {
+      if (sessionVersion != _sessionVersion) return false;
+      _deleteExpenseAccountErrorMessage = error.toString().replaceFirst(
+        'Exception: ',
+        '',
+      );
+      _deleteExpenseAccountErrorAccountId = accountId;
+      return false;
+    } finally {
+      if (sessionVersion == _sessionVersion) {
+        isDeletingExpenseAccount = false;
+        notifyListeners();
+      }
+    }
+  }
+
   void resetSessionState() {
     _sessionVersion++;
     isLoading = false;
     errorMessage = null;
     expenseAccount = null;
+    updatedExpenseAccount = null;
+    isUpdatingExpenseAccount = false;
+    updateExpenseAccountErrorMessage = null;
     accounts = [];
     isAccountsLoading = false;
     accountsErrorMessage = null;
@@ -96,8 +217,12 @@ class ExpenseAccountProvider extends ChangeNotifier {
     registeredExpensePayments = [];
     isRegisteringExpensePayments = false;
     paymentRegistrationErrorMessage = null;
+    isDeletingExpenseAccount = false;
+    _deleteExpenseAccountErrorMessage = null;
+    _deleteExpenseAccountErrorAccountId = null;
     _pendingSharesAccountId = null;
     _hasLoadedPendingShares = false;
+    _deletedAccountIds.clear();
     notifyListeners();
   }
 
@@ -110,7 +235,9 @@ class ExpenseAccountProvider extends ChangeNotifier {
     try {
       final loaded = await _expenseAccountService.getMyAccounts();
       if (sessionVersion != _sessionVersion) return;
-      accounts = loaded;
+      accounts = loaded
+          .where((account) => !_deletedAccountIds.contains(account.id))
+          .toList(growable: false);
     } catch (error) {
       if (sessionVersion != _sessionVersion) return;
       accountsErrorMessage = error.toString().replaceFirst('Exception: ', '');
@@ -127,6 +254,18 @@ class ExpenseAccountProvider extends ChangeNotifier {
     bool force = false,
   }) async {
     final sessionVersion = _sessionVersion;
+    if (_detailAccountId != accountId) {
+      _deleteExpenseAccountErrorMessage = null;
+      _deleteExpenseAccountErrorAccountId = null;
+    }
+    if (_deletedAccountIds.contains(accountId)) {
+      _detailAccountId = null;
+      accountDetail = null;
+      isDetailLoading = false;
+      detailErrorMessage = 'La cuenta ya no está disponible.';
+      notifyListeners();
+      return;
+    }
     final hasLoadedDetail =
         _detailAccountId == accountId && accountDetail != null;
     if (hasLoadedDetail && !force) {
@@ -146,6 +285,7 @@ class ExpenseAccountProvider extends ChangeNotifier {
       );
       if (sessionVersion != _sessionVersion) return;
       if (_detailAccountId != accountId) return;
+      if (_deletedAccountIds.contains(accountId)) return;
       accountDetail = loaded;
     } catch (error) {
       if (sessionVersion != _sessionVersion) return;
@@ -166,6 +306,8 @@ class ExpenseAccountProvider extends ChangeNotifier {
     accountDetail = null;
     isDetailLoading = false;
     detailErrorMessage = null;
+    _deleteExpenseAccountErrorMessage = null;
+    _deleteExpenseAccountErrorAccountId = null;
     notifyListeners();
   }
 
@@ -174,6 +316,12 @@ class ExpenseAccountProvider extends ChangeNotifier {
     bool force = false,
   }) async {
     final sessionVersion = _sessionVersion;
+    if (_deletedAccountIds.contains(accountId)) {
+      pendingExpenseShares = [];
+      pendingExpenseSharesErrorMessage = 'La cuenta ya no está disponible.';
+      notifyListeners();
+      return;
+    }
     if (_pendingSharesAccountId != accountId) {
       pendingExpenseShares = [];
       _hasLoadedPendingShares = false;
@@ -198,6 +346,7 @@ class ExpenseAccountProvider extends ChangeNotifier {
           _pendingSharesAccountId != accountId) {
         return;
       }
+      if (_deletedAccountIds.contains(accountId)) return;
       pendingExpenseShares = loaded;
       _hasLoadedPendingShares = true;
     } catch (error) {

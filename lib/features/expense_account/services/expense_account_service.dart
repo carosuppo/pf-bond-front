@@ -7,6 +7,7 @@ import '../models/expense_payment_model.response.dart';
 import '../models/expense_model.response.dart';
 import '../models/my_expense_account_model.response.dart';
 import '../models/pending_expense_share_model.response.dart';
+import '../models/update_expense_account_model.request.dart';
 
 class ExpenseAccountService {
   final ApiClient _apiClient;
@@ -18,6 +19,17 @@ class ExpenseAccountService {
   }) async {
     final response = await _apiClient.authenticatedPost(
       '/expense-account',
+      request.toJson(),
+    );
+    return ExpenseAccountResponseModel.fromJson(response);
+  }
+
+  Future<ExpenseAccountResponseModel> updateExpenseAccount({
+    required int accountId,
+    required UpdateExpenseAccountRequestModel request,
+  }) async {
+    final response = await _apiClient.authenticatedPatch(
+      '/expense-account/$accountId',
       request.toJson(),
     );
     return ExpenseAccountResponseModel.fromJson(response);
@@ -37,6 +49,10 @@ class ExpenseAccountService {
       '/expense-account/$accountId',
     );
     return ExpenseAccountDetailResponseModel.fromJson(response);
+  }
+
+  Future<void> deleteExpenseAccount({required int accountId}) {
+    return _apiClient.authenticatedDelete('/expense-account/$accountId');
   }
 
   Future<ExpenseResponseModel> createExpense({

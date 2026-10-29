@@ -117,6 +117,7 @@ class ExpenseAccountDetailResponseModel {
   final int id;
   final String name;
   final int groupId;
+  final int? createdByUserId;
   final String groupName;
   final int? eventId;
   final String? eventName;
@@ -132,6 +133,7 @@ class ExpenseAccountDetailResponseModel {
     required this.id,
     required this.name,
     required this.groupId,
+    this.createdByUserId,
     required this.groupName,
     this.eventId,
     this.eventName,
@@ -151,6 +153,7 @@ class ExpenseAccountDetailResponseModel {
       id: json['id'] as int,
       name: json['name'] as String,
       groupId: json['groupId'] as int,
+      createdByUserId: json['createdByUserId'] as int?,
       groupName: json['groupName'] as String,
       eventId: json['eventId'] as int?,
       eventName: json['eventName'] as String?,
