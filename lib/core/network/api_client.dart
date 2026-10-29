@@ -138,6 +138,29 @@ class ApiClient {
         .toList(growable: false);
   }
 
+  Future<List<Map<String, dynamic>>> authenticatedPostList(
+    String path, {
+    Map<String, dynamic>? body,
+  }) async {
+    final headers = await _buildHeaders(authenticated: true);
+    final response = await _send(
+      () => http.post(
+        Uri.parse('${ApiConfig.baseUrl}$path'),
+        headers: headers,
+        body: body == null ? null : jsonEncode(body),
+      ),
+    );
+    final decodedBody = _decodeSuccessfulResponse(response);
+
+    if (decodedBody is! List<Object?>) {
+      throw Exception('La respuesta del servidor no es una lista valida.');
+    }
+
+    return decodedBody
+        .map((item) => Map<String, dynamic>.from(item! as Map))
+        .toList(growable: false);
+  }
+
   Future<Map<String, dynamic>> authenticatedPut(
     String path,
     Map<String, dynamic> body,

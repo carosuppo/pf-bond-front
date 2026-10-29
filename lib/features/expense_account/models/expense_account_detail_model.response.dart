@@ -23,13 +23,19 @@ class AccountMemberBalanceModel {
 class AccountShareModel {
   final int memberId;
   final int amountCents;
+  final bool isPaid;
 
-  const AccountShareModel({required this.memberId, required this.amountCents});
+  const AccountShareModel({
+    required this.memberId,
+    required this.amountCents,
+    this.isPaid = false,
+  });
 
   factory AccountShareModel.fromJson(Map<String, dynamic> json) {
     return AccountShareModel(
       memberId: json['memberId'] as int,
       amountCents: json['amountCents'] as int,
+      isPaid: json['isPaid'] as bool? ?? false,
     );
   }
 }
@@ -56,7 +62,11 @@ class AccountMovementModel {
   final int? payerMemberId;
   final int? fromMemberId;
   final int? toMemberId;
+  final int? expenseId;
+  final int? expenseShareId;
+  final String? expenseTitle;
   final DateTime createdAt;
+  final DateTime? confirmedAt;
   final List<AccountShareModel> shares;
 
   const AccountMovementModel({
@@ -67,7 +77,11 @@ class AccountMovementModel {
     this.payerMemberId,
     this.fromMemberId,
     this.toMemberId,
+    this.expenseId,
+    this.expenseShareId,
+    this.expenseTitle,
     required this.createdAt,
+    this.confirmedAt,
     this.shares = const [],
   });
 
@@ -75,12 +89,18 @@ class AccountMovementModel {
     return AccountMovementModel(
       id: json['id'] as int,
       kind: json['kind'] as String,
-      title: json['title'] as String?,
+      title: json['title'] as String? ?? json['expenseTitle'] as String?,
       amountCents: json['amountCents'] as int,
       payerMemberId: json['payerMemberId'] as int?,
       fromMemberId: json['fromMemberId'] as int?,
       toMemberId: json['toMemberId'] as int?,
+      expenseId: json['expenseId'] as int?,
+      expenseShareId: json['expenseShareId'] as int?,
+      expenseTitle: json['expenseTitle'] as String?,
       createdAt: DateTime.parse(json['createdAt'] as String),
+      confirmedAt: json['confirmedAt'] == null
+          ? null
+          : DateTime.parse(json['confirmedAt'] as String),
       shares:
           (json['shares'] as List<dynamic>?)
               ?.map(

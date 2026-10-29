@@ -4,9 +4,11 @@ import '../models/create_expense_account_model.request.dart';
 import '../models/create_expense_model.request.dart';
 import '../models/expense_account_detail_model.response.dart';
 import '../models/expense_account_model.response.dart';
+import '../models/expense_payment_model.response.dart';
 import '../models/expense_model.response.dart';
 import '../models/expense_split_type.dart';
 import '../models/my_expense_account_model.response.dart';
+import '../models/pending_expense_share_model.response.dart';
 import '../services/expense_account_service.dart';
 
 class ExpenseAccountProvider extends ChangeNotifier {
@@ -25,6 +27,14 @@ class ExpenseAccountProvider extends ChangeNotifier {
   String? detailErrorMessage;
   int? _detailAccountId;
   ExpenseResponseModel? createdExpense;
+  List<PendingExpenseShareResponseModel> pendingExpenseShares = [];
+  bool isPendingExpenseSharesLoading = false;
+  String? pendingExpenseSharesErrorMessage;
+  List<ExpensePaymentResponseModel> registeredExpensePayments = [];
+  bool isRegisteringExpensePayments = false;
+  String? paymentRegistrationErrorMessage;
+  int? _pendingSharesAccountId;
+  bool _hasLoadedPendingShares = false;
   int _sessionVersion = 0;
 
   Future<bool> createExpenseAccount({
@@ -80,6 +90,14 @@ class ExpenseAccountProvider extends ChangeNotifier {
     detailErrorMessage = null;
     _detailAccountId = null;
     createdExpense = null;
+    pendingExpenseShares = [];
+    isPendingExpenseSharesLoading = false;
+    pendingExpenseSharesErrorMessage = null;
+    registeredExpensePayments = [];
+    isRegisteringExpensePayments = false;
+    paymentRegistrationErrorMessage = null;
+    _pendingSharesAccountId = null;
+    _hasLoadedPendingShares = false;
     notifyListeners();
   }
 
@@ -149,6 +167,111 @@ class ExpenseAccountProvider extends ChangeNotifier {
     isDetailLoading = false;
     detailErrorMessage = null;
     notifyListeners();
+  }
+
+  Future<void> loadPendingExpenseShares({
+    required int accountId,
+    bool force = false,
+  }) async {
+    final sessionVersion = _sessionVersion;
+    if (_pendingSharesAccountId != accountId) {
+      pendingExpenseShares = [];
+      _hasLoadedPendingShares = false;
+    }
+    if (_pendingSharesAccountId == accountId &&
+        _hasLoadedPendingShares &&
+        !force) {
+      return;
+    }
+
+    _pendingSharesAccountId = accountId;
+    pendingExpenseSharesErrorMessage = null;
+    paymentRegistrationErrorMessage = null;
+    isPendingExpenseSharesLoading = true;
+    notifyListeners();
+
+    try {
+      final loaded = await _expenseAccountService.getPendingExpenseShares(
+        accountId: accountId,
+      );
+      if (sessionVersion != _sessionVersion ||
+          _pendingSharesAccountId != accountId) {
+        return;
+      }
+      pendingExpenseShares = loaded;
+      _hasLoadedPendingShares = true;
+    } catch (error) {
+      if (sessionVersion != _sessionVersion ||
+          _pendingSharesAccountId != accountId) {
+        return;
+      }
+      pendingExpenseSharesErrorMessage = error.toString().replaceFirst(
+        'Exception: ',
+        '',
+      );
+    } finally {
+      if (sessionVersion == _sessionVersion &&
+          _pendingSharesAccountId == accountId) {
+        isPendingExpenseSharesLoading = false;
+        notifyListeners();
+      }
+    }
+  }
+
+  Future<bool> registerExpensePayments({
+    required int accountId,
+    required List<int> expenseShareIds,
+    bool registerAll = false,
+  }) async {
+    if (isRegisteringExpensePayments) {
+      return false;
+    }
+    if (!registerAll && expenseShareIds.isEmpty) {
+      paymentRegistrationErrorMessage =
+          'Seleccioná al menos una participación para registrar.';
+      notifyListeners();
+      return false;
+    }
+
+    final sessionVersion = _sessionVersion;
+    isRegisteringExpensePayments = true;
+    paymentRegistrationErrorMessage = null;
+    registeredExpensePayments = [];
+    notifyListeners();
+
+    try {
+      final registered = registerAll
+          ? await _expenseAccountService.registerAllExpensePayments(
+              accountId: accountId,
+            )
+          : await _expenseAccountService.registerExpensePayments(
+              accountId: accountId,
+              expenseShareIds: expenseShareIds,
+            );
+      if (sessionVersion != _sessionVersion) return false;
+      registeredExpensePayments = registered;
+
+      await Future.wait([
+        loadPendingExpenseShares(accountId: accountId, force: true),
+        loadAccountDetail(accountId: accountId, force: true),
+        loadAccounts(),
+      ]);
+      if (sessionVersion != _sessionVersion) return false;
+
+      return true;
+    } catch (error) {
+      if (sessionVersion != _sessionVersion) return false;
+      paymentRegistrationErrorMessage = error.toString().replaceFirst(
+        'Exception: ',
+        '',
+      );
+      return false;
+    } finally {
+      if (sessionVersion == _sessionVersion) {
+        isRegisteringExpensePayments = false;
+        notifyListeners();
+      }
+    }
   }
 
   Future<bool> createExpense({

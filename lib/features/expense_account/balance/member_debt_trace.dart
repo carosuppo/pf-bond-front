@@ -47,8 +47,13 @@ List<MemberDebtTrace> calculateMemberDebtTraces({
 }) {
   final impactsByMember = <int, List<_MovementImpact>>{};
 
-  void addImpact(int memberId, AccountMovementModel movement, int amountCents) {
-    if (memberId == myMemberId || amountCents == 0) {
+  void addImpact(
+    int memberId,
+    AccountMovementModel movement,
+    int amountCents, {
+    bool includeZero = false,
+  }) {
+    if (memberId == myMemberId || (amountCents == 0 && !includeZero)) {
       return;
     }
 
@@ -57,6 +62,25 @@ List<MemberDebtTrace> calculateMemberDebtTraces({
         .add(
           _MovementImpact(movement: movement, balanceChangeCents: amountCents),
         );
+  }
+
+  bool isPaymentForPaidShare(AccountMovementModel payment) {
+    final expenseId = payment.expenseId;
+    final memberId = payment.fromMemberId;
+    final payerMemberId = payment.toMemberId;
+    if (expenseId == null || memberId == null || payerMemberId == null) {
+      return false;
+    }
+
+    return movements.any(
+      (movement) =>
+          movement.kind == 'EXPENSE' &&
+          movement.id == expenseId &&
+          movement.payerMemberId == payerMemberId &&
+          movement.shares.any(
+            (share) => share.memberId == memberId && share.isPaid,
+          ),
+    );
   }
 
   for (final movement in movements) {
@@ -68,7 +92,7 @@ List<MemberDebtTrace> calculateMemberDebtTraces({
 
       if (payerMemberId == myMemberId) {
         for (final share in movement.shares) {
-          if (share.memberId != myMemberId) {
+          if (share.memberId != myMemberId && !share.isPaid) {
             addImpact(share.memberId, movement, share.amountCents);
           }
         }
@@ -76,10 +100,25 @@ List<MemberDebtTrace> calculateMemberDebtTraces({
       }
 
       for (final share in movement.shares) {
-        if (share.memberId == myMemberId) {
+        if (share.memberId == myMemberId && !share.isPaid) {
           addImpact(payerMemberId, movement, -share.amountCents);
           break;
         }
+      }
+      continue;
+    }
+
+    if (movement.expenseShareId != null) {
+      if (!isPaymentForPaidShare(movement)) {
+        continue;
+      }
+
+      if (movement.fromMemberId == myMemberId &&
+          movement.toMemberId != null) {
+        addImpact(movement.toMemberId!, movement, 0, includeZero: true);
+      } else if (movement.toMemberId == myMemberId &&
+          movement.fromMemberId != null) {
+        addImpact(movement.fromMemberId!, movement, 0, includeZero: true);
       }
       continue;
     }

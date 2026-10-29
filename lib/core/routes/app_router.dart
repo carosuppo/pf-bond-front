@@ -10,6 +10,7 @@ import '../../features/expense_account/screens/create_expense_screen.dart';
 import '../../features/expense_account/screens/expense_account_balance_screen.dart';
 import '../../features/expense_account/screens/expense_account_detail_screen.dart';
 import '../../features/expense_account/screens/expense_account_movements_screen.dart';
+import '../../features/expense_account/screens/expense_account_payments_screen.dart';
 import '../../features/group/models/get_group_model.response.dart';
 import '../../features/group/screens/create_group_screen.dart';
 import '../../features/group/screens/edit_group_screen.dart';
@@ -164,6 +165,17 @@ class AppRouter {
         return MaterialPageRoute(
           builder: (_) => ExpenseAccountMovementsScreen(
             accountId: movementsArgs['accountId'] as int,
+          ),
+          settings: settings,
+        );
+
+      case AppRoutes.expenseAccountPayments:
+        final paymentArgs = settings.arguments as Map<String, dynamic>;
+
+        return MaterialPageRoute(
+          builder: (_) => ExpenseAccountPaymentsScreen(
+            accountId: paymentArgs['accountId'] as int,
+            groupId: paymentArgs['groupId'] as int,
           ),
           settings: settings,
         );

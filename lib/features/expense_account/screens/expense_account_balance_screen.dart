@@ -291,6 +291,10 @@ class _MemberDebtTile extends StatelessWidget {
           : 'Tu parte del gasto';
     }
 
+    if (movement.expenseShareId != null) {
+      return 'Pago registrado · participación saldada';
+    }
+
     if (movement.fromMemberId == myMemberId) {
       return 'Pago realizado · reduce tu deuda';
     }
@@ -386,7 +390,11 @@ class _MovementRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final signedChange = balanceChangeCents > 0
+    final isParticipationPayment =
+        movement.kind == 'PAYMENT' && movement.expenseShareId != null;
+    final signedChange = isParticipationPayment
+        ? MoneyFormatter.formatCentsShort(movement.amountCents)
+        : balanceChangeCents > 0
         ? '+${MoneyFormatter.formatCentsShort(balanceChangeCents)}'
         : '−${MoneyFormatter.formatCentsShort(balanceChangeCents.abs())}';
 
@@ -430,7 +438,9 @@ class _MovementRow extends StatelessWidget {
           Text(
             signedChange,
             style: TextStyle(
-              color: balanceChangeCents > 0
+              color: isParticipationPayment
+                  ? AppColors.success
+                  : balanceChangeCents > 0
                   ? AppColors.success
                   : AppColors.error,
               fontSize: 14,

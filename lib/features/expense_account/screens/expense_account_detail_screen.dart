@@ -81,6 +81,25 @@ class _SummaryContentState extends State<_SummaryContent> {
     );
   }
 
+  Future<void> _goToPayments() async {
+    final groupId = _provider.accountDetail?.groupId;
+    if (groupId == null) return;
+
+    final registered = await Navigator.of(context).pushNamed(
+      AppRoutes.expenseAccountPayments,
+      arguments: {'accountId': widget.accountId, 'groupId': groupId},
+    );
+
+    if (!mounted || registered != true) {
+      return;
+    }
+
+    await Future.wait([
+      _provider.loadAccountDetail(accountId: widget.accountId, force: true),
+      _provider.loadAccounts(),
+    ]);
+  }
+
   @override
   Widget build(BuildContext context) {
     final provider = context.watch<ExpenseAccountProvider>();
@@ -114,6 +133,7 @@ class _SummaryContentState extends State<_SummaryContent> {
                 onBalanceTap: _goToBalance,
                 onMovementsTap: _goToMovements,
                 onCreateExpenseTap: _goToCreateExpense,
+                onPaymentsTap: _goToPayments,
               );
             },
           ),
@@ -163,12 +183,14 @@ class _SummaryBody extends StatelessWidget {
     required this.onBalanceTap,
     required this.onMovementsTap,
     required this.onCreateExpenseTap,
+    required this.onPaymentsTap,
   });
 
   final ExpenseAccountDetailResponseModel detail;
   final VoidCallback onBalanceTap;
   final VoidCallback onMovementsTap;
   final VoidCallback onCreateExpenseTap;
+  final VoidCallback onPaymentsTap;
 
   @override
   Widget build(BuildContext context) {
@@ -190,6 +212,12 @@ class _SummaryBody extends StatelessWidget {
           AppSecondaryButton(
             text: 'Registrar gasto',
             onPressed: onCreateExpenseTap,
+          ),
+          const SizedBox(height: 12),
+          AppSecondaryButton(
+            text: 'Registrar pagos',
+            onPressed: onPaymentsTap,
+            leading: const Icon(Icons.payments_outlined),
           ),
         ],
       ),

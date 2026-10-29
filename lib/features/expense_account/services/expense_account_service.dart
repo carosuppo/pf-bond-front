@@ -3,8 +3,10 @@ import '../models/create_expense_account_model.request.dart';
 import '../models/create_expense_model.request.dart';
 import '../models/expense_account_detail_model.response.dart';
 import '../models/expense_account_model.response.dart';
+import '../models/expense_payment_model.response.dart';
 import '../models/expense_model.response.dart';
 import '../models/my_expense_account_model.response.dart';
+import '../models/pending_expense_share_model.response.dart';
 
 class ExpenseAccountService {
   final ApiClient _apiClient;
@@ -46,5 +48,40 @@ class ExpenseAccountService {
       request.toJson(),
     );
     return ExpenseResponseModel.fromJson(response);
+  }
+
+  Future<List<PendingExpenseShareResponseModel>> getPendingExpenseShares({
+    required int accountId,
+  }) async {
+    final response = await _apiClient.authenticatedGetList(
+      '/expense-account/$accountId/pending-shares',
+    );
+    return response
+        .map(PendingExpenseShareResponseModel.fromJson)
+        .toList(growable: false);
+  }
+
+  Future<List<ExpensePaymentResponseModel>> registerExpensePayments({
+    required int accountId,
+    required List<int> expenseShareIds,
+  }) async {
+    final response = await _apiClient.authenticatedPostList(
+      '/expense-account/$accountId/payments',
+      body: {'expenseShareIds': expenseShareIds},
+    );
+    return response
+        .map(ExpensePaymentResponseModel.fromJson)
+        .toList(growable: false);
+  }
+
+  Future<List<ExpensePaymentResponseModel>> registerAllExpensePayments({
+    required int accountId,
+  }) async {
+    final response = await _apiClient.authenticatedPostList(
+      '/expense-account/$accountId/payments/all',
+    );
+    return response
+        .map(ExpensePaymentResponseModel.fromJson)
+        .toList(growable: false);
   }
 }
