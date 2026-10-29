@@ -16,6 +16,7 @@ import '../../group/providers/group_provider.dart';
 import '../formatters/expense_split.dart';
 import '../formatters/money_formatter.dart';
 import '../models/create_expense_model.request.dart';
+import '../models/expense_account_detail_model.response.dart';
 import '../models/expense_model.response.dart';
 import '../models/expense_split_type.dart';
 import '../providers/expense_account_provider.dart';
@@ -23,8 +24,15 @@ import 'member_check_tile.dart';
 
 class CreateExpenseForm extends StatefulWidget {
   final int accountId;
+  final AccountMovementModel? expense;
+  final bool hasConfirmedPayments;
 
-  const CreateExpenseForm({super.key, required this.accountId});
+  const CreateExpenseForm({
+    super.key,
+    required this.accountId,
+    this.expense,
+    this.hasConfirmedPayments = false,
+  });
 
   @override
   State<CreateExpenseForm> createState() => _CreateExpenseFormState();
@@ -50,11 +58,13 @@ class _CreateExpenseFormState extends State<CreateExpenseForm> {
   String? _groupDetailsError;
   ExpenseSplitType _splitType = ExpenseSplitType.equal;
   final Set<int> _selectedParticipantIds = {};
+  bool _initializedExpense = false;
 
   @override
   void initState() {
     super.initState();
     _amountController.addListener(() => setState(() {}));
+    _titleController.addListener(() => setState(() {}));
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) {
         return;
@@ -94,6 +104,7 @@ class _CreateExpenseFormState extends State<CreateExpenseForm> {
             : null;
         _payerMemberId ??= _defaultPayerId();
       });
+      _initializeExpenseIfNeeded();
     } catch (error) {
       if (!mounted || _requestedGroupId != groupId) {
         return;
@@ -104,6 +115,54 @@ class _CreateExpenseFormState extends State<CreateExpenseForm> {
         _groupDetailsError = error.toString().replaceFirst('Exception: ', '');
       });
     }
+  }
+
+  TextEditingController _createCustomAmountController(String value) {
+    final controller = TextEditingController(text: value);
+    controller.addListener(() {
+      if (mounted) setState(() {});
+    });
+    return controller;
+  }
+
+  void _initializeExpenseIfNeeded() {
+    final expense = widget.expense;
+    if (_initializedExpense || expense == null) return;
+
+    final currentShares = expense.shares
+        .where((share) => share.isCurrent)
+        .toList(growable: false);
+    if (currentShares.isEmpty) return;
+
+    final base = expense.amountCents ~/ currentShares.length;
+    final remainder = expense.amountCents % currentShares.length;
+    final upperShareCount = currentShares
+        .where((share) => share.amountCents == base + 1)
+        .length;
+    final isEqualDistribution =
+        currentShares.every(
+          (share) => share.amountCents == base || share.amountCents == base + 1,
+        ) &&
+        upperShareCount == remainder;
+
+    _initializedExpense = true;
+    _titleController.text = expense.title ?? '';
+    _amountController.text = MoneyFormatter.formatCents(expense.amountCents);
+    _payerMemberId = expense.payerMemberId;
+    _splitType =
+        expense.splitType ??
+        (isEqualDistribution
+            ? ExpenseSplitType.equal
+            : ExpenseSplitType.custom);
+    _selectedParticipantIds
+      ..clear()
+      ..addAll(currentShares.map((share) => share.memberId));
+    for (final share in currentShares) {
+      _customAmountControllers[share.memberId] = _createCustomAmountController(
+        MoneyFormatter.formatCents(share.amountCents),
+      );
+    }
+    setState(() {});
   }
 
   void _retryAccountGroupLoad(int groupId) {
@@ -228,7 +287,7 @@ class _CreateExpenseFormState extends State<CreateExpenseForm> {
         _selectedParticipantIds.add(memberId);
         _customAmountControllers.putIfAbsent(
           memberId,
-          () => TextEditingController(),
+          () => _createCustomAmountController(''),
         );
       } else {
         _selectedParticipantIds.remove(memberId);
@@ -242,17 +301,23 @@ class _CreateExpenseFormState extends State<CreateExpenseForm> {
       return;
     }
 
+    final equalShares = _previewShares;
+    if (splitType == ExpenseSplitType.custom) {
+      for (final share in equalShares) {
+        final controller = _customAmountControllers.putIfAbsent(
+          share.memberId,
+          () => _createCustomAmountController(''),
+        );
+        controller.text = MoneyFormatter.formatCents(share.amountCents);
+      }
+    }
     setState(() {
       _splitType = splitType;
-      _selectedParticipantIds.clear();
-      for (final controller in _customAmountControllers.values) {
-        controller.dispose();
-      }
-      _customAmountControllers.clear();
     });
   }
 
   Future<void> _openPayerSheet(List<_MemberInfo> members) async {
+    if (widget.hasConfirmedPayments) return;
     FocusScope.of(context).unfocus();
 
     await showModalBottomSheet<void>(
@@ -371,31 +436,73 @@ class _CreateExpenseFormState extends State<CreateExpenseForm> {
     }
 
     final provider = context.read<ExpenseAccountProvider>();
+    final title = _titleController.text.trim().isEmpty
+        ? null
+        : _titleController.text.trim();
+    final participantIds = _splitType == ExpenseSplitType.equal
+        ? _selectedParticipantIds.toList(growable: false)
+        : null;
+    final shares = _splitType == ExpenseSplitType.custom
+        ? [
+            for (final memberId in _selectedParticipantIds)
+              ExpenseShareRequestModel(
+                memberId: memberId,
+                amountCents:
+                    MoneyFormatter.parseCents(
+                      _customAmountControllers[memberId]?.text ?? '',
+                    ) ??
+                    0,
+              ),
+          ]
+        : null;
+
+    if (widget.expense case final expense?) {
+      final changes = _editChanges(amount);
+      if (changes.isEmpty) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('No hay cambios para guardar.')),
+        );
+        return;
+      }
+      final confirmed = await _confirmEdit(changes);
+      if (!mounted || !confirmed) return;
+
+      final success = await provider.updateExpense(
+        accountId: widget.accountId,
+        expenseId: expense.id,
+        title: title,
+        amountCents: amount,
+        payerMemberId: _payerMemberId!,
+        splitType: _splitType,
+        participantIds: participantIds,
+        shares: shares,
+      );
+      if (!mounted) return;
+      if (!success) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              provider.updateExpenseErrorMessage ??
+                  'No se pudo actualizar el gasto.',
+            ),
+          ),
+        );
+        return;
+      }
+
+      await _showUpdateSuccessDialog(expense);
+      if (mounted) Navigator.of(context).pop(true);
+      return;
+    }
 
     final success = await provider.createExpense(
       accountId: widget.accountId,
-      title: _titleController.text.trim().isEmpty
-          ? null
-          : _titleController.text.trim(),
+      title: title,
       amountCents: amount,
       payerMemberId: _payerMemberId!,
       splitType: _splitType,
-      participantIds: _splitType == ExpenseSplitType.equal
-          ? _selectedParticipantIds.toList(growable: false)
-          : null,
-      shares: _splitType == ExpenseSplitType.custom
-          ? [
-              for (final memberId in _selectedParticipantIds)
-                ExpenseShareRequestModel(
-                  memberId: memberId,
-                  amountCents:
-                      MoneyFormatter.parseCents(
-                        _customAmountControllers[memberId]?.text ?? '',
-                      ) ??
-                      0,
-                ),
-            ]
-          : null,
+      participantIds: participantIds,
+      shares: shares,
     );
 
     if (!mounted) {
@@ -427,6 +534,197 @@ class _CreateExpenseFormState extends State<CreateExpenseForm> {
     }
 
     Navigator.of(context).pop(true);
+  }
+
+  List<String> _editChanges(int amountCents) {
+    final expense = widget.expense;
+    if (expense == null) return const [];
+
+    final changes = <String>[];
+    final oldTitle = expense.title?.trim() ?? '';
+    final newTitle = _titleController.text.trim();
+    if (oldTitle != newTitle) {
+      changes.add(
+        'Título: ${oldTitle.isEmpty ? 'Sin título' : oldTitle} → ${newTitle.isEmpty ? 'Sin título' : newTitle}',
+      );
+    }
+    if (expense.amountCents != amountCents) {
+      changes.add(
+        'Importe: ${MoneyFormatter.formatCentsShort(expense.amountCents)} → ${MoneyFormatter.formatCentsShort(amountCents)}',
+      );
+    }
+    if (expense.payerMemberId != _payerMemberId) {
+      changes.add(
+        'Pagador: ${_memberInfo(expense.payerMemberId ?? -1)?.name ?? 'Miembro'} → ${_memberInfo(_payerMemberId!)?.name ?? 'Miembro'}',
+      );
+    }
+
+    final oldShares = {
+      for (final share in expense.shares.where((share) => share.isCurrent))
+        share.memberId: share.amountCents,
+    };
+    final newShares = <int, int>{
+      if (_splitType == ExpenseSplitType.equal)
+        for (final share in _previewShares) share.memberId: share.amountCents
+      else
+        for (final memberId in _selectedParticipantIds)
+          memberId:
+              MoneyFormatter.parseCents(
+                _customAmountControllers[memberId]?.text ?? '',
+              ) ??
+              0,
+    };
+    final oldIds = oldShares.keys.toSet();
+    final newIds = newShares.keys.toSet();
+    if (!_sameSet(oldIds, newIds)) {
+      final oldNames = oldIds.map((id) => _memberInfo(id)?.name ?? 'Miembro');
+      final newNames = newIds.map((id) => _memberInfo(id)?.name ?? 'Miembro');
+      changes.add(
+        'Participantes: ${oldNames.isEmpty ? 'Ninguno' : oldNames.join(', ')} → ${newNames.isEmpty ? 'Ninguno' : newNames.join(', ')}',
+      );
+    }
+    final oldSplitType = expense.splitType ?? _inferSplitType(expense);
+    if (oldSplitType != _splitType) {
+      changes.add(
+        'Modalidad de reparto: ${oldSplitType.label} → ${_splitType.label}',
+      );
+    }
+    for (final memberId in {...oldIds, ...newIds}) {
+      final before = oldShares[memberId];
+      final after = newShares[memberId];
+      if (before == null && after != null) {
+        changes.add(
+          '${_memberInfo(memberId)?.name ?? 'Miembro'}: agregado · ${MoneyFormatter.formatCentsShort(after)}',
+        );
+      } else if (before != null && after == null) {
+        changes.add(
+          '${_memberInfo(memberId)?.name ?? 'Miembro'}: quitado · ${MoneyFormatter.formatCentsShort(before)}',
+        );
+      } else if (before != after && before != null && after != null) {
+        changes.add(
+          '${_memberInfo(memberId)?.name ?? 'Miembro'}: ${MoneyFormatter.formatCentsShort(before)} → ${MoneyFormatter.formatCentsShort(after)}',
+        );
+      }
+    }
+    return changes;
+  }
+
+  ExpenseSplitType _inferSplitType(AccountMovementModel expense) {
+    final shares = expense.shares.where((share) => share.isCurrent).toList();
+    if (shares.isEmpty) return ExpenseSplitType.equal;
+    final base = expense.amountCents ~/ shares.length;
+    final remainder = expense.amountCents % shares.length;
+    final upperShareCount = shares
+        .where((share) => share.amountCents == base + 1)
+        .length;
+    final isEqual =
+        shares.every(
+          (share) => share.amountCents == base || share.amountCents == base + 1,
+        ) &&
+        upperShareCount == remainder;
+    return isEqual ? ExpenseSplitType.equal : ExpenseSplitType.custom;
+  }
+
+  bool _sameSet(Set<int> first, Set<int> second) =>
+      first.length == second.length && first.containsAll(second);
+
+  Future<bool> _confirmEdit(List<String> changes) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Revisá los cambios'),
+        content: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              for (final change in changes)
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 8),
+                  child: Text(change),
+                ),
+              if (widget.hasConfirmedPayments) ...[
+                const SizedBox(height: 8),
+                const Text(
+                  'Este gasto tiene pagos registrados. Los cambios pueden generar nuevas deudas o importes a devolver; los importes definitivos se calcularán al guardar.',
+                  style: TextStyle(
+                    color: AppColors.error,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ],
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(false),
+            child: const Text('Seguir editando'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(dialogContext).pop(true),
+            child: const Text('Guardar cambios'),
+          ),
+        ],
+      ),
+    );
+    return confirmed == true;
+  }
+
+  Future<void> _showUpdateSuccessDialog(AccountMovementModel expense) async {
+    final updated = context.read<ExpenseAccountProvider>().accountDetail;
+    final adjustments =
+        updated?.movements
+            .where(
+              (movement) =>
+                  movement.kind == 'ADJUSTMENT' &&
+                  movement.expenseId == expense.id &&
+                  movement.status == 'PENDING',
+            )
+            .toList(growable: false) ??
+        const <AccountMovementModel>[];
+
+    await showDialog<void>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Gasto actualizado'),
+        content: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text('Los cambios se guardaron correctamente.'),
+              if (widget.hasConfirmedPayments) ...[
+                const SizedBox(height: 14),
+                const Text(
+                  'Ajustes económicos pendientes',
+                  style: TextStyle(fontWeight: FontWeight.w600),
+                ),
+                const SizedBox(height: 6),
+                if (adjustments.isEmpty)
+                  const Text('No hay nuevos ajustes pendientes.'),
+                for (final adjustment in adjustments)
+                  Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 3),
+                    child: Text(
+                      '${adjustment.debtorMemberId == expense.payerMemberId ? 'Devolución' : 'Importe adicional'}: '
+                      '${_memberInfo(adjustment.debtorMemberId ?? -1)?.name ?? 'Miembro'} paga a '
+                      '${_memberInfo(adjustment.creditorMemberId ?? -1)?.name ?? 'Miembro'} · '
+                      '${MoneyFormatter.formatCentsShort(adjustment.amountCents)}',
+                    ),
+                  ),
+              ],
+            ],
+          ),
+        ),
+        actions: [
+          FilledButton(
+            onPressed: () => Navigator.of(dialogContext).pop(),
+            child: const Text('Listo'),
+          ),
+        ],
+      ),
+    );
   }
 
   Future<void> _showMismatchDialog({
@@ -580,6 +878,11 @@ class _CreateExpenseFormState extends State<CreateExpenseForm> {
   }
 
   bool get _hasChanges {
+    final expense = widget.expense;
+    if (expense != null) {
+      final amount = _amountCents;
+      return amount == null || _editChanges(amount).isNotEmpty;
+    }
     return _titleController.text.trim().isNotEmpty ||
         _amountController.text.trim().isNotEmpty ||
         _selectedParticipantIds.isNotEmpty;
@@ -611,7 +914,7 @@ class _CreateExpenseFormState extends State<CreateExpenseForm> {
     if (detail != null) {
       _ensureAccountGroupLoaded(detail.groupId);
     }
-    final isLoading = provider.isLoading;
+    final isLoading = provider.isLoading || provider.isUpdatingExpense;
 
     final theme = Theme.of(context);
     final screenWidth = MediaQuery.of(context).size.width;
@@ -635,7 +938,9 @@ class _CreateExpenseFormState extends State<CreateExpenseForm> {
         child: Column(
           children: [
             AppScreenHeader(
-              title: detail?.name ?? 'Registrar gasto',
+              title: widget.expense == null
+                  ? 'Registrar gasto'
+                  : 'Editar gasto',
               onBack: _handleBack,
             ),
             Expanded(
@@ -736,9 +1041,23 @@ class _CreateExpenseFormState extends State<CreateExpenseForm> {
                             const SizedBox(height: 20),
                             _PayerCard(
                               payerName: payer?.name,
-                              enabled: !isLoading && members.isNotEmpty,
+                              locked: widget.hasConfirmedPayments,
+                              enabled:
+                                  !isLoading &&
+                                  members.isNotEmpty &&
+                                  !widget.hasConfirmedPayments,
                               onTap: () => _openPayerSheet(members),
                             ),
+                            if (widget.hasConfirmedPayments) ...[
+                              const SizedBox(height: 8),
+                              const Text(
+                                'El pagador no se puede cambiar porque este gasto tiene pagos registrados.',
+                                style: TextStyle(
+                                  color: AppColors.mutedText,
+                                  fontSize: 12,
+                                ),
+                              ),
+                            ],
                             const SizedBox(height: 20),
                             const _FieldHeader(label: 'Tipo de reparto'),
                             const SizedBox(height: 8),
@@ -776,7 +1095,9 @@ class _CreateExpenseFormState extends State<CreateExpenseForm> {
                             ],
                             const SizedBox(height: 24),
                             AppPrimaryButton(
-                              text: 'Registrar gasto',
+                              text: widget.expense == null
+                                  ? 'Registrar gasto'
+                                  : 'Guardar cambios',
                               loading: isLoading,
                               onPressed: isLoading ? null : _saveExpense,
                             ),
@@ -825,11 +1146,13 @@ class _FieldHeader extends StatelessWidget {
 class _PayerCard extends StatelessWidget {
   const _PayerCard({
     required this.payerName,
+    required this.locked,
     required this.enabled,
     required this.onTap,
   });
 
   final String? payerName;
+  final bool locked;
   final bool enabled;
   final VoidCallback onTap;
 
@@ -882,7 +1205,10 @@ class _PayerCard extends StatelessWidget {
                   ],
                 ),
               ),
-              const Icon(Icons.chevron_right, color: AppColors.mutedText),
+              Icon(
+                locked ? Icons.lock_outline : Icons.chevron_right,
+                color: AppColors.mutedText,
+              ),
             ],
           ),
         ),

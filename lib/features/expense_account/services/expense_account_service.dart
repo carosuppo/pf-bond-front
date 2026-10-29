@@ -6,6 +6,7 @@ import '../models/expense_account_model.response.dart';
 import '../models/expense_payment_model.response.dart';
 import '../models/expense_model.response.dart';
 import '../models/my_expense_account_model.response.dart';
+import '../models/pending_expense_adjustment_model.response.dart';
 import '../models/pending_expense_share_model.response.dart';
 import '../models/update_expense_account_model.request.dart';
 
@@ -66,6 +67,18 @@ class ExpenseAccountService {
     return ExpenseResponseModel.fromJson(response);
   }
 
+  Future<ExpenseResponseModel> updateExpense({
+    required int accountId,
+    required int expenseId,
+    required CreateExpenseRequestModel request,
+  }) async {
+    final response = await _apiClient.authenticatedPatch(
+      '/expense-account/$accountId/expense/$expenseId',
+      request.toJson(),
+    );
+    return ExpenseResponseModel.fromJson(response);
+  }
+
   Future<List<PendingExpenseShareResponseModel>> getPendingExpenseShares({
     required int accountId,
   }) async {
@@ -77,13 +90,27 @@ class ExpenseAccountService {
         .toList(growable: false);
   }
 
+  Future<List<PendingExpenseAdjustmentResponseModel>>
+  getPendingExpenseAdjustments({required int accountId}) async {
+    final response = await _apiClient.authenticatedGetList(
+      '/expense-account/$accountId/pending-adjustments',
+    );
+    return response
+        .map(PendingExpenseAdjustmentResponseModel.fromJson)
+        .toList(growable: false);
+  }
+
   Future<List<ExpensePaymentResponseModel>> registerExpensePayments({
     required int accountId,
     required List<int> expenseShareIds,
+    required List<int> adjustmentIds,
   }) async {
     final response = await _apiClient.authenticatedPostList(
       '/expense-account/$accountId/payments',
-      body: {'expenseShareIds': expenseShareIds},
+      body: {
+        'expenseShareIds': expenseShareIds,
+        'adjustmentIds': adjustmentIds,
+      },
     );
     return response
         .map(ExpensePaymentResponseModel.fromJson)

@@ -8,6 +8,7 @@ import '../models/expense_payment_model.response.dart';
 import '../models/expense_model.response.dart';
 import '../models/expense_split_type.dart';
 import '../models/my_expense_account_model.response.dart';
+import '../models/pending_expense_adjustment_model.response.dart';
 import '../models/pending_expense_share_model.response.dart';
 import '../models/update_expense_account_model.request.dart';
 import '../services/expense_account_service.dart';
@@ -34,6 +35,9 @@ class ExpenseAccountProvider extends ChangeNotifier {
   List<PendingExpenseShareResponseModel> pendingExpenseShares = [];
   bool isPendingExpenseSharesLoading = false;
   String? pendingExpenseSharesErrorMessage;
+  List<PendingExpenseAdjustmentResponseModel> pendingExpenseAdjustments = [];
+  bool isPendingExpenseAdjustmentsLoading = false;
+  String? pendingExpenseAdjustmentsErrorMessage;
   List<ExpensePaymentResponseModel> registeredExpensePayments = [];
   bool isRegisteringExpensePayments = false;
   String? paymentRegistrationErrorMessage;
@@ -42,6 +46,11 @@ class ExpenseAccountProvider extends ChangeNotifier {
   int? _deleteExpenseAccountErrorAccountId;
   int? _pendingSharesAccountId;
   bool _hasLoadedPendingShares = false;
+  int? _pendingAdjustmentsAccountId;
+  bool _hasLoadedPendingAdjustments = false;
+  bool isUpdatingExpense = false;
+  String? updateExpenseErrorMessage;
+  ExpenseResponseModel? updatedExpense;
   int _sessionVersion = 0;
   final Set<int> _deletedAccountIds = {};
 
@@ -171,6 +180,13 @@ class ExpenseAccountProvider extends ChangeNotifier {
         isPendingExpenseSharesLoading = false;
         pendingExpenseSharesErrorMessage = null;
       }
+      if (_pendingAdjustmentsAccountId == accountId) {
+        _pendingAdjustmentsAccountId = null;
+        _hasLoadedPendingAdjustments = false;
+        pendingExpenseAdjustments = [];
+        isPendingExpenseAdjustmentsLoading = false;
+        pendingExpenseAdjustmentsErrorMessage = null;
+      }
       if (expenseAccount?.id == accountId) expenseAccount = null;
       if (updatedExpenseAccount?.id == accountId) updatedExpenseAccount = null;
       registeredExpensePayments = [];
@@ -214,6 +230,9 @@ class ExpenseAccountProvider extends ChangeNotifier {
     pendingExpenseShares = [];
     isPendingExpenseSharesLoading = false;
     pendingExpenseSharesErrorMessage = null;
+    pendingExpenseAdjustments = [];
+    isPendingExpenseAdjustmentsLoading = false;
+    pendingExpenseAdjustmentsErrorMessage = null;
     registeredExpensePayments = [];
     isRegisteringExpensePayments = false;
     paymentRegistrationErrorMessage = null;
@@ -222,6 +241,11 @@ class ExpenseAccountProvider extends ChangeNotifier {
     _deleteExpenseAccountErrorAccountId = null;
     _pendingSharesAccountId = null;
     _hasLoadedPendingShares = false;
+    _pendingAdjustmentsAccountId = null;
+    _hasLoadedPendingAdjustments = false;
+    isUpdatingExpense = false;
+    updateExpenseErrorMessage = null;
+    updatedExpense = null;
     _deletedAccountIds.clear();
     notifyListeners();
   }
@@ -367,17 +391,74 @@ class ExpenseAccountProvider extends ChangeNotifier {
     }
   }
 
+  Future<void> loadPendingExpenseAdjustments({
+    required int accountId,
+    bool force = false,
+  }) async {
+    final sessionVersion = _sessionVersion;
+    if (_deletedAccountIds.contains(accountId)) {
+      pendingExpenseAdjustments = [];
+      pendingExpenseAdjustmentsErrorMessage =
+          'La cuenta ya no está disponible.';
+      notifyListeners();
+      return;
+    }
+    if (_pendingAdjustmentsAccountId != accountId) {
+      pendingExpenseAdjustments = [];
+      _hasLoadedPendingAdjustments = false;
+    }
+    if (_pendingAdjustmentsAccountId == accountId &&
+        _hasLoadedPendingAdjustments &&
+        !force) {
+      return;
+    }
+
+    _pendingAdjustmentsAccountId = accountId;
+    pendingExpenseAdjustmentsErrorMessage = null;
+    isPendingExpenseAdjustmentsLoading = true;
+    notifyListeners();
+
+    try {
+      final loaded = await _expenseAccountService.getPendingExpenseAdjustments(
+        accountId: accountId,
+      );
+      if (sessionVersion != _sessionVersion ||
+          _pendingAdjustmentsAccountId != accountId) {
+        return;
+      }
+      if (_deletedAccountIds.contains(accountId)) return;
+      pendingExpenseAdjustments = loaded;
+      _hasLoadedPendingAdjustments = true;
+    } catch (error) {
+      if (sessionVersion != _sessionVersion ||
+          _pendingAdjustmentsAccountId != accountId) {
+        return;
+      }
+      pendingExpenseAdjustmentsErrorMessage = error.toString().replaceFirst(
+        'Exception: ',
+        '',
+      );
+    } finally {
+      if (sessionVersion == _sessionVersion &&
+          _pendingAdjustmentsAccountId == accountId) {
+        isPendingExpenseAdjustmentsLoading = false;
+        notifyListeners();
+      }
+    }
+  }
+
   Future<bool> registerExpensePayments({
     required int accountId,
     required List<int> expenseShareIds,
+    required List<int> adjustmentIds,
     bool registerAll = false,
   }) async {
     if (isRegisteringExpensePayments) {
       return false;
     }
-    if (!registerAll && expenseShareIds.isEmpty) {
+    if (!registerAll && expenseShareIds.isEmpty && adjustmentIds.isEmpty) {
       paymentRegistrationErrorMessage =
-          'Seleccioná al menos una participación para registrar.';
+          'Seleccioná al menos una participación o ajuste para registrar.';
       notifyListeners();
       return false;
     }
@@ -396,12 +477,14 @@ class ExpenseAccountProvider extends ChangeNotifier {
           : await _expenseAccountService.registerExpensePayments(
               accountId: accountId,
               expenseShareIds: expenseShareIds,
+              adjustmentIds: adjustmentIds,
             );
       if (sessionVersion != _sessionVersion) return false;
       registeredExpensePayments = registered;
 
       await Future.wait([
         loadPendingExpenseShares(accountId: accountId, force: true),
+        loadPendingExpenseAdjustments(accountId: accountId, force: true),
         loadAccountDetail(accountId: accountId, force: true),
         loadAccounts(),
       ]);
@@ -469,6 +552,64 @@ class ExpenseAccountProvider extends ChangeNotifier {
     } finally {
       if (sessionVersion == _sessionVersion) {
         isLoading = false;
+        notifyListeners();
+      }
+    }
+  }
+
+  Future<bool> updateExpense({
+    required int accountId,
+    required int expenseId,
+    String? title,
+    required int amountCents,
+    required int payerMemberId,
+    required ExpenseSplitType splitType,
+    List<int>? participantIds,
+    List<ExpenseShareRequestModel>? shares,
+  }) async {
+    if (isUpdatingExpense) return false;
+
+    final sessionVersion = _sessionVersion;
+    isUpdatingExpense = true;
+    updateExpenseErrorMessage = null;
+    updatedExpense = null;
+    notifyListeners();
+
+    try {
+      final request = CreateExpenseRequestModel(
+        title: title,
+        amountCents: amountCents,
+        payerMemberId: payerMemberId,
+        splitType: splitType,
+        participantIds: participantIds,
+        shares: shares,
+      );
+      final updated = await _expenseAccountService.updateExpense(
+        accountId: accountId,
+        expenseId: expenseId,
+        request: request,
+      );
+      if (sessionVersion != _sessionVersion) return false;
+      updatedExpense = updated;
+
+      await Future.wait([
+        loadAccountDetail(accountId: accountId, force: true),
+        loadAccounts(),
+        loadPendingExpenseShares(accountId: accountId, force: true),
+        loadPendingExpenseAdjustments(accountId: accountId, force: true),
+      ]);
+      if (sessionVersion != _sessionVersion) return false;
+      return true;
+    } catch (error) {
+      if (sessionVersion != _sessionVersion) return false;
+      updateExpenseErrorMessage = error.toString().replaceFirst(
+        'Exception: ',
+        '',
+      );
+      return false;
+    } finally {
+      if (sessionVersion == _sessionVersion) {
+        isUpdatingExpense = false;
         notifyListeners();
       }
     }

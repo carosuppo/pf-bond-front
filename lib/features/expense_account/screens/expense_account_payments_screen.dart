@@ -6,6 +6,8 @@ import '../../../core/widgets/app_screen_header.dart';
 import '../../../core/widgets/buttons/app_primary_button.dart';
 import '../../group/models/get_group_model.response.dart';
 import '../formatters/money_formatter.dart';
+import '../models/expense_account_detail_model.response.dart';
+import '../models/pending_expense_adjustment_model.response.dart';
 import '../models/pending_expense_share_model.response.dart';
 import '../providers/expense_account_provider.dart';
 import '../widgets/account_header_card.dart';
@@ -30,6 +32,7 @@ class _ExpenseAccountPaymentsScreenState
     extends State<ExpenseAccountPaymentsScreen> {
   late final ExpenseAccountProvider _provider;
   final Set<int> _selectedExpenseShareIds = {};
+  final Set<int> _selectedAdjustmentIds = {};
 
   @override
   void initState() {
@@ -37,26 +40,49 @@ class _ExpenseAccountPaymentsScreenState
     _provider = context.read<ExpenseAccountProvider>();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
-      _provider.loadPendingExpenseShares(
-        accountId: widget.accountId,
-        force: true,
-      );
+      final detailRequest = _provider.accountDetail?.id == widget.accountId
+          ? Future<void>.value()
+          : _provider.loadAccountDetail(
+              accountId: widget.accountId,
+              force: true,
+            );
+      Future.wait<void>([
+        _provider.loadPendingExpenseShares(
+          accountId: widget.accountId,
+          force: true,
+        ),
+        _provider.loadPendingExpenseAdjustments(
+          accountId: widget.accountId,
+          force: true,
+        ),
+        detailRequest,
+      ]);
     });
   }
 
   Future<void> _reloadPendingShares() async {
-    await _provider.loadPendingExpenseShares(
-      accountId: widget.accountId,
-      force: true,
-    );
+    await Future.wait([
+      _provider.loadPendingExpenseShares(
+        accountId: widget.accountId,
+        force: true,
+      ),
+      _provider.loadPendingExpenseAdjustments(
+        accountId: widget.accountId,
+        force: true,
+      ),
+    ]);
     if (!mounted) return;
 
     final availableIds = _provider.pendingExpenseShares
         .map((share) => share.expenseShareId)
         .toSet();
+    final availableAdjustmentIds = _provider.pendingExpenseAdjustments
+        .map((adjustment) => adjustment.adjustmentId)
+        .toSet();
     setState(() {
-      _selectedExpenseShareIds.removeWhere(
-        (id) => !availableIds.contains(id),
+      _selectedExpenseShareIds.removeWhere((id) => !availableIds.contains(id));
+      _selectedAdjustmentIds.removeWhere(
+        (id) => !availableAdjustmentIds.contains(id),
       );
     });
   }
@@ -64,21 +90,41 @@ class _ExpenseAccountPaymentsScreenState
   bool _isSelected(PendingExpenseShareResponseModel share) =>
       _selectedExpenseShareIds.contains(share.expenseShareId);
 
-  bool _areAllSelected(List<PendingExpenseShareResponseModel> shares) =>
-      shares.isNotEmpty && shares.every(_isSelected);
+  bool _isAdjustmentSelected(
+    PendingExpenseAdjustmentResponseModel adjustment,
+  ) => _selectedAdjustmentIds.contains(adjustment.adjustmentId);
+
+  bool _areAllSelected(
+    List<PendingExpenseShareResponseModel> shares,
+    List<PendingExpenseAdjustmentResponseModel> adjustments,
+  ) => shares.isNotEmpty || adjustments.isNotEmpty
+      ? shares.every(_isSelected) && adjustments.every(_isAdjustmentSelected)
+      : false;
 
   List<PendingExpenseShareResponseModel> _selectedShares(
     List<PendingExpenseShareResponseModel> shares,
   ) => shares.where(_isSelected).toList(growable: false);
 
-  int _selectedTotal(List<PendingExpenseShareResponseModel> shares) =>
+  int _selectedTotal(
+    List<PendingExpenseShareResponseModel> shares,
+    List<PendingExpenseAdjustmentResponseModel> adjustments,
+  ) =>
       _selectedShares(
         shares,
-      ).fold(0, (total, share) => total + share.amountCents);
+      ).fold(0, (total, share) => total + share.amountCents) +
+      adjustments
+          .where(_isAdjustmentSelected)
+          .fold(0, (total, adjustment) => total + adjustment.amountCents);
 
-  void _toggleAll(List<PendingExpenseShareResponseModel> shares) {
-    if (_areAllSelected(shares)) {
-      setState(_selectedExpenseShareIds.clear);
+  void _toggleAll(
+    List<PendingExpenseShareResponseModel> shares,
+    List<PendingExpenseAdjustmentResponseModel> adjustments,
+  ) {
+    if (_areAllSelected(shares, adjustments)) {
+      setState(() {
+        _selectedExpenseShareIds.clear();
+        _selectedAdjustmentIds.clear();
+      });
       return;
     }
 
@@ -86,28 +132,38 @@ class _ExpenseAccountPaymentsScreenState
       _selectedExpenseShareIds
         ..clear()
         ..addAll(shares.map((share) => share.expenseShareId));
+      _selectedAdjustmentIds
+        ..clear()
+        ..addAll(adjustments.map((adjustment) => adjustment.adjustmentId));
     });
   }
 
   Future<void> _confirmSelectedPayments(
     List<PendingExpenseShareResponseModel> pendingShares,
+    List<PendingExpenseAdjustmentResponseModel> pendingAdjustments,
   ) async {
     final selectedShares = _selectedShares(pendingShares);
-    if (selectedShares.isEmpty || _provider.isRegisteringExpensePayments) {
+    final selectedAdjustments = pendingAdjustments
+        .where(_isAdjustmentSelected)
+        .toList(growable: false);
+    if ((selectedShares.isEmpty && selectedAdjustments.isEmpty) ||
+        _provider.isRegisteringExpensePayments) {
       return;
     }
 
-    final selectedTotal = _selectedTotal(pendingShares);
-    final registerAll = selectedShares.length == pendingShares.length;
+    final selectedCount = selectedShares.length + selectedAdjustments.length;
+    final selectedTotal = _selectedTotal(pendingShares, pendingAdjustments);
+    final registerAll =
+        selectedCount == pendingShares.length + pendingAdjustments.length;
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (dialogContext) => AlertDialog(
         title: const Text('Confirmar registro'),
         content: Text(
-          'Vas a registrar ${selectedShares.length} '
-          '${selectedShares.length == 1 ? 'pago' : 'pagos'} por '
+          'Vas a registrar $selectedCount '
+          '${selectedCount == 1 ? 'pago o ajuste' : 'pagos y ajustes'} por '
           '${MoneyFormatter.formatCentsShort(selectedTotal)}. '
-          'Las participaciones seleccionadas quedarán saldadas.',
+          'Se saldarán los importes seleccionados completos.',
         ),
         actions: [
           TextButton(
@@ -128,6 +184,9 @@ class _ExpenseAccountPaymentsScreenState
       accountId: widget.accountId,
       expenseShareIds: selectedShares
           .map((share) => share.expenseShareId)
+          .toList(growable: false),
+      adjustmentIds: selectedAdjustments
+          .map((adjustment) => adjustment.adjustmentId)
           .toList(growable: false),
       registerAll: registerAll,
     );
@@ -151,7 +210,7 @@ class _ExpenseAccountPaymentsScreenState
     final message = payments.isEmpty
         ? 'No había participaciones pendientes para registrar.'
         : 'Se registraron ${payments.length} '
-              '${payments.length == 1 ? 'pago' : 'pagos'} por '
+              '${payments.length == 1 ? 'pago o ajuste' : 'pagos y ajustes'} por '
               '${MoneyFormatter.formatCentsShort(registeredTotal)}.';
 
     ScaffoldMessenger.of(
@@ -174,23 +233,39 @@ class _ExpenseAccountPaymentsScreenState
     GetGroupResponseModel? groupDetails,
   ) {
     final shares = provider.pendingExpenseShares;
+    final adjustments = provider.pendingExpenseAdjustments;
+    final isLoading =
+        provider.isPendingExpenseSharesLoading ||
+        provider.isPendingExpenseAdjustmentsLoading;
+    final hasError =
+        provider.pendingExpenseSharesErrorMessage != null ||
+        provider.pendingExpenseAdjustmentsErrorMessage != null;
 
-    if (provider.isPendingExpenseSharesLoading && shares.isEmpty) {
+    if (isLoading && shares.isEmpty && adjustments.isEmpty) {
       return const Center(
         child: CircularProgressIndicator(color: AppColors.primary),
       );
     }
 
-    if (provider.pendingExpenseSharesErrorMessage != null && shares.isEmpty) {
+    if (hasError && shares.isEmpty && adjustments.isEmpty) {
       return _LoadError(
-        message: provider.pendingExpenseSharesErrorMessage!,
+        message:
+            provider.pendingExpenseSharesErrorMessage ??
+            provider.pendingExpenseAdjustmentsErrorMessage!,
         onRetry: _reloadPendingShares,
       );
     }
 
-    if (shares.isEmpty) {
+    if (shares.isEmpty && adjustments.isEmpty) {
       return const _EmptyPendingShares();
     }
+
+    final payerByExpense = {
+      for (final movement
+          in provider.accountDetail?.movements ??
+              const <AccountMovementModel>[])
+        if (movement.kind == 'EXPENSE') movement.id: movement.payerMemberId!,
+    };
 
     return RefreshIndicator(
       color: AppColors.primary,
@@ -208,20 +283,22 @@ class _ExpenseAccountPaymentsScreenState
             const SizedBox(height: 14),
           ],
           const Text(
-            'Seleccioná las participaciones que querés registrar como pagadas.',
+            'Seleccioná participaciones y ajustes para registrar los importes completos.',
             style: TextStyle(color: AppColors.mutedText, fontSize: 14),
           ),
-          if (provider.pendingExpenseSharesErrorMessage != null) ...[
+          if (hasError) ...[
             const SizedBox(height: 12),
-            _InlineError(message: provider.pendingExpenseSharesErrorMessage!),
+            _InlineError(
+              message:
+                  provider.pendingExpenseSharesErrorMessage ??
+                  provider.pendingExpenseAdjustmentsErrorMessage!,
+            ),
           ],
           const SizedBox(height: 12),
           _SelectAllTile(
-            selected: _areAllSelected(shares),
-            enabled:
-                !provider.isRegisteringExpensePayments &&
-                !provider.isPendingExpenseSharesLoading,
-            onTap: () => _toggleAll(shares),
+            selected: _areAllSelected(shares, adjustments),
+            enabled: !provider.isRegisteringExpensePayments && !isLoading,
+            onTap: () => _toggleAll(shares, adjustments),
           ),
           const SizedBox(height: 8),
           for (final share in shares)
@@ -229,13 +306,34 @@ class _ExpenseAccountPaymentsScreenState
               share: share,
               recipientName: _memberName(groupDetails, share.payerMemberId),
               selected: _isSelected(share),
-              enabled:
-                  !provider.isRegisteringExpensePayments &&
-                  !provider.isPendingExpenseSharesLoading,
+              enabled: !provider.isRegisteringExpensePayments && !isLoading,
               onTap: () {
                 setState(() {
                   if (!_selectedExpenseShareIds.add(share.expenseShareId)) {
                     _selectedExpenseShareIds.remove(share.expenseShareId);
+                  }
+                });
+              },
+            ),
+          for (final adjustment in adjustments)
+            _PendingAdjustmentTile(
+              adjustment: adjustment,
+              typeLabel:
+                  adjustment.debtorMemberId ==
+                      payerByExpense[adjustment.expenseId]
+                  ? 'Devolución'
+                  : 'Importe adicional',
+              debtorName: _memberName(groupDetails, adjustment.debtorMemberId),
+              creditorName: _memberName(
+                groupDetails,
+                adjustment.creditorMemberId,
+              ),
+              selected: _isAdjustmentSelected(adjustment),
+              enabled: !provider.isRegisteringExpensePayments && !isLoading,
+              onTap: () {
+                setState(() {
+                  if (!_selectedAdjustmentIds.add(adjustment.adjustmentId)) {
+                    _selectedAdjustmentIds.remove(adjustment.adjustmentId);
                   }
                 });
               },
@@ -248,15 +346,20 @@ class _ExpenseAccountPaymentsScreenState
   Widget _buildSummary(
     ExpenseAccountProvider provider,
     List<PendingExpenseShareResponseModel> shares,
+    List<PendingExpenseAdjustmentResponseModel> adjustments,
   ) {
     final selected = _selectedShares(shares);
-    final totalCents = _selectedTotal(shares);
-    final areAllSelected = _areAllSelected(shares);
+    final selectedAdjustmentCount = adjustments
+        .where(_isAdjustmentSelected)
+        .length;
+    final selectedCount = selected.length + selectedAdjustmentCount;
+    final totalCents = _selectedTotal(shares, adjustments);
+    final areAllSelected = _areAllSelected(shares, adjustments);
     final buttonText = areAllSelected
-        ? 'Registrar todos los pagos'
-        : selected.length == 1
-        ? 'Registrar pago'
-        : 'Registrar ${selected.length} pagos';
+        ? 'Registrar todos los pagos y ajustes'
+        : selectedCount == 1
+        ? 'Registrar pago o ajuste'
+        : 'Registrar $selectedCount pagos y ajustes';
 
     return Container(
       padding: const EdgeInsets.fromLTRB(16, 14, 16, 12),
@@ -278,8 +381,8 @@ class _ExpenseAccountPaymentsScreenState
               children: [
                 Expanded(
                   child: Text(
-                    '${selected.length} '
-                    '${selected.length == 1 ? 'seleccionada' : 'seleccionadas'}',
+                    '$selectedCount '
+                    '${selectedCount == 1 ? 'seleccionado' : 'seleccionados'}',
                     style: const TextStyle(
                       color: AppColors.mutedText,
                       fontSize: 14,
@@ -300,9 +403,11 @@ class _ExpenseAccountPaymentsScreenState
             AppPrimaryButton(
               text: buttonText,
               onPressed:
-                  selected.isEmpty || provider.isPendingExpenseSharesLoading
+                  selectedCount == 0 ||
+                      provider.isPendingExpenseSharesLoading ||
+                      provider.isPendingExpenseAdjustmentsLoading
                   ? null
-                  : () => _confirmSelectedPayments(shares),
+                  : () => _confirmSelectedPayments(shares, adjustments),
               loading: provider.isRegisteringExpensePayments,
               leading: const Icon(Icons.check_circle_outline),
             ),
@@ -316,6 +421,7 @@ class _ExpenseAccountPaymentsScreenState
   Widget build(BuildContext context) {
     final provider = context.watch<ExpenseAccountProvider>();
     final shares = provider.pendingExpenseShares;
+    final adjustments = provider.pendingExpenseAdjustments;
 
     return Scaffold(
       backgroundColor: AppColors.background,
@@ -335,7 +441,8 @@ class _ExpenseAccountPaymentsScreenState
                     _buildBody(provider, groupDetails),
               ),
             ),
-            if (shares.isNotEmpty) _buildSummary(provider, shares),
+            if (shares.isNotEmpty || adjustments.isNotEmpty)
+              _buildSummary(provider, shares, adjustments),
           ],
         ),
       ),
@@ -474,6 +581,96 @@ class _PendingShareTile extends StatelessWidget {
   }
 }
 
+class _PendingAdjustmentTile extends StatelessWidget {
+  const _PendingAdjustmentTile({
+    required this.adjustment,
+    required this.typeLabel,
+    required this.debtorName,
+    required this.creditorName,
+    required this.selected,
+    required this.enabled,
+    required this.onTap,
+  });
+
+  final PendingExpenseAdjustmentResponseModel adjustment;
+  final String typeLabel;
+  final String debtorName;
+  final String creditorName;
+  final bool selected;
+  final bool enabled;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final title = adjustment.expenseTitle?.trim();
+    final expenseName = title == null || title.isEmpty
+        ? 'Gasto #${adjustment.expenseId}'
+        : title;
+
+    return Card(
+      margin: const EdgeInsets.only(bottom: 8),
+      color: AppColors.cardColor,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(14),
+        side: const BorderSide(color: AppColors.border),
+      ),
+      child: InkWell(
+        onTap: enabled ? onTap : null,
+        borderRadius: BorderRadius.circular(14),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+          child: Row(
+            children: [
+              Checkbox(
+                value: selected,
+                onChanged: enabled ? (_) => onTap() : null,
+                activeColor: AppColors.primary,
+              ),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      expenseName,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        color: AppColors.text,
+                        fontSize: 15,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      '$typeLabel · $debtorName paga a $creditorName',
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        color: AppColors.mutedText,
+                        fontSize: 12,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(width: 8),
+              Text(
+                MoneyFormatter.formatCentsShort(adjustment.amountCents),
+                style: const TextStyle(
+                  color: AppColors.text,
+                  fontSize: 15,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+              const SizedBox(width: 8),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
 class _LoadError extends StatelessWidget {
   const _LoadError({required this.message, required this.onRetry});
 
@@ -543,7 +740,7 @@ class _EmptyPendingShares extends StatelessWidget {
             ),
             const SizedBox(height: 6),
             const Text(
-              'Tus participaciones pendientes aparecerán acá.',
+              'Tus pagos y ajustes pendientes aparecerán acá.',
               textAlign: TextAlign.center,
               style: TextStyle(color: AppColors.mutedText, fontSize: 14),
             ),

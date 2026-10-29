@@ -4,7 +4,9 @@ import 'package:provider/provider.dart';
 import '../../../core/routes/app_routes.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/widgets/app_screen_header.dart';
+import '../../auth/providers/auth_provider.dart';
 import '../../group/models/get_group_model.response.dart';
+import '../../group/models/get_member_model.response.dart';
 import '../balance/member_debt_trace.dart';
 import '../models/expense_account_detail_model.response.dart';
 import '../providers/expense_account_provider.dart';
@@ -139,6 +141,7 @@ class _MovementsTabs extends StatelessWidget {
         return _MovementsTabsContent(
           detail: detail,
           groupDetails: groupDetails,
+          currentUserId: context.watch<AuthProvider>().authResponse?.user.id,
         );
       },
     );
@@ -149,27 +152,58 @@ class _MovementsTabsContent extends StatelessWidget {
   const _MovementsTabsContent({
     required this.detail,
     required this.groupDetails,
+    required this.currentUserId,
   });
 
   final ExpenseAccountDetailResponseModel detail;
   final GetGroupResponseModel groupDetails;
+  final int? currentUserId;
 
   @override
   Widget build(BuildContext context) {
+    final expenseProvider = context.watch<ExpenseAccountProvider>();
     final memberNames = {
       for (final member in groupDetails.members) member.id: member.name,
+    };
+    final knownExpenseCreators = <int, int>{};
+    final createdExpense = expenseProvider.createdExpense;
+    if (createdExpense?.createdByUserId != null) {
+      knownExpenseCreators[createdExpense!.id] =
+          createdExpense.createdByUserId!;
+    }
+    final updatedExpense = expenseProvider.updatedExpense;
+    if (updatedExpense?.createdByUserId != null) {
+      knownExpenseCreators[updatedExpense!.id] =
+          updatedExpense.createdByUserId!;
+    }
+    final isGroupAdmin =
+        currentUserId != null &&
+        groupDetails.members.any(
+          (member) =>
+              member.idUser == currentUserId && member.role == RoleEnum.admin,
+        );
+    final expensePayers = {
+      for (final movement in detail.movements)
+        if (movement.kind == 'EXPENSE') movement.id: movement.payerMemberId!,
     };
     final expenses = detail.movements
         .where(
           (movement) =>
               movement.kind == 'EXPENSE' &&
-              memberMovementAmountCents(movement, detail.myMemberId) != null,
+              (memberMovementAmountCents(movement, detail.myMemberId) != null ||
+                  isGroupAdmin ||
+                  (currentUserId != null &&
+                      (movement.createdByUserId ??
+                              knownExpenseCreators[movement.id]) ==
+                          currentUserId)),
         )
         .toList(growable: false);
     final payments = detail.movements
         .where(
           (movement) =>
-              movement.kind == 'PAYMENT' &&
+              (movement.kind == 'PAYMENT' ||
+                  (movement.kind == 'ADJUSTMENT' &&
+                      movement.status != 'CANCELED')) &&
               memberMovementAmountCents(movement, detail.myMemberId) != null,
         )
         .toList(growable: false);
@@ -198,12 +232,24 @@ class _MovementsTabsContent extends StatelessWidget {
                   movements: expenses,
                   memberId: detail.myMemberId,
                   memberNames: memberNames,
+                  accountId: detail.id,
+                  isGroupAdmin: isGroupAdmin,
+                  currentUserId: currentUserId,
+                  allMovements: detail.movements,
+                  expensePayers: expensePayers,
+                  knownExpenseCreators: knownExpenseCreators,
                 ),
                 _MovementsList(
                   emptyMessage: 'Todavía no hay pagos en esta cuenta.',
                   movements: payments,
                   memberId: detail.myMemberId,
                   memberNames: memberNames,
+                  accountId: detail.id,
+                  isGroupAdmin: isGroupAdmin,
+                  currentUserId: currentUserId,
+                  allMovements: detail.movements,
+                  expensePayers: expensePayers,
+                  knownExpenseCreators: knownExpenseCreators,
                 ),
               ],
             ),
@@ -220,12 +266,24 @@ class _MovementsList extends StatelessWidget {
     required this.movements,
     required this.memberId,
     required this.memberNames,
+    required this.accountId,
+    required this.isGroupAdmin,
+    required this.currentUserId,
+    required this.allMovements,
+    required this.expensePayers,
+    required this.knownExpenseCreators,
   });
 
   final String emptyMessage;
   final List<AccountMovementModel> movements;
   final int memberId;
   final Map<int, String> memberNames;
+  final int accountId;
+  final bool isGroupAdmin;
+  final int? currentUserId;
+  final List<AccountMovementModel> allMovements;
+  final Map<int, int> expensePayers;
+  final Map<int, int> knownExpenseCreators;
 
   String _memberName(int? memberId) {
     return memberNames[memberId] ?? 'Miembro';
@@ -233,6 +291,13 @@ class _MovementsList extends StatelessWidget {
 
   String _title(AccountMovementModel movement) {
     final title = movement.title?.trim();
+
+    if (movement.kind == 'ADJUSTMENT') {
+      final expenseTitle = movement.expenseTitle?.trim();
+      return expenseTitle == null || expenseTitle.isEmpty
+          ? 'Ajuste económico'
+          : 'Ajuste · $expenseTitle';
+    }
 
     if (title != null && title.isNotEmpty) {
       return title;
@@ -252,7 +317,22 @@ class _MovementsList extends StatelessWidget {
       if (memberShare.isNotEmpty) {
         return 'Tu parte · pagó ${_memberName(movement.payerMemberId)}';
       }
-      return 'Adelantaste · pagaste vos';
+      if (movement.payerMemberId == memberId) {
+        return 'Adelantaste · pagaste vos';
+      }
+      return 'Pagó ${_memberName(movement.payerMemberId)}';
+    }
+
+    if (movement.kind == 'ADJUSTMENT') {
+      final payerMemberId = expensePayers[movement.expenseId];
+      final isRefund = movement.debtorMemberId == payerMemberId;
+      final status = movement.status == 'PAID' ? 'Pagado' : 'Pendiente';
+      if (movement.debtorMemberId == memberId) {
+        return '$status · ${isRefund ? 'devolución a' : 'importe adicional a'} '
+            '${_memberName(movement.creditorMemberId)}';
+      }
+      return '$status · ${_memberName(movement.debtorMemberId)} '
+          '${isRefund ? 'devuelve a' : 'aporta a'} vos';
     }
 
     if (movement.fromMemberId == memberId) {
@@ -303,16 +383,60 @@ class _MovementsList extends StatelessWidget {
       itemBuilder: (_, index) {
         final movement = movements[index];
         final isExpense = movement.kind == 'EXPENSE';
+        final canEdit =
+            isExpense &&
+            (isGroupAdmin ||
+                (currentUserId != null &&
+                    (movement.createdByUserId ??
+                            knownExpenseCreators[movement.id]) ==
+                        currentUserId));
+        final hasConfirmedPayments =
+            isExpense &&
+            allMovements.any(
+              (candidate) =>
+                  candidate.expenseId == movement.id &&
+                  ((candidate.kind == 'PAYMENT' &&
+                          candidate.expenseShareId != null) ||
+                      (candidate.kind == 'ADJUSTMENT' &&
+                          candidate.status == 'PAID')),
+            );
 
         return AccountMovementCard(
           icon: isExpense
               ? Icons.receipt_long_outlined
               : Icons.payments_outlined,
-          accentColor: isExpense ? AppColors.primary : AppColors.success,
+          accentColor: movement.kind == 'ADJUSTMENT'
+              ? AppColors.primary
+              : isExpense
+              ? AppColors.primary
+              : AppColors.success,
           title: _title(movement),
           subtitle: _subtitle(movement),
-          amountCents: memberMovementAmountCents(movement, memberId) ?? 0,
-          createdAt: movement.createdAt,
+          amountCents:
+              memberMovementAmountCents(movement, memberId) ??
+              (isExpense ? movement.amountCents : 0),
+          createdAt: movement.settledAt ?? movement.createdAt,
+          trailing: canEdit
+              ? IconButton(
+                  tooltip: 'Editar gasto',
+                  onPressed: () {
+                    Navigator.of(context).pushNamed(
+                      AppRoutes.createExpense,
+                      arguments: {
+                        'accountId': accountId,
+                        'expense': movement,
+                        'hasConfirmedPayments': hasConfirmedPayments,
+                      },
+                    );
+                  },
+                  icon: const Icon(
+                    Icons.edit_outlined,
+                    color: AppColors.primary,
+                    size: 20,
+                  ),
+                  visualDensity: VisualDensity.compact,
+                )
+              : null,
         );
       },
     );

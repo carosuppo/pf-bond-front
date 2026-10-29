@@ -1,4 +1,5 @@
 import 'balance_status.dart';
+import 'expense_split_type.dart';
 
 class AccountMemberBalanceModel {
   final int memberId;
@@ -24,11 +25,13 @@ class AccountShareModel {
   final int memberId;
   final int amountCents;
   final bool isPaid;
+  final bool isCurrent;
 
   const AccountShareModel({
     required this.memberId,
     required this.amountCents,
     this.isPaid = false,
+    this.isCurrent = true,
   });
 
   factory AccountShareModel.fromJson(Map<String, dynamic> json) {
@@ -36,6 +39,7 @@ class AccountShareModel {
       memberId: json['memberId'] as int,
       amountCents: json['amountCents'] as int,
       isPaid: json['isPaid'] as bool? ?? false,
+      isCurrent: json['isCurrent'] as bool? ?? true,
     );
   }
 }
@@ -65,6 +69,12 @@ class AccountMovementModel {
   final int? expenseId;
   final int? expenseShareId;
   final String? expenseTitle;
+  final ExpenseSplitType? splitType;
+  final int? createdByUserId;
+  final int? debtorMemberId;
+  final int? creditorMemberId;
+  final String? status;
+  final DateTime? settledAt;
   final DateTime createdAt;
   final DateTime? confirmedAt;
   final List<AccountShareModel> shares;
@@ -80,6 +90,12 @@ class AccountMovementModel {
     this.expenseId,
     this.expenseShareId,
     this.expenseTitle,
+    this.splitType,
+    this.createdByUserId,
+    this.debtorMemberId,
+    this.creditorMemberId,
+    this.status,
+    this.settledAt,
     required this.createdAt,
     this.confirmedAt,
     this.shares = const [],
@@ -97,6 +113,16 @@ class AccountMovementModel {
       expenseId: json['expenseId'] as int?,
       expenseShareId: json['expenseShareId'] as int?,
       expenseTitle: json['expenseTitle'] as String?,
+      splitType: json['splitType'] == null
+          ? null
+          : expenseSplitTypeFromString(json['splitType'] as String),
+      createdByUserId: json['createdByUserId'] as int?,
+      debtorMemberId: json['debtorMemberId'] as int?,
+      creditorMemberId: json['creditorMemberId'] as int?,
+      status: json['status'] as String?,
+      settledAt: json['settledAt'] == null
+          ? null
+          : DateTime.parse(json['settledAt'] as String),
       createdAt: DateTime.parse(json['createdAt'] as String),
       confirmedAt: json['confirmedAt'] == null
           ? null

@@ -291,6 +291,13 @@ class _MemberDebtTile extends StatelessWidget {
           : 'Tu parte del gasto';
     }
 
+    if (movement.kind == 'ADJUSTMENT') {
+      if (movement.status == 'PAID') return 'Ajuste pagado';
+      return movement.debtorMemberId == myMemberId
+          ? 'Ajuste pendiente · debés pagar'
+          : 'Ajuste pendiente · te deben';
+    }
+
     if (movement.expenseShareId != null) {
       return 'Pago registrado · participación saldada';
     }
@@ -342,7 +349,10 @@ class _MemberDebtTile extends StatelessWidget {
                   _MovementRow(
                     movement: movement.movement,
                     label: _etiquetaMovimiento(movement.movement),
-                    date: _fecha(movement.movement.createdAt),
+                    date: _fecha(
+                      movement.movement.settledAt ??
+                          movement.movement.createdAt,
+                    ),
                     balanceChangeCents: movement.balanceChangeCents,
                     balanceAfterCents: movement.balanceAfterCents,
                   ),
@@ -372,6 +382,11 @@ class _MovementRow extends StatelessWidget {
 
   String _movementTitle() {
     final title = movement.title?.trim();
+    if (movement.kind == 'ADJUSTMENT') {
+      return title == null || title.isEmpty
+          ? 'Ajuste económico'
+          : 'Ajuste · $title';
+    }
     if (title != null && title.isNotEmpty) {
       return title;
     }
@@ -392,7 +407,9 @@ class _MovementRow extends StatelessWidget {
   Widget build(BuildContext context) {
     final isParticipationPayment =
         movement.kind == 'PAYMENT' && movement.expenseShareId != null;
-    final signedChange = isParticipationPayment
+    final isSettledAdjustment =
+        movement.kind == 'ADJUSTMENT' && movement.status == 'PAID';
+    final signedChange = isParticipationPayment || isSettledAdjustment
         ? MoneyFormatter.formatCentsShort(movement.amountCents)
         : balanceChangeCents > 0
         ? '+${MoneyFormatter.formatCentsShort(balanceChangeCents)}'
@@ -438,7 +455,7 @@ class _MovementRow extends StatelessWidget {
           Text(
             signedChange,
             style: TextStyle(
-              color: isParticipationPayment
+              color: isParticipationPayment || isSettledAdjustment
                   ? AppColors.success
                   : balanceChangeCents > 0
                   ? AppColors.success

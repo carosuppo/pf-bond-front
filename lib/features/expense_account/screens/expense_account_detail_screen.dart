@@ -87,19 +87,10 @@ class _SummaryContentState extends State<_SummaryContent> {
     final groupId = _provider.accountDetail?.groupId;
     if (groupId == null) return;
 
-    final registered = await Navigator.of(context).pushNamed(
+    await Navigator.of(context).pushNamed(
       AppRoutes.expenseAccountPayments,
       arguments: {'accountId': widget.accountId, 'groupId': groupId},
     );
-
-    if (!mounted || registered != true) {
-      return;
-    }
-
-    await Future.wait([
-      _provider.loadAccountDetail(accountId: widget.accountId, force: true),
-      _provider.loadAccounts(),
-    ]);
   }
 
   Future<void> _goToEditAccount() async {

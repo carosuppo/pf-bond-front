@@ -13,6 +13,7 @@ class AccountMovementCard extends StatelessWidget {
     required this.amountCents,
     required this.createdAt,
     this.accentColor = AppColors.primary,
+    this.trailing,
   });
 
   final IconData icon;
@@ -21,6 +22,7 @@ class AccountMovementCard extends StatelessWidget {
   final int amountCents;
   final DateTime createdAt;
   final Color accentColor;
+  final Widget? trailing;
 
   @override
   Widget build(BuildContext context) {
@@ -93,6 +95,7 @@ class AccountMovementCard extends StatelessWidget {
               ),
             ],
           ),
+          if (trailing != null) ...[const SizedBox(width: 4), trailing!],
         ],
       ),
     );

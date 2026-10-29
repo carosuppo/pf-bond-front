@@ -12,6 +12,7 @@ import '../../features/expense_account/screens/expense_account_detail_screen.dar
 import '../../features/expense_account/screens/expense_account_movements_screen.dart';
 import '../../features/expense_account/screens/expense_account_payments_screen.dart';
 import '../../features/expense_account/screens/edit_expense_account_screen.dart';
+import '../../features/expense_account/models/expense_account_detail_model.response.dart';
 import '../../features/group/models/get_group_model.response.dart';
 import '../../features/group/screens/create_group_screen.dart';
 import '../../features/group/screens/edit_group_screen.dart';
@@ -174,9 +175,8 @@ class AppRouter {
         final editArgs = settings.arguments as Map<String, dynamic>;
 
         return MaterialPageRoute(
-          builder: (_) => EditExpenseAccountScreen(
-            accountId: editArgs['accountId'] as int,
-          ),
+          builder: (_) =>
+              EditExpenseAccountScreen(accountId: editArgs['accountId'] as int),
           settings: settings,
         );
 
@@ -195,8 +195,12 @@ class AppRouter {
         final expenseArgs = settings.arguments as Map<String, dynamic>;
 
         return MaterialPageRoute(
-          builder: (_) =>
-              CreateExpenseScreen(accountId: expenseArgs['accountId'] as int),
+          builder: (_) => CreateExpenseScreen(
+            accountId: expenseArgs['accountId'] as int,
+            expense: expenseArgs['expense'] as AccountMovementModel?,
+            hasConfirmedPayments:
+                expenseArgs['hasConfirmedPayments'] as bool? ?? false,
+          ),
           settings: settings,
         );
 

@@ -92,7 +92,9 @@ List<MemberDebtTrace> calculateMemberDebtTraces({
 
       if (payerMemberId == myMemberId) {
         for (final share in movement.shares) {
-          if (share.memberId != myMemberId && !share.isPaid) {
+          if (share.isCurrent &&
+              share.memberId != myMemberId &&
+              !share.isPaid) {
             addImpact(share.memberId, movement, share.amountCents);
           }
         }
@@ -100,10 +102,31 @@ List<MemberDebtTrace> calculateMemberDebtTraces({
       }
 
       for (final share in movement.shares) {
-        if (share.memberId == myMemberId && !share.isPaid) {
+        if (share.isCurrent && share.memberId == myMemberId && !share.isPaid) {
           addImpact(payerMemberId, movement, -share.amountCents);
           break;
         }
+      }
+      continue;
+    }
+
+    if (movement.kind == 'ADJUSTMENT') {
+      final debtorMemberId = movement.debtorMemberId;
+      final creditorMemberId = movement.creditorMemberId;
+      if (debtorMemberId == null || creditorMemberId == null) {
+        continue;
+      }
+
+      if (movement.status == 'PENDING') {
+        if (debtorMemberId == myMemberId) {
+          addImpact(creditorMemberId, movement, -movement.amountCents);
+        } else if (creditorMemberId == myMemberId) {
+          addImpact(debtorMemberId, movement, movement.amountCents);
+        }
+      } else if (movement.status == 'PAID' && debtorMemberId == myMemberId) {
+        addImpact(creditorMemberId, movement, 0, includeZero: true);
+      } else if (movement.status == 'PAID' && creditorMemberId == myMemberId) {
+        addImpact(debtorMemberId, movement, 0, includeZero: true);
       }
       continue;
     }
@@ -113,8 +136,7 @@ List<MemberDebtTrace> calculateMemberDebtTraces({
         continue;
       }
 
-      if (movement.fromMemberId == myMemberId &&
-          movement.toMemberId != null) {
+      if (movement.fromMemberId == myMemberId && movement.toMemberId != null) {
         addImpact(movement.toMemberId!, movement, 0, includeZero: true);
       } else if (movement.toMemberId == myMemberId &&
           movement.fromMemberId != null) {
@@ -212,6 +234,14 @@ int? memberMovementAmountCents(AccountMovementModel movement, int memberId) {
       return movement.amountCents;
     }
 
+    return null;
+  }
+
+  if (movement.kind == 'ADJUSTMENT') {
+    if (movement.debtorMemberId == memberId ||
+        movement.creditorMemberId == memberId) {
+      return movement.amountCents;
+    }
     return null;
   }
 

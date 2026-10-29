@@ -24,6 +24,7 @@ class ExpenseResponseModel {
   final int amountCents;
   final ExpenseSplitType splitType;
   final int payerMemberId;
+  final int? createdByUserId;
   final List<ExpenseShareResponseModel> shares;
 
   const ExpenseResponseModel({
@@ -33,6 +34,7 @@ class ExpenseResponseModel {
     required this.amountCents,
     required this.splitType,
     required this.payerMemberId,
+    this.createdByUserId,
     required this.shares,
   });
 
@@ -44,6 +46,7 @@ class ExpenseResponseModel {
       amountCents: json['amountCents'] as int,
       splitType: expenseSplitTypeFromString(json['splitType'] as String),
       payerMemberId: json['payerMemberId'] as int,
+      createdByUserId: json['createdByUserId'] as int?,
       shares: (json['shares'] as List<dynamic>)
           .map(
             (share) => ExpenseShareResponseModel.fromJson(
