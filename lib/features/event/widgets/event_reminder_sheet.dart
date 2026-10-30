@@ -11,6 +11,7 @@ import '../providers/event_reminder_provider.dart';
 import '../utils/event_reminder_options.dart';
 
 class EventReminderSheet extends StatefulWidget {
+  final bool isRecurring;
   final int groupId;
   final int eventId;
   final String eventName;
@@ -18,6 +19,7 @@ class EventReminderSheet extends StatefulWidget {
 
   const EventReminderSheet({
     super.key,
+    this.isRecurring = false,
     required this.groupId,
     required this.eventId,
     required this.eventName,
@@ -128,7 +130,7 @@ class _EventReminderSheetState extends State<EventReminderSheet> {
 
   String? _validateLead(int lead) {
     final remindAt = widget.eventStartAt.subtract(Duration(minutes: lead));
-    if (!remindAt.isAfter(DateTime.now())) {
+    if (!widget.isRecurring && !remindAt.isAfter(DateTime.now())) {
       return '${EventReminderOptions.formatLeadMinutes(lead)} ya pasó: el evento empieza antes.';
     }
     return null;
@@ -285,6 +287,13 @@ class _EventReminderSheetState extends State<EventReminderSheet> {
                 height: 1.4,
               ),
             ),
+            if (widget.isRecurring)
+              const Padding(
+                padding: EdgeInsets.only(top: 12),
+                child: Text(
+                  'Tus cambios de recordatorios se aplican a todas las próximas repeticiones. Los demás miembros conservan sus preferencias.',
+                ),
+              ),
             if (_systemPermissionGranted == false) ...[
               const SizedBox(height: 12),
               Container(
@@ -323,8 +332,9 @@ class _EventReminderSheetState extends State<EventReminderSheet> {
             for (final lead in sorted) ...[
               _ReminderCard(
                 title: EventReminderOptions.presetLabel(lead),
-                subtitle:
-                    'Se enviará el ${EventDateFormatter.weekdayTime(remindAts[lead] ?? widget.eventStartAt)}',
+                subtitle: widget.isRecurring
+                    ? 'En cada repetición futura, con esta anticipación.'
+                    : 'Se enviará el ${EventDateFormatter.weekdayTime(remindAts[lead] ?? widget.eventStartAt)}',
                 busy: provider.isSaving,
                 onDelete: () => _delete(lead),
               ),
@@ -457,7 +467,9 @@ class _EventReminderSheetState extends State<EventReminderSheet> {
                   ],
                 ),
               ],
-              if (previewLead != null && previewRemindAt != null) ...[
+              if (!widget.isRecurring &&
+                  previewLead != null &&
+                  previewRemindAt != null) ...[
                 const SizedBox(height: 12),
                 _PreviewBanner(
                   remindAt: previewRemindAt,

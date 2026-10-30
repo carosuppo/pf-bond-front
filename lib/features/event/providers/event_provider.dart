@@ -17,6 +17,8 @@ class EventProvider extends ChangeNotifier {
   EventResponseModel? event;
   List<EventResponseModel> events = [];
   int? _eventsGroupId;
+  int? _requestedYear;
+  int? _requestedMonth;
   int _eventsLoadVersion = 0;
   int _sessionVersion = 0;
   final Set<int> _loadedYears = {};
@@ -64,6 +66,8 @@ class EventProvider extends ChangeNotifier {
     final targetMonth = month;
     final loadVersion = ++_eventsLoadVersion;
     _eventsGroupId = groupId;
+    _requestedYear = targetYear;
+    _requestedMonth = targetMonth;
     events = [];
     _loadedYears.clear();
     _loadedMonths.clear();
@@ -155,6 +159,7 @@ class EventProvider extends ChangeNotifier {
     required DateTime startAt,
     DateTime? endAt,
     required List<int> memberIds,
+    EventRecurrenceRequest? recurrence,
   }) async {
     final sessionVersion = _sessionVersion;
     isLoading = true;
@@ -170,6 +175,7 @@ class EventProvider extends ChangeNotifier {
         startAt: startAt,
         endAt: endAt,
         memberIds: memberIds,
+        recurrence: recurrence,
       );
 
       final createdEvent = await _eventService.createEvent(
@@ -184,6 +190,51 @@ class EventProvider extends ChangeNotifier {
           ..sort((first, second) => first.startAt.compareTo(second.startAt));
       }
 
+      if (recurrence != null && _eventsGroupId == groupId) {
+        final Set<int> years = {..._loadedYears};
+        final Set<String> months = {..._loadedMonths};
+        _eventsLoadVersion++;
+        isEventsLoading = false;
+        if (_requestedYear != null) {
+          if (_requestedMonth == null) {
+            years.add(_requestedYear!);
+          } else {
+            months.add(_monthKey(_requestedYear!, _requestedMonth!));
+          }
+        }
+        _loadedYears.clear();
+        _loadedMonths.clear();
+        for (final int year in years) {
+          try {
+            final List<EventResponseModel> loaded = await _eventService
+                .getEvents(groupId: groupId, year: year);
+            if (sessionVersion != _sessionVersion ||
+                _eventsGroupId != groupId) {
+              return true;
+            }
+            final Map<int, EventResponseModel> byId = {
+              for (final EventResponseModel item in events) item.id: item,
+            };
+            for (final EventResponseModel item in loaded) {
+              byId[item.id] = item;
+            }
+            events = byId.values.toList()
+              ..sort((a, b) => a.startAt.compareTo(b.startAt));
+            _loadedYears.add(year);
+          } catch (_) {
+            errorMessage =
+                'El evento se creó. Actualizá el calendario para cargar sus repeticiones.';
+          }
+        }
+        for (final String key in months) {
+          final List<String> parts = key.split('-');
+          await ensureMonthLoaded(
+            groupId: groupId,
+            year: int.parse(parts[0]),
+            month: int.parse(parts[1]),
+          );
+        }
+      }
       return true;
     } catch (error) {
       if (sessionVersion != _sessionVersion) return false;

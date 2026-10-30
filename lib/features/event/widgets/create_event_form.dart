@@ -11,6 +11,8 @@ import '../../auth/providers/auth_provider.dart';
 import '../../group/models/get_member_model.response.dart';
 import '../../group/providers/group_provider.dart';
 import '../models/event_model.response.dart';
+import '../models/create_event_model.request.dart';
+import 'event_recurrence_fields.dart';
 import '../models/update_event_model.request.dart';
 import '../providers/event_provider.dart';
 import 'event_date_time_picker.dart';
@@ -32,6 +34,7 @@ class _CreateEventFormState extends State<CreateEventForm> {
 
   DateTime? _startAt;
   DateTime? _endAt;
+  EventRecurrenceRequest? _recurrence;
 
   EventResponseModel? _currentEvent;
 
@@ -247,6 +250,13 @@ class _CreateEventFormState extends State<CreateEventForm> {
       return;
     }
 
+    final String? recurrenceError = _recurrence?.validateFor(_startAt!);
+    if (recurrenceError != null) {
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(recurrenceError)));
+      return;
+    }
     final groupProvider = context.read<GroupProvider>();
     final eventProvider = context.read<EventProvider>();
 
@@ -272,6 +282,7 @@ class _CreateEventFormState extends State<CreateEventForm> {
       startAt: _startAt!,
       endAt: _endAt,
       memberIds: _selectedMemberIds.toList(),
+      recurrence: _recurrence,
     );
 
     if (!mounted) {
@@ -369,7 +380,8 @@ class _CreateEventFormState extends State<CreateEventForm> {
         _descriptionController.text.trim().isNotEmpty ||
         _startAt != null ||
         _endAt != null ||
-        _selectedMemberIds.isNotEmpty;
+        _selectedMemberIds.isNotEmpty ||
+        _recurrence != null;
   }
 
   Future<void> _handleBack() async {
@@ -492,6 +504,16 @@ class _CreateEventFormState extends State<CreateEventForm> {
                                   : _clearEndDateTime,
                             ),
 
+                            if (!_isEditing) ...[
+                              const SizedBox(height: 24),
+                              EventRecurrenceFields(
+                                value: _recurrence,
+                                startAt: _startAt,
+                                enabled: !isLoading,
+                                onChanged: (EventRecurrenceRequest? value) =>
+                                    setState(() => _recurrence = value),
+                              ),
+                            ],
                             if (_isEditing) ...[
                               const SizedBox(height: 16),
 
