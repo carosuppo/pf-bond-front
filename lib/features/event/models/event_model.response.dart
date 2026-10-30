@@ -1,6 +1,7 @@
 import 'event_location_model.dart';
 
 class EventResponseModel {
+  final int? recurrenceId;
   final int id;
   final String name;
   final String? description;
@@ -10,6 +11,7 @@ class EventResponseModel {
   final EventLocationModel? location;
 
   const EventResponseModel({
+    this.recurrenceId,
     required this.id,
     required this.name,
     this.description,
@@ -21,6 +23,7 @@ class EventResponseModel {
 
   factory EventResponseModel.fromJson(Map<String, dynamic> json) {
     return EventResponseModel(
+      recurrenceId: json['recurrenceId'] as int?,
       id: json['id'] as int,
       name: json['name'] as String,
       description: json['description'] as String?,

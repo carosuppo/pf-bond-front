@@ -52,6 +52,7 @@ class _EventReminderButtonState extends State<EventReminderButton> {
         child: EventReminderSheet(
           groupId: widget.groupId,
           eventId: widget.event.id,
+          isRecurring: widget.event.recurrenceId != null,
           eventName: widget.event.name,
           eventStartAt: widget.event.startAt,
         ),
