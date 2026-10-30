@@ -420,6 +420,67 @@ class _MovementsList extends StatelessWidget {
     ).showSnackBar(SnackBar(content: Text(message)));
   }
 
+  Future<void> _confirmDeleteExpense(
+    BuildContext context,
+    AccountMovementModel expense,
+  ) async {
+    if (expense.kind != 'EXPENSE') return;
+    final provider = context.read<ExpenseAccountProvider>();
+    if (provider.isDeletingExpense) return;
+
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Eliminar gasto'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('Gasto: ${_title(expense)}'),
+            const SizedBox(height: 6),
+            Text(
+              'Importe: ${MoneyFormatter.formatCentsShort(expense.amountCents)}',
+            ),
+            const SizedBox(height: 12),
+            const Text(
+              'La eliminación es definitiva y no se puede deshacer. Se actualizarán los saldos de los miembros afectados.',
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(false),
+            child: const Text('Cancelar'),
+          ),
+          FilledButton(
+            style: FilledButton.styleFrom(
+              backgroundColor: AppColors.error,
+              foregroundColor: Colors.white,
+            ),
+            onPressed: () => Navigator.of(dialogContext).pop(true),
+            child: const Text('Eliminar gasto'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !context.mounted || provider.isDeletingExpense) {
+      return;
+    }
+
+    final messenger = ScaffoldMessenger.of(context);
+    final deleted = await provider.deleteExpense(
+      accountId: accountId,
+      expenseId: expense.id,
+    );
+    if (!context.mounted) return;
+
+    final message = deleted
+        ? 'Gasto eliminado correctamente. Se actualizaron los saldos y movimientos.'
+        : provider.deleteExpenseErrorMessage ??
+              'No se pudo eliminar el gasto. Volvé a intentarlo.';
+    messenger.showSnackBar(SnackBar(content: Text(message)));
+  }
+
   @override
   Widget build(BuildContext context) {
     final provider = context.watch<ExpenseAccountProvider>();
@@ -521,24 +582,52 @@ class _MovementsList extends StatelessWidget {
                   visualDensity: VisualDensity.compact,
                 )
               : canEdit
-              ? IconButton(
-                  tooltip: 'Editar gasto',
-                  onPressed: () {
-                    Navigator.of(context).pushNamed(
-                      AppRoutes.createExpense,
-                      arguments: {
-                        'accountId': accountId,
-                        'expense': movement,
-                        'hasConfirmedPayments': hasConfirmedPayments,
-                      },
-                    );
-                  },
-                  icon: const Icon(
-                    Icons.edit_outlined,
-                    color: AppColors.primary,
-                    size: 20,
-                  ),
-                  visualDensity: VisualDensity.compact,
+              ? Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    IconButton(
+                      tooltip: 'Editar gasto',
+                      onPressed: provider.isDeletingExpense
+                          ? null
+                          : () {
+                              Navigator.of(context).pushNamed(
+                                AppRoutes.createExpense,
+                                arguments: {
+                                  'accountId': accountId,
+                                  'expense': movement,
+                                  'hasConfirmedPayments': hasConfirmedPayments,
+                                },
+                              );
+                            },
+                      icon: const Icon(
+                        Icons.edit_outlined,
+                        color: AppColors.primary,
+                        size: 20,
+                      ),
+                      visualDensity: VisualDensity.compact,
+                    ),
+                    IconButton(
+                      tooltip: 'Eliminar gasto',
+                      onPressed: provider.isDeletingExpense
+                          ? null
+                          : () => _confirmDeleteExpense(context, movement),
+                      icon: provider.deletingExpenseId == movement.id
+                          ? const SizedBox(
+                              width: 18,
+                              height: 18,
+                              child: CircularProgressIndicator(
+                                color: AppColors.error,
+                                strokeWidth: 2,
+                              ),
+                            )
+                          : const Icon(
+                              Icons.delete_outline,
+                              color: AppColors.error,
+                              size: 20,
+                            ),
+                      visualDensity: VisualDensity.compact,
+                    ),
+                  ],
                 )
               : null,
         );

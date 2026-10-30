@@ -55,6 +55,9 @@ class ExpenseAccountProvider extends ChangeNotifier {
   bool isUpdatingExpense = false;
   String? updateExpenseErrorMessage;
   ExpenseResponseModel? updatedExpense;
+  bool isDeletingExpense = false;
+  int? deletingExpenseId;
+  String? deleteExpenseErrorMessage;
   int _sessionVersion = 0;
   final Set<int> _deletedAccountIds = {};
 
@@ -255,6 +258,9 @@ class ExpenseAccountProvider extends ChangeNotifier {
     isUpdatingExpense = false;
     updateExpenseErrorMessage = null;
     updatedExpense = null;
+    isDeletingExpense = false;
+    deletingExpenseId = null;
+    deleteExpenseErrorMessage = null;
     _deletedAccountIds.clear();
     notifyListeners();
   }
@@ -674,6 +680,50 @@ class ExpenseAccountProvider extends ChangeNotifier {
     } finally {
       if (sessionVersion == _sessionVersion) {
         isUpdatingExpense = false;
+        notifyListeners();
+      }
+    }
+  }
+
+  Future<bool> deleteExpense({
+    required int accountId,
+    required int expenseId,
+  }) async {
+    if (isDeletingExpense) return false;
+
+    final sessionVersion = _sessionVersion;
+    isDeletingExpense = true;
+    deletingExpenseId = expenseId;
+    deleteExpenseErrorMessage = null;
+    notifyListeners();
+
+    try {
+      await _expenseAccountService.deleteExpense(
+        accountId: accountId,
+        expenseId: expenseId,
+      );
+      if (sessionVersion != _sessionVersion) return false;
+
+      await Future.wait([
+        loadAccountDetail(accountId: accountId, force: true),
+        loadAccounts(clearOnError: true),
+        loadPendingExpenseShares(accountId: accountId, force: true),
+        loadPendingExpenseAdjustments(accountId: accountId, force: true),
+      ]);
+      if (sessionVersion != _sessionVersion) return false;
+
+      return true;
+    } catch (error) {
+      if (sessionVersion != _sessionVersion) return false;
+      deleteExpenseErrorMessage = error.toString().replaceFirst(
+        'Exception: ',
+        '',
+      );
+      return false;
+    } finally {
+      if (sessionVersion == _sessionVersion) {
+        isDeletingExpense = false;
+        deletingExpenseId = null;
         notifyListeners();
       }
     }

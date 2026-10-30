@@ -79,6 +79,12 @@ class ExpenseAccountService {
     return ExpenseResponseModel.fromJson(response);
   }
 
+  Future<void> deleteExpense({required int accountId, required int expenseId}) {
+    return _apiClient.authenticatedDelete(
+      '/expense-account/$accountId/expense/$expenseId',
+    );
+  }
+
   Future<List<PendingExpenseShareResponseModel>> getPendingExpenseShares({
     required int accountId,
   }) async {
