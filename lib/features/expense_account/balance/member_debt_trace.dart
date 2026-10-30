@@ -123,10 +123,6 @@ List<MemberDebtTrace> calculateMemberDebtTraces({
         } else if (creditorMemberId == myMemberId) {
           addImpact(debtorMemberId, movement, movement.amountCents);
         }
-      } else if (movement.status == 'PAID' && debtorMemberId == myMemberId) {
-        addImpact(creditorMemberId, movement, 0, includeZero: true);
-      } else if (movement.status == 'PAID' && creditorMemberId == myMemberId) {
-        addImpact(debtorMemberId, movement, 0, includeZero: true);
       }
       continue;
     }

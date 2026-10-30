@@ -41,6 +41,10 @@ class ExpenseAccountProvider extends ChangeNotifier {
   List<ExpensePaymentResponseModel> registeredExpensePayments = [];
   bool isRegisteringExpensePayments = false;
   String? paymentRegistrationErrorMessage;
+  bool isAnnullingExpensePayment = false;
+  int? annullingExpensePaymentId;
+  String? annulExpensePaymentErrorMessage;
+  ExpensePaymentResponseModel? annulledExpensePayment;
   bool isDeletingExpenseAccount = false;
   String? _deleteExpenseAccountErrorMessage;
   int? _deleteExpenseAccountErrorAccountId;
@@ -190,6 +194,7 @@ class ExpenseAccountProvider extends ChangeNotifier {
       if (expenseAccount?.id == accountId) expenseAccount = null;
       if (updatedExpenseAccount?.id == accountId) updatedExpenseAccount = null;
       registeredExpensePayments = [];
+      annulledExpensePayment = null;
       notifyListeners();
 
       await loadAccounts();
@@ -236,6 +241,10 @@ class ExpenseAccountProvider extends ChangeNotifier {
     registeredExpensePayments = [];
     isRegisteringExpensePayments = false;
     paymentRegistrationErrorMessage = null;
+    isAnnullingExpensePayment = false;
+    annullingExpensePaymentId = null;
+    annulExpensePaymentErrorMessage = null;
+    annulledExpensePayment = null;
     isDeletingExpenseAccount = false;
     _deleteExpenseAccountErrorMessage = null;
     _deleteExpenseAccountErrorAccountId = null;
@@ -250,7 +259,7 @@ class ExpenseAccountProvider extends ChangeNotifier {
     notifyListeners();
   }
 
-  Future<void> loadAccounts() async {
+  Future<void> loadAccounts({bool clearOnError = false}) async {
     final sessionVersion = _sessionVersion;
     isAccountsLoading = true;
     accountsErrorMessage = null;
@@ -264,6 +273,7 @@ class ExpenseAccountProvider extends ChangeNotifier {
           .toList(growable: false);
     } catch (error) {
       if (sessionVersion != _sessionVersion) return;
+      if (clearOnError) accounts = [];
       accountsErrorMessage = error.toString().replaceFirst('Exception: ', '');
     } finally {
       if (sessionVersion == _sessionVersion) {
@@ -314,8 +324,9 @@ class ExpenseAccountProvider extends ChangeNotifier {
     } catch (error) {
       if (sessionVersion != _sessionVersion) return;
       if (_detailAccountId != accountId) return;
-      if (!hasLoadedDetail) {
+      if (!hasLoadedDetail || force) {
         detailErrorMessage = error.toString().replaceFirst('Exception: ', '');
+        if (force) accountDetail = null;
       }
     } finally {
       if (sessionVersion == _sessionVersion && _detailAccountId == accountId) {
@@ -382,6 +393,10 @@ class ExpenseAccountProvider extends ChangeNotifier {
         'Exception: ',
         '',
       );
+      if (force) {
+        pendingExpenseShares = [];
+        _hasLoadedPendingShares = false;
+      }
     } finally {
       if (sessionVersion == _sessionVersion &&
           _pendingSharesAccountId == accountId) {
@@ -438,6 +453,10 @@ class ExpenseAccountProvider extends ChangeNotifier {
         'Exception: ',
         '',
       );
+      if (force) {
+        pendingExpenseAdjustments = [];
+        _hasLoadedPendingAdjustments = false;
+      }
     } finally {
       if (sessionVersion == _sessionVersion &&
           _pendingAdjustmentsAccountId == accountId) {
@@ -501,6 +520,51 @@ class ExpenseAccountProvider extends ChangeNotifier {
     } finally {
       if (sessionVersion == _sessionVersion) {
         isRegisteringExpensePayments = false;
+        notifyListeners();
+      }
+    }
+  }
+
+  Future<bool> annulExpensePayment({
+    required int accountId,
+    required int paymentId,
+  }) async {
+    if (isAnnullingExpensePayment) return false;
+
+    final sessionVersion = _sessionVersion;
+    isAnnullingExpensePayment = true;
+    annullingExpensePaymentId = paymentId;
+    annulExpensePaymentErrorMessage = null;
+    annulledExpensePayment = null;
+    notifyListeners();
+
+    try {
+      final annulled = await _expenseAccountService.annulExpensePayment(
+        accountId: accountId,
+        paymentId: paymentId,
+      );
+      if (sessionVersion != _sessionVersion) return false;
+      annulledExpensePayment = annulled;
+
+      await Future.wait([
+        loadAccountDetail(accountId: accountId, force: true),
+        loadAccounts(clearOnError: true),
+        loadPendingExpenseShares(accountId: accountId, force: true),
+        loadPendingExpenseAdjustments(accountId: accountId, force: true),
+      ]);
+      if (sessionVersion != _sessionVersion) return false;
+      return true;
+    } catch (error) {
+      if (sessionVersion != _sessionVersion) return false;
+      annulExpensePaymentErrorMessage = error.toString().replaceFirst(
+        'Exception: ',
+        '',
+      );
+      return false;
+    } finally {
+      if (sessionVersion == _sessionVersion) {
+        isAnnullingExpensePayment = false;
+        annullingExpensePaymentId = null;
         notifyListeners();
       }
     }

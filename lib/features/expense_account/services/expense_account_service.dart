@@ -127,4 +127,15 @@ class ExpenseAccountService {
         .map(ExpensePaymentResponseModel.fromJson)
         .toList(growable: false);
   }
+
+  Future<ExpensePaymentResponseModel> annulExpensePayment({
+    required int accountId,
+    required int paymentId,
+  }) async {
+    final response = await _apiClient.authenticatedPatch(
+      '/expense-account/$accountId/payments/$paymentId/annul',
+      const {},
+    );
+    return ExpensePaymentResponseModel.fromJson(response);
+  }
 }

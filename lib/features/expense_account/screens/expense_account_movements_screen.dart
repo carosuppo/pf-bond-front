@@ -8,6 +8,7 @@ import '../../auth/providers/auth_provider.dart';
 import '../../group/models/get_group_model.response.dart';
 import '../../group/models/get_member_model.response.dart';
 import '../balance/member_debt_trace.dart';
+import '../formatters/money_formatter.dart';
 import '../models/expense_account_detail_model.response.dart';
 import '../providers/expense_account_provider.dart';
 import '../widgets/account_group_details_loader.dart';
@@ -203,7 +204,7 @@ class _MovementsTabsContent extends StatelessWidget {
           (movement) =>
               (movement.kind == 'PAYMENT' ||
                   (movement.kind == 'ADJUSTMENT' &&
-                      movement.status != 'CANCELED')) &&
+                      movement.status == 'PENDING')) &&
               memberMovementAmountCents(movement, detail.myMemberId) != null,
         )
         .toList(growable: false);
@@ -335,14 +336,93 @@ class _MovementsList extends StatelessWidget {
           '${isRefund ? 'devuelve a' : 'aporta a'} vos';
     }
 
+    if (movement.kind == 'PAYMENT') {
+      final direction = movement.fromMemberId == memberId
+          ? 'Pagaste a ${_memberName(movement.toMemberId)}'
+          : '${_memberName(movement.fromMemberId)} te pagó';
+      final paymentLabel = movement.adjustmentId == null
+          ? 'Pago'
+          : 'Pago de ajuste';
+      return movement.adjustmentId == null
+          ? direction
+          : '$paymentLabel · $direction';
+    }
+
     if (movement.fromMemberId == memberId) {
       return 'Pagaste a ${_memberName(movement.toMemberId)}';
     }
     return '${_memberName(movement.fromMemberId)} te pagó';
   }
 
+  Future<void> _confirmAnnulPayment(
+    BuildContext context,
+    AccountMovementModel payment,
+  ) async {
+    if (payment.kind != 'PAYMENT' || payment.fromMemberId != memberId) {
+      return;
+    }
+    final provider = context.read<ExpenseAccountProvider>();
+    if (provider.isAnnullingExpensePayment) return;
+
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Anular pago'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'Importe: ${MoneyFormatter.formatCentsShort(payment.amountCents)}',
+            ),
+            const SizedBox(height: 6),
+            Text('Destinatario: ${_memberName(payment.toMemberId)}'),
+            const SizedBox(height: 12),
+            const Text(
+              'La anulación volverá a afectar las obligaciones y los saldos pendientes. Esta acción no se puede deshacer.',
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(false),
+            child: const Text('Cancelar'),
+          ),
+          FilledButton(
+            style: FilledButton.styleFrom(
+              backgroundColor: AppColors.error,
+              foregroundColor: Colors.white,
+            ),
+            onPressed: () => Navigator.of(dialogContext).pop(true),
+            child: const Text('Anular pago'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true ||
+        !context.mounted ||
+        provider.isAnnullingExpensePayment) {
+      return;
+    }
+
+    final succeeded = await provider.annulExpensePayment(
+      accountId: accountId,
+      paymentId: payment.id,
+    );
+    if (!context.mounted) return;
+
+    final message = succeeded
+        ? 'Pago anulado. Se actualizaron las obligaciones y los saldos.'
+        : provider.annulExpensePaymentErrorMessage ??
+              'No se pudo anular el pago. Volvé a intentarlo.';
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(SnackBar(content: Text(message)));
+  }
+
   @override
   Widget build(BuildContext context) {
+    final provider = context.watch<ExpenseAccountProvider>();
     if (movements.isEmpty) {
       return Center(
         child: Padding(
@@ -400,6 +480,8 @@ class _MovementsList extends StatelessWidget {
                       (candidate.kind == 'ADJUSTMENT' &&
                           candidate.status == 'PAID')),
             );
+        final isOwnedConfirmedPayment =
+            movement.kind == 'PAYMENT' && movement.fromMemberId == memberId;
 
         return AccountMovementCard(
           icon: isExpense
@@ -416,7 +498,29 @@ class _MovementsList extends StatelessWidget {
               memberMovementAmountCents(movement, memberId) ??
               (isExpense ? movement.amountCents : 0),
           createdAt: movement.settledAt ?? movement.createdAt,
-          trailing: canEdit
+          trailing: isOwnedConfirmedPayment
+              ? IconButton(
+                  tooltip: 'Anular pago',
+                  onPressed: provider.isAnnullingExpensePayment
+                      ? null
+                      : () => _confirmAnnulPayment(context, movement),
+                  icon: provider.annullingExpensePaymentId == movement.id
+                      ? const SizedBox(
+                          width: 18,
+                          height: 18,
+                          child: CircularProgressIndicator(
+                            color: AppColors.error,
+                            strokeWidth: 2,
+                          ),
+                        )
+                      : const Icon(
+                          Icons.block_outlined,
+                          color: AppColors.error,
+                          size: 20,
+                        ),
+                  visualDensity: VisualDensity.compact,
+                )
+              : canEdit
               ? IconButton(
                   tooltip: 'Editar gasto',
                   onPressed: () {

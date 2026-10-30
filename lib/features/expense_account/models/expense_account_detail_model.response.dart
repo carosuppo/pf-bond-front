@@ -68,6 +68,7 @@ class AccountMovementModel {
   final int? toMemberId;
   final int? expenseId;
   final int? expenseShareId;
+  final int? adjustmentId;
   final String? expenseTitle;
   final ExpenseSplitType? splitType;
   final int? createdByUserId;
@@ -89,6 +90,7 @@ class AccountMovementModel {
     this.toMemberId,
     this.expenseId,
     this.expenseShareId,
+    this.adjustmentId,
     this.expenseTitle,
     this.splitType,
     this.createdByUserId,
@@ -112,6 +114,7 @@ class AccountMovementModel {
       toMemberId: json['toMemberId'] as int?,
       expenseId: json['expenseId'] as int?,
       expenseShareId: json['expenseShareId'] as int?,
+      adjustmentId: json['adjustmentId'] as int?,
       expenseTitle: json['expenseTitle'] as String?,
       splitType: json['splitType'] == null
           ? null
