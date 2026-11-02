@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:typed_data';
 
 import 'package:http/http.dart' as http;
 
@@ -7,6 +8,42 @@ import '../storage/session_storage_service.dart';
 import 'api_exception.dart';
 
 class ApiClient {
+  Future<Map<String, dynamic>> authenticatedMultipart(
+    String method,
+    String path,
+    Map<String, String> fields, {
+    http.MultipartFile? file,
+  }) async {
+    final http.MultipartRequest request = http.MultipartRequest(
+      method,
+      Uri.parse('${ApiConfig.baseUrl}$path'),
+    );
+    final Map<String, String> headers = await _buildHeaders(
+      authenticated: true,
+    );
+    request.headers['Authorization'] = headers['Authorization']!;
+    request.fields.addAll(fields);
+    if (file != null) request.files.add(file);
+    final http.Response response = await http.Response.fromStream(
+      await request.send().timeout(_timeout),
+    ).timeout(_timeout);
+    return _handleResponse(response);
+  }
+
+  Future<Uint8List> authenticatedBytes(String path) async {
+    final Map<String, String> headers = await _buildHeaders(
+      authenticated: true,
+    );
+    headers['Cache-Control'] = 'no-store';
+    final http.Response response = await _send(
+      () => http.get(Uri.parse('${ApiConfig.baseUrl}$path'), headers: headers),
+    );
+    if (response.statusCode < 200 || response.statusCode >= 300) {
+      _decodeSuccessfulResponse(response);
+    }
+    return response.bodyBytes;
+  }
+
   final SessionStorageService sessionStorage;
 
   ApiClient(this.sessionStorage);
