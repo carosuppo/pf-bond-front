@@ -45,6 +45,8 @@ class ExpenseAccountProvider extends ChangeNotifier {
   int? annullingExpensePaymentId;
   String? annulExpensePaymentErrorMessage;
   ExpensePaymentResponseModel? annulledExpensePayment;
+  final Map<int, List<ExpensePaymentResponseModel>>
+  annulledExpensePaymentsByAccount = {};
   bool isDeletingExpenseAccount = false;
   String? _deleteExpenseAccountErrorMessage;
   int? _deleteExpenseAccountErrorAccountId;
@@ -198,6 +200,7 @@ class ExpenseAccountProvider extends ChangeNotifier {
       if (updatedExpenseAccount?.id == accountId) updatedExpenseAccount = null;
       registeredExpensePayments = [];
       annulledExpensePayment = null;
+      annulledExpensePaymentsByAccount.remove(accountId);
       notifyListeners();
 
       await loadAccounts();
@@ -248,6 +251,7 @@ class ExpenseAccountProvider extends ChangeNotifier {
     annullingExpensePaymentId = null;
     annulExpensePaymentErrorMessage = null;
     annulledExpensePayment = null;
+    annulledExpensePaymentsByAccount.clear();
     isDeletingExpenseAccount = false;
     _deleteExpenseAccountErrorMessage = null;
     _deleteExpenseAccountErrorAccountId = null;
@@ -551,6 +555,13 @@ class ExpenseAccountProvider extends ChangeNotifier {
       );
       if (sessionVersion != _sessionVersion) return false;
       annulledExpensePayment = annulled;
+      final annulledForAccount = annulledExpensePaymentsByAccount.putIfAbsent(
+        accountId,
+        () => <ExpensePaymentResponseModel>[],
+      );
+      if (!annulledForAccount.any((payment) => payment.id == annulled.id)) {
+        annulledForAccount.add(annulled);
+      }
 
       await Future.wait([
         loadAccountDetail(accountId: accountId, force: true),

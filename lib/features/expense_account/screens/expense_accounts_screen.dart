@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 
 import '../../../core/routes/app_routes.dart';
 import '../../../core/theme/app_colors.dart';
+import '../../../core/widgets/app_screen_header.dart';
 import '../models/balance_status.dart';
 import '../providers/expense_account_provider.dart';
 import '../widgets/account_balance_label.dart';
@@ -41,8 +42,6 @@ class ExpenseAccountsScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-
     return Scaffold(
       backgroundColor: AppColors.background,
       body: SafeArea(
@@ -50,17 +49,7 @@ class ExpenseAccountsScreen extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            Padding(
-              padding: const EdgeInsets.fromLTRB(24, 16, 24, 8),
-              child: Text(
-                'Cuentas',
-                textAlign: TextAlign.center,
-                style: theme.textTheme.headlineSmall?.copyWith(
-                  color: AppColors.text,
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
-            ),
+            const AppScreenHeader(title: 'Cuentas'),
             Expanded(child: _AccountsContent(onTap: _goToDetail)),
           ],
         ),
@@ -261,29 +250,19 @@ class _AccountCard extends StatelessWidget {
             ),
             child: Row(
               children: [
-                Container(
-                  width: 48,
-                  height: 48,
-                  decoration: BoxDecoration(
-                    color: AppColors.primary.withValues(alpha: 0.15),
-                    shape: BoxShape.circle,
-                  ),
-                  child: const Icon(
-                    Icons.account_balance_wallet_outlined,
-                    color: AppColors.primary,
-                    size: 24,
-                  ),
-                ),
-                const SizedBox(width: 14),
                 Expanded(
+                  flex: 3,
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisSize: MainAxisSize.min,
                     children: [
                       Text(
                         name,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
                         style: const TextStyle(
                           color: AppColors.text,
-                          fontSize: 16,
+                          fontSize: 15,
                           fontWeight: FontWeight.w600,
                         ),
                       ),
@@ -294,14 +273,29 @@ class _AccountCard extends StatelessWidget {
                         overflow: TextOverflow.ellipsis,
                         style: const TextStyle(
                           color: AppColors.mutedText,
-                          fontSize: 13,
+                          fontSize: 12,
                         ),
                       ),
                     ],
                   ),
                 ),
-                const SizedBox(width: 8),
-                AccountBalanceLabel(status: status, balanceCents: balanceCents),
+                const SizedBox(width: 12),
+                Flexible(
+                  flex: 2,
+                  child: Align(
+                    alignment: Alignment.centerRight,
+                    child: FittedBox(
+                      fit: BoxFit.scaleDown,
+                      alignment: Alignment.centerRight,
+                      child: AccountBalanceLabel(
+                        status: status,
+                        balanceCents: balanceCents,
+                        large: true,
+                        showStatus: false,
+                      ),
+                    ),
+                  ),
+                ),
               ],
             ),
           ),

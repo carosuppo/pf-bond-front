@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 
 import '../../../core/theme/app_colors.dart';
 import '../../../core/widgets/app_screen_header.dart';
+import '../../../core/widgets/app_message_dialog.dart';
 import '../../../core/widgets/buttons/app_primary_button.dart';
 import '../../group/models/get_group_model.response.dart';
 import '../formatters/money_formatter.dart';
@@ -10,8 +11,8 @@ import '../models/expense_account_detail_model.response.dart';
 import '../models/pending_expense_adjustment_model.response.dart';
 import '../models/pending_expense_share_model.response.dart';
 import '../providers/expense_account_provider.dart';
-import '../widgets/account_header_card.dart';
 import '../widgets/account_group_details_loader.dart';
+import '../widgets/account_selectable_payment_tile.dart';
 
 class ExpenseAccountPaymentsScreen extends StatefulWidget {
   const ExpenseAccountPaymentsScreen({
@@ -155,27 +156,17 @@ class _ExpenseAccountPaymentsScreenState
     final selectedTotal = _selectedTotal(pendingShares, pendingAdjustments);
     final registerAll =
         selectedCount == pendingShares.length + pendingAdjustments.length;
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (dialogContext) => AlertDialog(
-        title: const Text('Confirmar registro'),
-        content: Text(
+    final confirmed = await showAppMessageDialog(
+      context,
+      title: 'Confirmar registro',
+      message:
           'Vas a registrar $selectedCount '
           '${selectedCount == 1 ? 'pago o ajuste' : 'pagos y ajustes'} por '
           '${MoneyFormatter.formatCentsShort(selectedTotal)}. '
           'Se saldarán los importes seleccionados completos.',
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(dialogContext).pop(false),
-            child: const Text('Volver'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.of(dialogContext).pop(true),
-            child: const Text('Confirmar'),
-          ),
-        ],
-      ),
+      cancelText: 'Volver',
+      confirmText: 'Confirmar',
+      icon: Icons.payments_outlined,
     );
 
     if (confirmed != true || !mounted) return;
@@ -266,78 +257,82 @@ class _ExpenseAccountPaymentsScreenState
               const <AccountMovementModel>[])
         if (movement.kind == 'EXPENSE') movement.id: movement.payerMemberId!,
     };
-
     return RefreshIndicator(
       color: AppColors.primary,
       onRefresh: _reloadPendingShares,
       child: ListView(
         physics: const AlwaysScrollableScrollPhysics(),
-        padding: const EdgeInsets.fromLTRB(16, 8, 16, 20),
+        padding: const EdgeInsets.fromLTRB(16, 4, 16, 20),
         children: [
           if (provider.accountDetail != null) ...[
-            AccountHeaderCard(
+            _PaymentAccountContext(
               name: provider.accountDetail!.name,
               groupName: provider.accountDetail!.groupName,
               eventName: provider.accountDetail!.eventName,
             ),
-            const SizedBox(height: 14),
           ],
-          const Text(
-            'Seleccioná participaciones y ajustes para registrar los importes completos.',
-            style: TextStyle(color: AppColors.mutedText, fontSize: 14),
-          ),
           if (hasError) ...[
-            const SizedBox(height: 12),
+            const SizedBox(height: 8),
             _InlineError(
               message:
                   provider.pendingExpenseSharesErrorMessage ??
                   provider.pendingExpenseAdjustmentsErrorMessage!,
             ),
           ],
-          const SizedBox(height: 12),
-          _SelectAllTile(
+          _PendingListHeader(
             selected: _areAllSelected(shares, adjustments),
             enabled: !provider.isRegisteringExpensePayments && !isLoading,
             onTap: () => _toggleAll(shares, adjustments),
           ),
-          const SizedBox(height: 8),
-          for (final share in shares)
-            _PendingShareTile(
-              share: share,
-              recipientName: _memberName(groupDetails, share.payerMemberId),
-              selected: _isSelected(share),
-              enabled: !provider.isRegisteringExpensePayments && !isLoading,
-              onTap: () {
-                setState(() {
-                  if (!_selectedExpenseShareIds.add(share.expenseShareId)) {
-                    _selectedExpenseShareIds.remove(share.expenseShareId);
-                  }
-                });
-              },
+          if (shares.isNotEmpty) ...[
+            _PendingSectionHeader(
+              title: 'Participaciones',
+              count: shares.length,
             ),
-          for (final adjustment in adjustments)
-            _PendingAdjustmentTile(
-              adjustment: adjustment,
-              typeLabel:
-                  adjustment.debtorMemberId ==
-                      payerByExpense[adjustment.expenseId]
-                  ? 'Devolución'
-                  : 'Importe adicional',
-              debtorName: _memberName(groupDetails, adjustment.debtorMemberId),
-              creditorName: _memberName(
-                groupDetails,
-                adjustment.creditorMemberId,
+            for (final share in shares)
+              _PendingShareTile(
+                share: share,
+                recipientName: _memberName(groupDetails, share.payerMemberId),
+                selected: _isSelected(share),
+                enabled: !provider.isRegisteringExpensePayments && !isLoading,
+                onTap: () {
+                  setState(() {
+                    if (!_selectedExpenseShareIds.add(share.expenseShareId)) {
+                      _selectedExpenseShareIds.remove(share.expenseShareId);
+                    }
+                  });
+                },
               ),
-              selected: _isAdjustmentSelected(adjustment),
-              enabled: !provider.isRegisteringExpensePayments && !isLoading,
-              onTap: () {
-                setState(() {
-                  if (!_selectedAdjustmentIds.add(adjustment.adjustmentId)) {
-                    _selectedAdjustmentIds.remove(adjustment.adjustmentId);
-                  }
-                });
-              },
-            ),
+          ],
+          if (adjustments.isNotEmpty) ...[
+            _PendingSectionHeader(title: 'Ajustes', count: adjustments.length),
+            for (final adjustment in adjustments)
+              _PendingAdjustmentTile(
+                adjustment: adjustment,
+                typeLabel:
+                    adjustment.debtorMemberId ==
+                        payerByExpense[adjustment.expenseId]
+                    ? 'Devolución'
+                    : 'Importe adicional',
+                debtorName: _memberName(
+                  groupDetails,
+                  adjustment.debtorMemberId,
+                ),
+                creditorName: _memberName(
+                  groupDetails,
+                  adjustment.creditorMemberId,
+                ),
+                selected: _isAdjustmentSelected(adjustment),
+                enabled: !provider.isRegisteringExpensePayments && !isLoading,
+                onTap: () {
+                  setState(() {
+                    if (!_selectedAdjustmentIds.add(adjustment.adjustmentId)) {
+                      _selectedAdjustmentIds.remove(adjustment.adjustmentId);
+                    }
+                  });
+                },
+              ),
+          ],
         ],
       ),
     );
@@ -354,18 +349,14 @@ class _ExpenseAccountPaymentsScreenState
         .length;
     final selectedCount = selected.length + selectedAdjustmentCount;
     final totalCents = _selectedTotal(shares, adjustments);
-    final areAllSelected = _areAllSelected(shares, adjustments);
-    final buttonText = areAllSelected
-        ? 'Registrar todos los pagos y ajustes'
-        : selectedCount == 1
-        ? 'Registrar pago o ajuste'
-        : 'Registrar $selectedCount pagos y ajustes';
 
     return Container(
-      padding: const EdgeInsets.fromLTRB(16, 14, 16, 12),
-      decoration: const BoxDecoration(
-        color: AppColors.cardColor,
-        border: Border(top: BorderSide(color: AppColors.border)),
+      padding: const EdgeInsets.fromLTRB(16, 10, 16, 8),
+      decoration: BoxDecoration(
+        color: AppColors.background,
+        border: Border(
+          top: BorderSide(color: AppColors.border.withValues(alpha: 0.65)),
+        ),
       ),
       child: SafeArea(
         top: false,
@@ -375,7 +366,7 @@ class _ExpenseAccountPaymentsScreenState
           children: [
             if (provider.paymentRegistrationErrorMessage != null) ...[
               _InlineError(message: provider.paymentRegistrationErrorMessage!),
-              const SizedBox(height: 10),
+              const SizedBox(height: 8),
             ],
             Row(
               children: [
@@ -384,24 +375,36 @@ class _ExpenseAccountPaymentsScreenState
                     '$selectedCount '
                     '${selectedCount == 1 ? 'seleccionado' : 'seleccionados'}',
                     style: const TextStyle(
-                      color: AppColors.mutedText,
+                      color: AppColors.text,
                       fontSize: 14,
+                      fontWeight: FontWeight.w500,
                     ),
                   ),
                 ),
-                Text(
-                  MoneyFormatter.formatCentsShort(totalCents),
-                  style: const TextStyle(
-                    color: AppColors.text,
-                    fontSize: 18,
-                    fontWeight: FontWeight.bold,
+                const Text(
+                  'Total',
+                  style: TextStyle(color: AppColors.mutedText, fontSize: 12),
+                ),
+                const SizedBox(width: 8),
+                Flexible(
+                  child: FittedBox(
+                    fit: BoxFit.scaleDown,
+                    alignment: Alignment.centerRight,
+                    child: Text(
+                      MoneyFormatter.formatCentsShort(totalCents),
+                      style: const TextStyle(
+                        color: AppColors.primary,
+                        fontSize: 19,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
                   ),
                 ),
               ],
             ),
-            const SizedBox(height: 12),
+            const SizedBox(height: 8),
             AppPrimaryButton(
-              text: buttonText,
+              text: 'Confirmar pagos',
               onPressed:
                   selectedCount == 0 ||
                       provider.isPendingExpenseSharesLoading ||
@@ -450,8 +453,44 @@ class _ExpenseAccountPaymentsScreenState
   }
 }
 
-class _SelectAllTile extends StatelessWidget {
-  const _SelectAllTile({
+class _PendingSectionHeader extends StatelessWidget {
+  const _PendingSectionHeader({required this.title, required this.count});
+
+  final String title;
+  final int count;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(4, 14, 4, 8),
+      child: Row(
+        children: [
+          Expanded(
+            child: Text(
+              title,
+              style: const TextStyle(
+                color: AppColors.text,
+                fontSize: 14,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ),
+          Text(
+            '$count',
+            style: const TextStyle(
+              color: AppColors.mutedText,
+              fontSize: 12,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _PendingListHeader extends StatelessWidget {
+  const _PendingListHeader({
     required this.selected,
     required this.enabled,
     required this.onTap,
@@ -463,33 +502,95 @@ class _SelectAllTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Material(
-      color: AppColors.fieldColor,
-      borderRadius: BorderRadius.circular(12),
-      child: InkWell(
-        onTap: enabled ? onTap : null,
-        borderRadius: BorderRadius.circular(12),
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-          child: Row(
-            children: [
-              Checkbox(
-                value: selected,
-                onChanged: enabled ? (_) => onTap() : null,
-                activeColor: AppColors.primary,
+    return Padding(
+      padding: const EdgeInsets.only(top: 8, bottom: 2),
+      child: Row(
+        children: [
+          const Expanded(
+            child: Text(
+              'Pendientes',
+              style: TextStyle(
+                color: AppColors.text,
+                fontSize: 16,
+                fontWeight: FontWeight.w600,
               ),
-              const Expanded(
-                child: Text(
-                  'Seleccionar todos',
-                  style: TextStyle(
+            ),
+          ),
+          TextButton.icon(
+            onPressed: enabled ? onTap : null,
+            style: TextButton.styleFrom(
+              padding: const EdgeInsets.symmetric(horizontal: 4),
+              minimumSize: const Size(44, 44),
+              foregroundColor: AppColors.primary,
+            ),
+            icon: Icon(
+              selected ? Icons.remove_done_rounded : Icons.done_all_rounded,
+              size: 18,
+            ),
+            label: Text(selected ? 'Quitar selección' : 'Seleccionar todos'),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _PaymentAccountContext extends StatelessWidget {
+  const _PaymentAccountContext({
+    required this.name,
+    required this.groupName,
+    this.eventName,
+  });
+
+  final String name;
+  final String groupName;
+  final String? eventName;
+
+  @override
+  Widget build(BuildContext context) {
+    final event = eventName?.trim();
+    final groupContext = event == null || event.isEmpty
+        ? groupName
+        : '$groupName · $event';
+
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(4, 4, 4, 8),
+      child: Row(
+        children: [
+          const Icon(
+            Icons.groups_outlined,
+            color: AppColors.mutedText,
+            size: 19,
+          ),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  name,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
                     color: AppColors.text,
+                    fontSize: 14,
                     fontWeight: FontWeight.w600,
                   ),
                 ),
-              ),
-            ],
+                const SizedBox(height: 2),
+                Text(
+                  groupContext,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                    color: AppColors.mutedText,
+                    fontSize: 12,
+                  ),
+                ),
+              ],
+            ),
           ),
-        ),
+        ],
       ),
     );
   }
@@ -517,66 +618,13 @@ class _PendingShareTile extends StatelessWidget {
         ? 'Gasto #${share.expenseId}'
         : title;
 
-    return Card(
-      margin: const EdgeInsets.only(bottom: 8),
-      color: AppColors.cardColor,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(14),
-        side: const BorderSide(color: AppColors.border),
-      ),
-      child: InkWell(
-        onTap: enabled ? onTap : null,
-        borderRadius: BorderRadius.circular(14),
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
-          child: Row(
-            children: [
-              Checkbox(
-                value: selected,
-                onChanged: enabled ? (_) => onTap() : null,
-                activeColor: AppColors.primary,
-              ),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      expenseName,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(
-                        color: AppColors.text,
-                        fontSize: 15,
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-                    const SizedBox(height: 4),
-                    Text(
-                      'Pagar a $recipientName',
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(
-                        color: AppColors.mutedText,
-                        fontSize: 12,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              const SizedBox(width: 8),
-              Text(
-                MoneyFormatter.formatCentsShort(share.amountCents),
-                style: const TextStyle(
-                  color: AppColors.text,
-                  fontSize: 15,
-                  fontWeight: FontWeight.w600,
-                ),
-              ),
-              const SizedBox(width: 8),
-            ],
-          ),
-        ),
-      ),
+    return AccountSelectablePaymentTile(
+      title: expenseName,
+      description: 'Pagás a $recipientName',
+      amountCents: share.amountCents,
+      selected: selected,
+      enabled: enabled,
+      onTap: onTap,
     );
   }
 }
@@ -607,66 +655,13 @@ class _PendingAdjustmentTile extends StatelessWidget {
         ? 'Gasto #${adjustment.expenseId}'
         : title;
 
-    return Card(
-      margin: const EdgeInsets.only(bottom: 8),
-      color: AppColors.cardColor,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(14),
-        side: const BorderSide(color: AppColors.border),
-      ),
-      child: InkWell(
-        onTap: enabled ? onTap : null,
-        borderRadius: BorderRadius.circular(14),
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
-          child: Row(
-            children: [
-              Checkbox(
-                value: selected,
-                onChanged: enabled ? (_) => onTap() : null,
-                activeColor: AppColors.primary,
-              ),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      expenseName,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(
-                        color: AppColors.text,
-                        fontSize: 15,
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-                    const SizedBox(height: 4),
-                    Text(
-                      '$typeLabel · $debtorName paga a $creditorName',
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(
-                        color: AppColors.mutedText,
-                        fontSize: 12,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              const SizedBox(width: 8),
-              Text(
-                MoneyFormatter.formatCentsShort(adjustment.amountCents),
-                style: const TextStyle(
-                  color: AppColors.text,
-                  fontSize: 15,
-                  fontWeight: FontWeight.w600,
-                ),
-              ),
-              const SizedBox(width: 8),
-            ],
-          ),
-        ),
-      ),
+    return AccountSelectablePaymentTile(
+      title: expenseName,
+      description: '$typeLabel · $debtorName paga a $creditorName',
+      amountCents: adjustment.amountCents,
+      selected: selected,
+      enabled: enabled,
+      onTap: onTap,
     );
   }
 }
@@ -688,9 +683,9 @@ class _LoadError extends StatelessWidget {
             const Icon(
               Icons.error_outline,
               color: AppColors.mutedText,
-              size: 44,
+              size: 36,
             ),
-            const SizedBox(height: 12),
+            const SizedBox(height: 10),
             Text(
               message,
               textAlign: TextAlign.center,
@@ -716,33 +711,20 @@ class _EmptyPendingShares extends StatelessWidget {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Container(
-              padding: const EdgeInsets.all(22),
-              decoration: BoxDecoration(
-                color: AppColors.fieldColor,
-                borderRadius: BorderRadius.circular(24),
-              ),
-              child: const Icon(
-                Icons.check_circle_outline,
-                color: AppColors.success,
-                size: 48,
-              ),
+            const Icon(
+              Icons.check_circle_outline,
+              color: AppColors.success,
+              size: 36,
             ),
-            const SizedBox(height: 16),
+            const SizedBox(height: 10),
             const Text(
-              'No tenés pagos pendientes',
+              'No hay pagos pendientes',
               textAlign: TextAlign.center,
               style: TextStyle(
                 color: AppColors.text,
-                fontSize: 17,
+                fontSize: 16,
                 fontWeight: FontWeight.w600,
               ),
-            ),
-            const SizedBox(height: 6),
-            const Text(
-              'Tus pagos y ajustes pendientes aparecerán acá.',
-              textAlign: TextAlign.center,
-              style: TextStyle(color: AppColors.mutedText, fontSize: 14),
             ),
           ],
         ),
@@ -758,17 +740,25 @@ class _InlineError extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(
-        color: AppColors.error.withValues(alpha: 0.1),
-        borderRadius: BorderRadius.circular(12),
-      ),
-      child: Text(
-        message,
-        style: const TextStyle(color: AppColors.error, fontSize: 13),
-      ),
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Padding(
+          padding: EdgeInsets.only(top: 1),
+          child: Icon(
+            Icons.error_outline_rounded,
+            color: AppColors.error,
+            size: 17,
+          ),
+        ),
+        const SizedBox(width: 8),
+        Expanded(
+          child: Text(
+            message,
+            style: const TextStyle(color: AppColors.error, fontSize: 13),
+          ),
+        ),
+      ],
     );
   }
 }

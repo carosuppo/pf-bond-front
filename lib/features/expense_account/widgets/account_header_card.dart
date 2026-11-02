@@ -8,11 +8,13 @@ class AccountHeaderCard extends StatelessWidget {
     required this.name,
     required this.groupName,
     this.eventName,
+    this.trailing,
   });
 
   final String name;
   final String groupName;
   final String? eventName;
+  final Widget? trailing;
 
   @override
   Widget build(BuildContext context) {
@@ -51,6 +53,8 @@ class AccountHeaderCard extends StatelessWidget {
                     Expanded(
                       child: Text(
                         name,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
                         style: const TextStyle(
                           color: AppColors.text,
                           fontSize: 17,
@@ -58,6 +62,10 @@ class AccountHeaderCard extends StatelessWidget {
                         ),
                       ),
                     ),
+                    if (trailing != null) ...[
+                      const SizedBox(width: 4),
+                      trailing!,
+                    ],
                   ],
                 ),
                 const SizedBox(height: 10),

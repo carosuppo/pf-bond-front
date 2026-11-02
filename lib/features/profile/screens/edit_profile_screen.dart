@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/validators/form_validators.dart';
 import '../../../core/widgets/app_screen_header.dart';
+import '../../../core/widgets/discard_changes_dialog.dart';
 import '../../auth/providers/auth_provider.dart';
 import '../../auth/widgets/auth_submit_button.dart';
 import '../../auth/widgets/auth_text_field.dart';
@@ -121,26 +122,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
       return;
     }
 
-    final shouldDiscard = await showDialog<bool>(
-      context: context,
-      builder: (dialogContext) => AlertDialog(
-        title: const Text('Descartar cambios'),
-        content: const Text('Tenés cambios sin guardar. ¿Querés descartarlos?'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(dialogContext).pop(false),
-            child: const Text('Cancelar'),
-          ),
-          TextButton(
-            onPressed: () => Navigator.of(dialogContext).pop(true),
-            child: const Text(
-              'Descartar',
-              style: TextStyle(color: AppColors.error),
-            ),
-          ),
-        ],
-      ),
-    );
+    final shouldDiscard = await showDiscardChangesDialog(context);
 
     if (shouldDiscard == true && mounted) {
       context.read<ProfileProvider>().clearSelectedPhoto();

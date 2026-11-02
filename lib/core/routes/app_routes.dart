@@ -20,7 +20,7 @@ class AppRoutes {
       '/expense-accounts/create-expense-account';
   static const String editExpenseAccount = '/expense-accounts/edit';
   static const String expenseAccountDetail = '/expense-accounts/detail';
-  static const String expenseAccountBalance = '/expense-accounts/balance';
+  static const String expenseAccountSettings = '/expense-accounts/settings';
   static const String expenseAccountMovements = '/expense-accounts/movements';
   static const String expenseAccountPayments = '/expense-accounts/payments';
   static const String createExpense = '/expense-accounts/create-expense';

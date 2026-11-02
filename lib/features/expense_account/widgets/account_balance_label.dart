@@ -9,17 +9,19 @@ class AccountBalanceLabel extends StatelessWidget {
     required this.status,
     required this.balanceCents,
     this.large = false,
+    this.showStatus = true,
   });
 
   final BalanceStatus status;
   final int balanceCents;
   final bool large;
+  final bool showStatus;
 
   @override
   Widget build(BuildContext context) {
-    return Column(
+    return Row(
       mainAxisSize: MainAxisSize.min,
-      crossAxisAlignment: CrossAxisAlignment.end,
+      crossAxisAlignment: CrossAxisAlignment.center,
       children: [
         Text(
           MoneyFormatter.formatCentsShort(balanceCents),
@@ -29,10 +31,13 @@ class AccountBalanceLabel extends StatelessWidget {
             fontWeight: FontWeight.bold,
           ),
         ),
-        Text(
-          status.label,
-          style: TextStyle(color: status.color, fontSize: large ? 14 : 12),
-        ),
+        if (showStatus) ...[
+          const SizedBox(width: 6),
+          Text(
+            status.label,
+            style: TextStyle(color: status.color, fontSize: large ? 14 : 12),
+          ),
+        ],
       ],
     );
   }

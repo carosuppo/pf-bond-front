@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 
 import '../../../core/routes/app_routes.dart';
 import '../../../core/theme/app_colors.dart';
+import '../../../core/widgets/app_message_dialog.dart';
 import '../../../core/widgets/buttons/app_primary_button.dart';
 import '../../../core/widgets/user_avatar.dart';
 import '../../auth/providers/auth_provider.dart';
@@ -489,22 +490,14 @@ class GroupMembersBottomSheet extends StatelessWidget {
     int memberId,
     bool isCurrentUserAdmin,
   ) async {
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (dialogContext) => AlertDialog(
-        title: const Text('Expulsar miembro'),
-        content: Text('¿Querés expulsar a $memberName del grupo?'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(dialogContext).pop(false),
-            child: const Text('Cancelar'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.of(dialogContext).pop(true),
-            child: const Text('Expulsar'),
-          ),
-        ],
-      ),
+    final confirmed = await showAppMessageDialog(
+      context,
+      title: 'Expulsar miembro',
+      message: '¿Querés expulsar a $memberName del grupo?',
+      confirmText: 'Expulsar',
+      icon: Icons.person_remove_alt_1_rounded,
+      accentColor: AppColors.error,
+      confirmButtonColor: AppColors.error,
     );
 
     if (confirmed != true || !context.mounted) {
@@ -702,26 +695,14 @@ class _MemberRoleSelector extends StatelessWidget {
 
   Future<void> _confirmRoleChange(BuildContext context, RoleEnum role) async {
     final isAssigningAdmin = role == RoleEnum.admin;
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (dialogContext) => AlertDialog(
-        title: const Text('Confirmar cambio de rol'),
-        content: Text(
-          isAssigningAdmin
-              ? '¿Querés asignar el rol de Administrador a ${member.name}?'
-              : '¿Querés revocar el rol de Administrador de ${member.name}?',
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(dialogContext).pop(false),
-            child: const Text('Cancelar'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.of(dialogContext).pop(true),
-            child: const Text('Confirmar'),
-          ),
-        ],
-      ),
+    final confirmed = await showAppMessageDialog(
+      context,
+      title: 'Confirmar cambio de rol',
+      message: isAssigningAdmin
+          ? '¿Querés asignar el rol de Administrador a ${member.name}?'
+          : '¿Querés revocar el rol de Administrador de ${member.name}?',
+      confirmText: 'Confirmar',
+      icon: Icons.manage_accounts_outlined,
     );
 
     if (confirmed != true || !context.mounted) {
