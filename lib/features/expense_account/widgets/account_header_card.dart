@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 
 import '../../../core/theme/app_colors.dart';
-import '../../../core/widgets/status_pill.dart';
 
 class AccountHeaderCard extends StatelessWidget {
   const AccountHeaderCard({
@@ -58,11 +57,6 @@ class AccountHeaderCard extends StatelessWidget {
                           fontWeight: FontWeight.bold,
                         ),
                       ),
-                    ),
-                    const SizedBox(width: 8),
-                    StatusPill(
-                      text: event != null ? 'Evento' : 'General',
-                      color: AppColors.mutedText,
                     ),
                   ],
                 ),

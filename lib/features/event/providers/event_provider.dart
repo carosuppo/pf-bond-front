@@ -102,6 +102,13 @@ class EventProvider extends ChangeNotifier {
     }
   }
 
+  Future<EventResponseModel> getEventById({
+    required int groupId,
+    required int eventId,
+  }) {
+    return _eventService.getEventById(groupId: groupId, eventId: eventId);
+  }
+
   Future<void> ensureMonthLoaded({
     required int groupId,
     required int year,
