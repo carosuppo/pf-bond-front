@@ -1,14 +1,52 @@
 import 'dart:convert';
+import 'dart:typed_data';
 
 import 'package:http/http.dart' as http;
 
 import '../config/api_config.dart';
 import '../storage/session_storage_service.dart';
+import 'api_exception.dart';
 
 class ApiClient {
-  final SessionStorageService _sessionStorage;
+  Future<Map<String, dynamic>> authenticatedMultipart(
+    String method,
+    String path,
+    Map<String, String> fields, {
+    http.MultipartFile? file,
+  }) async {
+    final http.MultipartRequest request = http.MultipartRequest(
+      method,
+      Uri.parse('${ApiConfig.baseUrl}$path'),
+    );
+    final Map<String, String> headers = await _buildHeaders(
+      authenticated: true,
+    );
+    request.headers['Authorization'] = headers['Authorization']!;
+    request.fields.addAll(fields);
+    if (file != null) request.files.add(file);
+    final http.Response response = await http.Response.fromStream(
+      await request.send().timeout(_timeout),
+    ).timeout(_timeout);
+    return _handleResponse(response);
+  }
 
-  ApiClient(this._sessionStorage);
+  Future<Uint8List> authenticatedBytes(String path) async {
+    final Map<String, String> headers = await _buildHeaders(
+      authenticated: true,
+    );
+    headers['Cache-Control'] = 'no-store';
+    final http.Response response = await _send(
+      () => http.get(Uri.parse('${ApiConfig.baseUrl}$path'), headers: headers),
+    );
+    if (response.statusCode < 200 || response.statusCode >= 300) {
+      _decodeSuccessfulResponse(response);
+    }
+    return response.bodyBytes;
+  }
+
+  final SessionStorageService sessionStorage;
+
+  ApiClient(this.sessionStorage);
 
   static const _timeout = Duration(seconds: 20);
 
@@ -21,11 +59,10 @@ class ApiClient {
     Map<String, dynamic> body,
   ) async {
     final uri = Uri.parse('${ApiConfig.baseUrl}$path');
+    final headers = await _buildHeaders();
 
-    final response = await http.post(
-      uri,
-      headers: await _buildHeaders(),
-      body: jsonEncode(body),
+    final response = await _send(
+      () => http.post(uri, headers: headers, body: jsonEncode(body)),
     );
 
     return _handleResponse(response);
@@ -36,14 +73,32 @@ class ApiClient {
     Map<String, dynamic> body,
   ) async {
     final uri = Uri.parse('${ApiConfig.baseUrl}$path');
+    final headers = await _buildHeaders(authenticated: true);
 
-    final response = await http.post(
-      uri,
-      headers: await _buildHeaders(authenticated: true),
-      body: jsonEncode(body),
+    final response = await _send(
+      () => http.post(uri, headers: headers, body: jsonEncode(body)),
     );
 
     return _handleResponse(response);
+  }
+
+  Future<void> authenticatedPostNoContent(
+    String path, {
+    Map<String, dynamic>? body,
+  }) async {
+    final uri = Uri.parse('${ApiConfig.baseUrl}$path');
+
+    final headers = await _buildHeaders(authenticated: true);
+
+    final response = await _send(
+      () => http.post(
+        uri,
+        headers: headers,
+        body: body == null ? null : jsonEncode(body),
+      ),
+    );
+
+    _decodeSuccessfulResponse(response);
   }
 
   Future<Map<String, dynamic>> authenticatedPatch(
@@ -52,17 +107,37 @@ class ApiClient {
   ) async {
     final uri = Uri.parse('${ApiConfig.baseUrl}$path');
 
-    final response = await http.patch(
-      uri,
-      headers: await _buildHeaders(authenticated: true),
-      body: jsonEncode(body),
+    final headers = await _buildHeaders(authenticated: true);
+
+    final response = await _send(
+      () => http.patch(uri, headers: headers, body: jsonEncode(body)),
     );
+
+    return _handleResponse(response);
+  }
+
+  Future<Map<String, dynamic>> authenticatedMultipartPatch(
+    String path, {
+    required http.MultipartFile file,
+  }) async {
+    final request = http.MultipartRequest(
+      'PATCH',
+      Uri.parse('${ApiConfig.baseUrl}$path'),
+    );
+    final headers = await _buildHeaders(authenticated: true);
+
+    request.headers['Authorization'] = headers['Authorization']!;
+    request.files.add(file);
+
+    final streamedResponse = await request.send().timeout(_timeout);
+    final response = await http.Response.fromStream(streamedResponse);
 
     return _handleResponse(response);
   }
 
   Future<Map<String, dynamic>> authenticatedGet(String path) async {
     final uri = Uri.parse('${ApiConfig.baseUrl}$path');
+
     final headers = await _buildHeaders(authenticated: true);
 
     final response = await _send(() => http.get(uri, headers: headers));
@@ -70,15 +145,52 @@ class ApiClient {
     return _handleResponse(response);
   }
 
+  Future<void> authenticatedDelete(String path) async {
+    final uri = Uri.parse('${ApiConfig.baseUrl}$path');
+
+    final headers = await _buildHeaders(authenticated: true);
+
+    final response = await _send(() => http.delete(uri, headers: headers));
+
+    _decodeSuccessfulResponse(response);
+  }
+
   Future<List<Map<String, dynamic>>> authenticatedGetList(String path) async {
     final headers = await _buildHeaders(authenticated: true);
+
     final response = await _send(
       () => http.get(Uri.parse('${ApiConfig.baseUrl}$path'), headers: headers),
     );
+
     final decodedBody = _decodeSuccessfulResponse(response);
+
     if (decodedBody is! List<Object?>) {
       throw Exception('La respuesta del servidor no es una lista valida.');
     }
+
+    return decodedBody
+        .map((item) => Map<String, dynamic>.from(item! as Map))
+        .toList(growable: false);
+  }
+
+  Future<List<Map<String, dynamic>>> authenticatedPostList(
+    String path, {
+    Map<String, dynamic>? body,
+  }) async {
+    final headers = await _buildHeaders(authenticated: true);
+    final response = await _send(
+      () => http.post(
+        Uri.parse('${ApiConfig.baseUrl}$path'),
+        headers: headers,
+        body: body == null ? null : jsonEncode(body),
+      ),
+    );
+    final decodedBody = _decodeSuccessfulResponse(response);
+
+    if (decodedBody is! List<Object?>) {
+      throw Exception('La respuesta del servidor no es una lista valida.');
+    }
+
     return decodedBody
         .map((item) => Map<String, dynamic>.from(item! as Map))
         .toList(growable: false);
@@ -90,10 +202,9 @@ class ApiClient {
   ) async {
     final uri = Uri.parse('${ApiConfig.baseUrl}$path');
 
-    final response = await http.put(
-      uri,
-      headers: await _buildHeaders(authenticated: true),
-      body: jsonEncode(body),
+    final headers = await _buildHeaders(authenticated: true);
+    final response = await _send(
+      () => http.put(uri, headers: headers, body: jsonEncode(body)),
     );
 
     return _handleResponse(response);
@@ -108,7 +219,7 @@ class ApiClient {
       return headers;
     }
 
-    final token = await _sessionStorage.getSessionToken();
+    final token = await sessionStorage.getSessionToken();
 
     if (token == null || token.isEmpty) {
       throw Exception('No existe una sesión válida.');
@@ -137,6 +248,7 @@ class ApiClient {
 
   Future<Map<String, dynamic>> _handleResponse(http.Response response) async {
     final decodedBody = _decodeSuccessfulResponse(response);
+
     return Map<String, dynamic>.from(decodedBody as Map);
   }
 
@@ -144,9 +256,15 @@ class ApiClient {
     final Object? decodedBody = response.body.isNotEmpty
         ? jsonDecode(response.body) as Object?
         : null;
+
     if (response.statusCode >= 200 && response.statusCode < 300) {
       return decodedBody;
     }
-    throw Exception(_getErrorMessage(decodedBody));
+
+    throw ApiException(
+      _getErrorMessage(decodedBody),
+      statusCode: response.statusCode,
+      responseBody: decodedBody is Map<String, dynamic> ? decodedBody : null,
+    );
   }
 }

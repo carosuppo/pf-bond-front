@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../theme/app_colors.dart';
+import '../app_loading_indicator.dart';
 
 class AppPrimaryButton extends StatelessWidget {
   const AppPrimaryButton({
@@ -31,14 +32,7 @@ class AppPrimaryButton extends StatelessWidget {
           ),
         ),
         child: loading
-            ? const SizedBox(
-                width: 22,
-                height: 22,
-                child: CircularProgressIndicator(
-                  strokeWidth: 2,
-                  color: Colors.black,
-                ),
-              )
+            ? const AppLoadingIndicator(size: 22, color: Colors.black)
             : Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [

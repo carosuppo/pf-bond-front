@@ -1,46 +1,111 @@
 import 'dart:async';
+import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:latlong2/latlong.dart';
 
+import '../../../core/config/api_config.dart';
+import '../../../core/theme/app_colors.dart';
+import '../../../core/widgets/user_avatar.dart';
+import '../../point_of_interest/models/point_of_interest.dart';
+import '../../point_of_interest/models/point_of_interest_color.dart';
+import '../../point_of_interest/widgets/point_of_interest_marker_icon.dart';
 import '../constants/default_location.dart';
 import '../constants/location_tracking_config.dart';
+import '../models/location_model.dart';
 import '../models/member_location_model.dart';
 import '../providers/location_provider.dart';
 import '../utils/marker_colors.dart';
 
 class LocationMap extends ConsumerStatefulWidget {
   final int? groupId;
+  final bool showMembers;
+  final bool autoCenter;
   final VoidCallback? onMapTap;
   final void Function(int memberId)? onMemberTap;
+  final List<PointOfInterest> points;
+  final LatLng? previewPoint;
+  final double? previewRadius;
+  final PointOfInterestColor previewColor;
+  final ValueChanged<LatLng>? onTap;
+  final MapController? controller;
+  final String? ownProfilePhoto;
+  final String? ownProfileName;
+  final double indicatorBottomFraction;
+  final bool showOffscreenPoints;
+  final bool showPointOfInterestAreas;
+  final List<LatLng> routePoints;
+  final int routeFitRevision;
+  final EdgeInsets routeFitPadding;
+  final LocationModel? navigationLocation;
+  final int? destinationPointId;
+  final ValueChanged<PointOfInterest>? onPointTap;
 
   const LocationMap({
     super.key,
     required this.groupId,
+    this.showMembers = true,
+    this.autoCenter = true,
     this.onMapTap,
     this.onMemberTap,
+    this.points = const [],
+    this.previewPoint,
+    this.previewRadius,
+    this.previewColor = PointOfInterestColor.blue,
+    this.onTap,
+    this.controller,
+    this.ownProfilePhoto,
+    this.ownProfileName,
+    this.indicatorBottomFraction = 0,
+    this.showOffscreenPoints = false,
+    this.showPointOfInterestAreas = false,
+    this.routePoints = const [],
+    this.routeFitRevision = 0,
+    this.routeFitPadding = EdgeInsets.zero,
+    this.navigationLocation,
+    this.destinationPointId,
+    this.onPointTap,
   });
 
   @override
   ConsumerState<LocationMap> createState() => _LocationMapState();
 }
 
-class _LocationMapState extends ConsumerState<LocationMap> {
-  final MapController _mapController = MapController();
+class _LocationMapState extends ConsumerState<LocationMap>
+    with SingleTickerProviderStateMixin<LocationMap> {
+  static const _memberClusterDistanceMeters = 50.0;
+  static const _memberClusterPhotoGap = 5.0;
+  static const _memberMovementDuration = Duration(milliseconds: 700);
+  static const Distance _distanceCalculator = Distance(roundResult: false);
 
+  late final MapController _mapController =
+      widget.controller ?? MapController();
+
+  bool _mapReady = false;
   bool _hasCenteredOnUser = false;
+  LatLng? _ownLocationToCenter;
+  int? _scheduledRouteFitRevision;
 
   Timer? _freshnessTimer;
+  late final AnimationController _memberMovementController;
+  final Map<int, LatLng> _memberMovementStarts = {};
+  final Map<int, LatLng> _memberMovementTargets = {};
+  double _memberMovementProgress = 0;
+  bool _memberMovementStartScheduled = false;
 
   @override
   void initState() {
     super.initState();
 
+    _memberMovementController = AnimationController(
+      vsync: this,
+      duration: _memberMovementDuration,
+    )..addListener(_handleMemberMovementTick);
+
     _freshnessTimer = Timer.periodic(
       LocationTrackingConfig.freshnessRefreshInterval,
-
       (_) {
         if (mounted) {
           setState(() {});
@@ -52,8 +117,189 @@ class _LocationMapState extends ConsumerState<LocationMap> {
   @override
   void dispose() {
     _freshnessTimer?.cancel();
+    _memberMovementController.dispose();
 
     super.dispose();
+  }
+
+  void _handleMemberMovementTick() {
+    _memberMovementProgress = _memberMovementController.value;
+
+    if (mounted) {
+      setState(() {});
+    }
+  }
+
+  @override
+  void didUpdateWidget(covariant LocationMap oldWidget) {
+    super.didUpdateWidget(oldWidget);
+
+    if (widget.routePoints.length < 2) {
+      _scheduledRouteFitRevision = null;
+    } else if (widget.routeFitRevision != oldWidget.routeFitRevision) {
+      _scheduleRouteFit(widget.routeFitRevision);
+    }
+
+    final oldPreviewPoint = oldWidget.previewPoint;
+    final newPreviewPoint = widget.previewPoint;
+
+    if (widget.autoCenter &&
+        !_samePoint(oldPreviewPoint, newPreviewPoint) &&
+        newPreviewPoint != null) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted && _mapReady && widget.autoCenter) {
+          _mapController.move(newPreviewPoint, defaultZoom);
+        }
+      });
+    }
+  }
+
+  void _handleMapReady() {
+    _mapReady = true;
+
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) {
+        setState(() {});
+      }
+    });
+
+    if (widget.routeFitRevision > 0 && widget.routePoints.length >= 2) {
+      _scheduleRouteFit(widget.routeFitRevision);
+      return;
+    }
+
+    if (!widget.autoCenter) return;
+
+    final previewPoint = widget.previewPoint;
+    if (previewPoint != null) {
+      _mapController.move(previewPoint, defaultZoom);
+      _hasCenteredOnUser = true;
+      return;
+    }
+
+    final ownLocation = _ownLocationToCenter;
+    if (widget.autoCenter && !_hasCenteredOnUser && ownLocation != null) {
+      _mapController.move(ownLocation, defaultZoom);
+      _hasCenteredOnUser = true;
+    }
+  }
+
+  bool _samePoint(LatLng? first, LatLng? second) {
+    return first?.latitude == second?.latitude &&
+        first?.longitude == second?.longitude;
+  }
+
+  void _scheduleRouteFit(int revision) {
+    _scheduledRouteFitRevision = revision;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted ||
+          !_mapReady ||
+          _scheduledRouteFitRevision != revision ||
+          widget.routeFitRevision != revision ||
+          widget.routePoints.length < 2) {
+        return;
+      }
+
+      _scheduledRouteFitRevision = null;
+      final navigationLocation = widget.navigationLocation;
+      final destination = _destinationPoint;
+      final coordinates = <LatLng>[
+        if (navigationLocation != null)
+          LatLng(navigationLocation.latitude, navigationLocation.longitude),
+        ...widget.routePoints,
+        ?destination,
+      ];
+      _mapController.fitCamera(
+        CameraFit.bounds(
+          bounds: LatLngBounds.fromPoints(coordinates),
+          padding: widget.routeFitPadding,
+        ),
+      );
+      _hasCenteredOnUser = true;
+    });
+  }
+
+  LatLng? get _destinationPoint {
+    final destinationId = widget.destinationPointId;
+    if (destinationId == null) return null;
+    for (final point in widget.points) {
+      if (point.id == destinationId) {
+        return LatLng(point.latitude, point.longitude);
+      }
+    }
+    return null;
+  }
+
+  void _updateMemberMovement(Map<int, LatLng> targetLocations) {
+    var movementStarted = false;
+
+    for (final entry in targetLocations.entries) {
+      final previousTarget = _memberMovementTargets[entry.key];
+
+      if (previousTarget == null) {
+        _memberMovementStarts[entry.key] = entry.value;
+      } else if (!_samePoint(previousTarget, entry.value)) {
+        _memberMovementStarts[entry.key] = _animatedPoint(
+          entry.key,
+          previousTarget,
+        );
+        movementStarted = true;
+      }
+
+      _memberMovementTargets[entry.key] = entry.value;
+    }
+
+    final removedIds = _memberMovementTargets.keys
+        .where((memberId) => !targetLocations.containsKey(memberId))
+        .toList();
+    for (final memberId in removedIds) {
+      _memberMovementStarts.remove(memberId);
+      _memberMovementTargets.remove(memberId);
+    }
+
+    if (!movementStarted || _memberMovementStartScheduled) {
+      return;
+    }
+
+    _memberMovementController.stop();
+    _memberMovementProgress = 0;
+    _memberMovementStartScheduled = true;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) {
+        return;
+      }
+
+      _memberMovementStartScheduled = false;
+      _memberMovementController.forward(from: 0);
+    });
+  }
+
+  LatLng _animatedPoint(int memberId, LatLng fallback) {
+    final start = _memberMovementStarts[memberId];
+    final target = _memberMovementTargets[memberId];
+
+    if (start == null || target == null) {
+      return fallback;
+    }
+
+    return LatLng(
+      start.latitude +
+          (target.latitude - start.latitude) * _memberMovementProgress,
+      start.longitude +
+          (target.longitude - start.longitude) * _memberMovementProgress,
+    );
+  }
+
+  MemberLocationModel _animatedMember(MemberLocationModel member) {
+    final point = _animatedPoint(
+      member.memberId,
+      LatLng(member.latitude, member.longitude),
+    );
+
+    return member.copyWith(
+      latitude: point.latitude,
+      longitude: point.longitude,
+    );
   }
 
   @override
@@ -62,110 +308,311 @@ class _LocationMapState extends ConsumerState<LocationMap> {
 
     final now = DateTime.now();
 
-    final ownSharing = widget.groupId == null
-        ? false
-        : state.sharingForGroup(widget.groupId!)?.effectiveLocationSharing ??
-              false;
+    final ownMembership =
+        widget.showMembers &&
+        widget.groupId != null &&
+        state.sharingForGroup(widget.groupId!) != null;
 
-    final ownLocation = ownSharing ? state.currentLocation : null;
+    final ownLocation =
+        widget.navigationLocation ??
+        (ownMembership ? state.currentLocation : null);
 
     final allMembers = state.visibleMembers.values.toList();
 
-    final members =
-        allMembers.where((member) => _shouldShowMember(member, now)).toList()
-          ..sort((a, b) => a.memberId.compareTo(b.memberId));
+    final members = widget.showMembers ? allMembers : <MemberLocationModel>[];
+
+    if (widget.showMembers) {
+      members.sort((a, b) => a.memberId.compareTo(b.memberId));
+    }
+
+    final targetLocations = <int, LatLng>{
+      if (ownLocation != null)
+        -1: LatLng(ownLocation.latitude, ownLocation.longitude),
+      for (final member in members)
+        member.memberId: LatLng(member.latitude, member.longitude),
+    };
+    _updateMemberMovement(targetLocations);
+
+    final animatedOwnLocation = ownLocation == null
+        ? null
+        : _animatedPoint(
+            -1,
+            LatLng(ownLocation.latitude, ownLocation.longitude),
+          );
+    final animatedMembers = [
+      for (final member in members) _animatedMember(member),
+    ];
+
+    final membersForClustering = [
+      if (ownLocation != null && animatedOwnLocation != null)
+        MemberLocationModel(
+          memberId: -1,
+          userId: -1,
+          name: widget.ownProfileName ?? 'Vos',
+          profilePhoto: widget.ownProfilePhoto,
+          latitude: animatedOwnLocation.latitude,
+          longitude: animatedOwnLocation.longitude,
+          accuracy: ownLocation.accuracy,
+          capturedAt: ownLocation.timestamp,
+          lastSeenAt: ownLocation.timestamp,
+        ),
+      ...animatedMembers,
+    ];
+    final membersInsidePoints = <int, List<MemberLocationModel>>{
+      for (final point in widget.points)
+        point.id: [
+          for (final member in membersForClustering)
+            if (_isMemberInsidePoint(member, point)) member,
+        ],
+    };
+    final membersInsidePointIds = {
+      for (final members in membersInsidePoints.values)
+        for (final member in members) member.memberId,
+    };
+    final membersOutsidePoints = [
+      for (final member in membersForClustering)
+        if (!membersInsidePointIds.contains(member.memberId)) member,
+    ];
+    final memberClusters = _buildMemberClusters(membersOutsidePoints);
 
     // Usamos todos los IDs conocidos para
     // evitar cambiar colores solamente
     // porque uno quedó temporalmente oculto.
-    final markerIds = <int>[
-      if (ownLocation != null) -1,
-
-      ...allMembers.map((member) => member.memberId),
-    ];
+    final markerIds = widget.showMembers
+        ? <int>[
+            if (ownLocation != null) -1,
+            ...allMembers.map((member) => member.memberId),
+          ]
+        : <int>[];
 
     final colors = buildDistinctMarkerColors(markerIds);
 
-    if (!_hasCenteredOnUser && ownLocation != null) {
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (!mounted || _hasCenteredOnUser) {
-          return;
-        }
+    if (widget.autoCenter &&
+        !_hasCenteredOnUser &&
+        ownLocation != null &&
+        widget.routePoints.length < 2) {
+      _ownLocationToCenter = LatLng(
+        ownLocation.latitude,
+        ownLocation.longitude,
+      );
 
-        _mapController.move(
-          LatLng(ownLocation.latitude, ownLocation.longitude),
-          defaultZoom,
-        );
+      if (_mapReady) {
+        final point = _ownLocationToCenter!;
 
-        _hasCenteredOnUser = true;
-      });
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (!mounted || _hasCenteredOnUser || !widget.autoCenter) {
+            return;
+          }
+
+          _mapController.move(point, defaultZoom);
+          _hasCenteredOnUser = true;
+        });
+      }
     }
+
+    final initialCenter =
+        widget.previewPoint ??
+        (ownLocation == null
+            ? defaultLocation
+            : LatLng(ownLocation.latitude, ownLocation.longitude));
+    final String cartoApiKey = ApiConfig.cartoApiKey;
+    final String tileUrl =
+        'https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}.png${cartoApiKey.isEmpty ? '' : '?key=$cartoApiKey'}';
 
     return FlutterMap(
       mapController: _mapController,
-
       options: MapOptions(
-        initialCenter: ownLocation == null
-            ? defaultLocation
-            : LatLng(ownLocation.latitude, ownLocation.longitude),
-
+        initialCenter: initialCenter,
+        interactionOptions: const InteractionOptions(
+          flags: InteractiveFlag.all & ~InteractiveFlag.flingAnimation,
+        ),
         initialZoom: defaultZoom,
+        onMapReady: _handleMapReady,
+        onTap: (_, point) {
+          if (widget.onTap != null) {
+            widget.onTap!(point);
+            return;
+          }
 
-        onTap: (_, _) => widget.onMapTap?.call(),
+          widget.onMapTap?.call();
+        },
       ),
-
       children: [
         TileLayer(
-          urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
-
+          urlTemplate: tileUrl,
+          subdomains: const ['a', 'b', 'c', 'd'],
           userAgentPackageName: 'com.example.bond_front',
         ),
-
-        MarkerLayer(
-          markers: [
-            if (ownLocation != null)
-              _marker(
-                point: LatLng(ownLocation.latitude, ownLocation.longitude),
-
-                name: 'Vos',
-
-                color: colors[-1] ?? Colors.blue,
+        if (widget.routePoints.length >= 2)
+          PolylineLayer(
+            polylines: [
+              Polyline(
+                points: widget.routePoints,
+                strokeWidth: 6,
+                color: AppColors.primary,
               ),
-
-            for (final member in members)
-              _marker(
-                point: LatLng(member.latitude, member.longitude),
-
-                name: member.name,
-
-                color: colors[member.memberId] ?? Colors.blue,
-
-                isStale: _isStale(member, now),
-
-                lastSeenAt: member.lastSeenAt,
-
-                now: now,
-
-                onTap: widget.onMemberTap == null
-                    ? null
-                    : () => widget.onMemberTap!(member.memberId),
+            ],
+          ),
+        RichAttributionWidget(
+          attributions: [
+            TextSourceAttribution('OpenStreetMap contributors'),
+            TextSourceAttribution('CARTO'),
+          ],
+        ),
+        CircleLayer(
+          circles: [
+            if (widget.showPointOfInterestAreas)
+              for (final point in widget.points)
+                CircleMarker(
+                  point: LatLng(point.latitude, point.longitude),
+                  radius: point.radius,
+                  useRadiusInMeter: true,
+                  color: point.color.visualColor.withAlpha(45),
+                  borderColor: point.color.visualColor,
+                  borderStrokeWidth: 2,
+                ),
+            if (widget.previewPoint != null && widget.previewRadius != null)
+              CircleMarker(
+                point: widget.previewPoint!,
+                radius: widget.previewRadius!,
+                useRadiusInMeter: true,
+                color: widget.previewColor.visualColor.withAlpha(55),
+                borderColor: widget.previewColor.visualColor,
+                borderStrokeWidth: 2,
               ),
           ],
+        ),
+        MarkerLayer(
+          markers: [
+            for (final cluster in memberClusters)
+              _memberClusterMarker(cluster, now),
+            for (final point in widget.points)
+              if (membersInsidePoints[point.id]!.isNotEmpty)
+                _pointMembersMarker(
+                  point: LatLng(point.latitude, point.longitude),
+                  name: point.name,
+                  color: point.color.visualColor,
+                  members: membersInsidePoints[point.id]!,
+                  onMemberTap: widget.onMemberTap,
+                  onTap: widget.onPointTap == null
+                      ? null
+                      : () => widget.onPointTap!(point),
+                )
+              else
+                _pointOfInterestMarker(
+                  point: LatLng(point.latitude, point.longitude),
+                  name: point.name,
+                  color: point.color.visualColor,
+                  onTap: widget.onPointTap == null
+                      ? null
+                      : () => widget.onPointTap!(point),
+                ),
+            if (widget.previewPoint != null && widget.previewRadius != null)
+              _pointOfInterestMarker(
+                point: widget.previewPoint!,
+                name: 'Vista previa',
+                color: widget.previewColor.visualColor,
+              ),
+            if (widget.previewPoint != null && widget.previewRadius == null)
+              _eventLocationMarker(widget.previewPoint!),
+          ],
+        ),
+        Positioned.fill(
+          child: _OffscreenLocationIndicatorLayer(
+            locations: [
+              if (animatedOwnLocation != null)
+                _OffscreenLocation(
+                  point: LatLng(ownLocation!.latitude, ownLocation.longitude),
+                  color: colors[-1] ?? Colors.blue,
+                  avatarName: widget.ownProfileName ?? 'Vos',
+                  photoUrl: widget.ownProfilePhoto,
+                ),
+              for (final member in members)
+                _OffscreenLocation(
+                  point: LatLng(member.latitude, member.longitude),
+                  color: colors[member.memberId] ?? Colors.blue,
+                  avatarName: member.name,
+                  photoUrl: member.profilePhoto,
+                  stale: _isStale(member, now),
+                ),
+              if (widget.showOffscreenPoints)
+                for (final point in widget.points)
+                  if (membersInsidePoints[point.id]!.isEmpty)
+                    _OffscreenLocation(
+                      point: LatLng(point.latitude, point.longitude),
+                      color: point.color.visualColor,
+                      icon: const PointOfInterestMarkerIcon(
+                        color: Colors.white,
+                        size: 20,
+                      ),
+                    ),
+            ],
+            bottomFraction: widget.indicatorBottomFraction,
+            onLocationTap: (point) =>
+                _mapController.move(point, _mapController.camera.zoom),
+          ),
         ),
       ],
     );
   }
 
-  bool _shouldShowMember(MemberLocationModel member, DateTime now) {
-    final lastSeenAt = member.lastSeenAt;
-
-    // Una Location anterior a esta feature
-    // no tiene heartbeat válido.
-    if (lastSeenAt == null) {
-      return false;
+  List<_MemberCluster> _buildMemberClusters(List<MemberLocationModel> members) {
+    if (members.length < 2) {
+      return members
+          .map((member) => _MemberCluster(members: [member]))
+          .toList(growable: false);
     }
 
-    return _age(lastSeenAt, now) < LocationTrackingConfig.hideAfter;
+    final pending = [...members];
+    final clusters = <_MemberCluster>[];
+
+    while (pending.isNotEmpty) {
+      final clusterMembers = <MemberLocationModel>[pending.removeAt(0)];
+      var expanded = true;
+
+      while (expanded) {
+        expanded = false;
+
+        for (var index = pending.length - 1; index >= 0; index--) {
+          final candidate = pending[index];
+          final isClose = clusterMembers.any(
+            (member) =>
+                _geographicDistance(member, candidate) <
+                _memberClusterDistanceMeters,
+          );
+
+          if (isClose) {
+            clusterMembers.add(candidate);
+            pending.removeAt(index);
+            expanded = true;
+          }
+        }
+      }
+
+      clusters.add(_MemberCluster(members: clusterMembers));
+    }
+
+    return clusters;
+  }
+
+  double _geographicDistance(
+    MemberLocationModel first,
+    MemberLocationModel second,
+  ) {
+    return _distanceCalculator.as(
+      LengthUnit.Meter,
+      LatLng(first.latitude, first.longitude),
+      LatLng(second.latitude, second.longitude),
+    );
+  }
+
+  bool _isMemberInsidePoint(MemberLocationModel member, PointOfInterest point) {
+    return _distanceCalculator.as(
+          LengthUnit.Meter,
+          LatLng(member.latitude, member.longitude),
+          LatLng(point.latitude, point.longitude),
+        ) <=
+        point.radius;
   }
 
   bool _isStale(MemberLocationModel member, DateTime now) {
@@ -188,22 +635,172 @@ class _LocationMapState extends ConsumerState<LocationMap> {
     return difference;
   }
 
-  Marker _marker({
+  Marker _pointOfInterestMarker({
     required LatLng point,
     required String name,
     required Color color,
+    VoidCallback? onTap,
+  }) {
+    final content = Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        PointOfInterestMarkerIcon(color: color, size: 42),
+        Text(
+          name,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+          textAlign: TextAlign.center,
+          style: const TextStyle(
+            color: Colors.black87,
+            fontSize: 13,
+            fontWeight: FontWeight.w600,
+          ),
+        ),
+      ],
+    );
+    return Marker(
+      point: point,
+      rotate: true,
+      width: 150,
+      height: 66,
+      child: onTap == null
+          ? content
+          : GestureDetector(
+              behavior: HitTestBehavior.opaque,
+              onTap: onTap,
+              child: content,
+            ),
+    );
+  }
+
+  Marker _pointMembersMarker({
+    required LatLng point,
+    required String name,
+    required Color color,
+    required List<MemberLocationModel> members,
+    void Function(int memberId)? onMemberTap,
+    VoidCallback? onTap,
+  }) {
+    final count = members.length;
+    final avatarRadius =
+        (count > 4
+            ? 11.0
+            : count > 2
+            ? 14.0
+            : 17.0) *
+        1.3;
+    final columns = math.min(2, count);
+    final rows = (count + columns - 1) ~/ columns;
+    final avatarDiameter = avatarRadius * 2;
+    final contentWidth =
+        columns * avatarDiameter + (columns - 1) * _memberClusterPhotoGap;
+    final contentHeight =
+        rows * avatarDiameter + (rows - 1) * _memberClusterPhotoGap;
+    final width = contentWidth + 16;
+    const iconSize = 42.0;
+    const iconOutside = iconSize * 0.7;
+    final boxHeight = contentHeight + 28;
+    final height = iconOutside + boxHeight;
+    final markerWidth = math.max(width, 150.0);
+    final content = Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        SizedBox(
+          width: width,
+          height: height,
+          child: Stack(
+            children: [
+              Positioned(
+                top: iconOutside,
+                left: 0,
+                right: 0,
+                child: Container(
+                  width: width,
+                  height: boxHeight,
+                  decoration: BoxDecoration(
+                    color: color.withValues(alpha: 0.3),
+                    borderRadius: BorderRadius.circular(15),
+                  ),
+                  padding: const EdgeInsets.fromLTRB(6, 18, 6, 6),
+                  child: Wrap(
+                    alignment: WrapAlignment.center,
+                    runAlignment: WrapAlignment.center,
+                    crossAxisAlignment: WrapCrossAlignment.center,
+                    spacing: _memberClusterPhotoGap,
+                    runSpacing: _memberClusterPhotoGap,
+                    children: [
+                      for (final member in members)
+                        _memberAvatar(
+                          name: member.name,
+                          photoUrl: member.profilePhoto,
+                          radius: avatarRadius,
+                          isStale: _isStale(member, DateTime.now()),
+                          onTap: onMemberTap == null || member.memberId == -1
+                              ? null
+                              : () => onMemberTap(member.memberId),
+                        ),
+                    ],
+                  ),
+                ),
+              ),
+              Positioned(
+                top: 0,
+                left: 0,
+                right: 0,
+                child: Center(
+                  child: PointOfInterestMarkerIcon(
+                    color: color,
+                    size: iconSize,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+        SizedBox(
+          width: markerWidth,
+          child: Text(
+            'en $name',
+            textAlign: TextAlign.center,
+            style: const TextStyle(
+              color: Colors.black87,
+              fontSize: 13,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+        ),
+      ],
+    );
+
+    return Marker(
+      point: point,
+      rotate: true,
+      width: markerWidth,
+      height: height + 40,
+      child: onTap == null
+          ? content
+          : GestureDetector(
+              behavior: HitTestBehavior.opaque,
+              onTap: onTap,
+              child: content,
+            ),
+    );
+  }
+
+  Marker _memberMarker({
+    required LatLng point,
+    required String name,
+    String? avatarName,
+    String? photoUrl,
     bool isStale = false,
     DateTime? lastSeenAt,
     DateTime? now,
     VoidCallback? onTap,
   }) {
-    final markerColor = isStale ? color.withAlpha(110) : color;
     final markerContent = Column(
       mainAxisSize: MainAxisSize.min,
 
       children: [
-        Icon(Icons.location_pin, size: 42, color: markerColor),
-
         Text(
           name,
 
@@ -222,6 +819,14 @@ class _LocationMapState extends ConsumerState<LocationMap> {
           ),
         ),
 
+        _memberAvatar(
+          name: avatarName ?? name,
+          photoUrl: photoUrl,
+          radius: 19,
+          isStale: isStale,
+          borderColor: AppColors.primary,
+          borderWidth: 2,
+        ),
         if (isStale && lastSeenAt != null && now != null)
           Text(
             _formatLastSeen(lastSeenAt, now),
@@ -245,11 +850,9 @@ class _LocationMapState extends ConsumerState<LocationMap> {
 
     return Marker(
       point: point,
-
+      rotate: true,
       width: 150,
-
-      height: isStale ? 84 : 66,
-
+      height: isStale ? 94 : 76,
       child: onTap == null
           ? markerContent
           : GestureDetector(
@@ -257,6 +860,121 @@ class _LocationMapState extends ConsumerState<LocationMap> {
               onTap: onTap,
               child: markerContent,
             ),
+    );
+  }
+
+  Widget _memberAvatar({
+    required String name,
+    required String? photoUrl,
+    required double radius,
+    required bool isStale,
+    Color? borderColor,
+    double borderWidth = 0,
+    VoidCallback? onTap,
+  }) {
+    final avatar = UserAvatar(
+      name: name,
+      photoUrl: photoUrl,
+      radius: radius,
+      borderColor: borderColor,
+      borderWidth: borderWidth,
+    );
+
+    final content = isStale ? Opacity(opacity: 0.5, child: avatar) : avatar;
+
+    return onTap == null
+        ? content
+        : GestureDetector(
+            behavior: HitTestBehavior.opaque,
+            onTap: onTap,
+            child: content,
+          );
+  }
+
+  Marker _memberClusterMarker(_MemberCluster cluster, DateTime now) {
+    if (cluster.members.length == 1) {
+      final member = cluster.members.first;
+
+      return _memberMarker(
+        point: LatLng(member.latitude, member.longitude),
+        name: member.memberId == -1 ? 'Vos' : member.name,
+        avatarName: member.name,
+        photoUrl: member.profilePhoto,
+        isStale: _isStale(member, now),
+        lastSeenAt: member.lastSeenAt,
+        now: now,
+        onTap: widget.onMemberTap == null
+            ? null
+            : member.memberId == -1
+            ? null
+            : () => widget.onMemberTap!(member.memberId),
+      );
+    }
+
+    final count = cluster.members.length;
+    final avatarRadius = count > 4
+        ? 11.0
+        : count > 2
+        ? 14.0
+        : 17.0;
+    final columns = math.min(2, count);
+    final rows = (count + columns - 1) ~/ columns;
+    final avatarDiameter = avatarRadius * 2;
+    final contentWidth =
+        columns * avatarDiameter + (columns - 1) * _memberClusterPhotoGap;
+    final contentHeight =
+        rows * avatarDiameter + (rows - 1) * _memberClusterPhotoGap;
+    final width = contentWidth + 16;
+    final height = contentHeight + 16;
+
+    return Marker(
+      point: cluster.center,
+      rotate: true,
+      width: width,
+      height: height,
+      child: Container(
+        width: width,
+        height: height,
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(15),
+          border: Border.all(color: AppColors.primary, width: 2),
+        ),
+        padding: const EdgeInsets.all(6),
+        child: Wrap(
+          alignment: WrapAlignment.center,
+          runAlignment: WrapAlignment.center,
+          crossAxisAlignment: WrapCrossAlignment.center,
+          spacing: _memberClusterPhotoGap,
+          runSpacing: _memberClusterPhotoGap,
+          children: [
+            for (final member in cluster.members)
+              _memberAvatar(
+                name: member.name,
+                photoUrl: member.profilePhoto,
+                radius: avatarRadius,
+                isStale: _isStale(member, now),
+                onTap: widget.onMemberTap == null || member.memberId == -1
+                    ? null
+                    : () => widget.onMemberTap!(member.memberId),
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Marker _eventLocationMarker(LatLng point) {
+    return Marker(
+      point: point,
+      rotate: true,
+      width: 150,
+      height: 66,
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          const Icon(Icons.location_pin, size: 42, color: AppColors.error),
+        ],
+      ),
     );
   }
 
@@ -277,4 +995,475 @@ class _LocationMapState extends ConsumerState<LocationMap> {
 
     return 'Actualizado hace ${age.inDays} d';
   }
+}
+
+class _MemberCluster {
+  final List<MemberLocationModel> members;
+
+  const _MemberCluster({required this.members});
+
+  LatLng get center {
+    final latitude = members.fold<double>(
+      0,
+      (sum, member) => sum + member.latitude,
+    );
+    final longitude = members.fold<double>(
+      0,
+      (sum, member) => sum + member.longitude,
+    );
+
+    return LatLng(latitude / members.length, longitude / members.length);
+  }
+}
+
+class _OffscreenLocationIndicatorLayer extends StatelessWidget {
+  static const _indicatorSize = Size(54, 78);
+  static const _collisionSize = Size(50, 50);
+  static const _indicatorGap = 2.0;
+
+  static const _edgePadding = EdgeInsets.fromLTRB(12, 72, 12, 12);
+
+  const _OffscreenLocationIndicatorLayer({
+    required this.locations,
+    required this.bottomFraction,
+    required this.onLocationTap,
+  });
+
+  final List<_OffscreenLocation> locations;
+  final double bottomFraction;
+  final ValueChanged<LatLng> onLocationTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final camera = MapCamera.of(context);
+
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final size = constraints.biggest;
+
+        if (!size.width.isFinite || !size.height.isFinite || size.isEmpty) {
+          return const SizedBox.shrink();
+        }
+
+        final viewport = Offset.zero & size;
+
+        final safeBounds = Rect.fromLTRB(
+          _edgePadding.left + _indicatorSize.width / 2,
+          _edgePadding.top + _indicatorSize.height / 2,
+          size.width - _edgePadding.right - _indicatorSize.width / 2,
+          size.height * (1 - bottomFraction) -
+              _edgePadding.bottom -
+              _indicatorSize.height / 2,
+        );
+
+        if (safeBounds.width <= 0 || safeBounds.height <= 0) {
+          return const SizedBox.shrink();
+        }
+
+        final candidates = <_OffscreenIndicatorCandidate>[];
+        for (final location in locations) {
+          final indicator = _indicatorPosition(
+            camera: camera,
+            viewport: viewport,
+            safeBounds: safeBounds,
+            point: location.point,
+          );
+          if (indicator != null) {
+            candidates.add(
+              _OffscreenIndicatorCandidate(
+                location: location,
+                indicator: indicator,
+              ),
+            );
+          }
+        }
+
+        final arrangedIndicators = _arrangeIndicators(candidates, safeBounds);
+
+        return Stack(
+          children: [
+            for (final indicator in arrangedIndicators)
+              Positioned(
+                left: indicator.position.dx - _indicatorSize.width / 2,
+                top: indicator.position.dy - _indicatorSize.height / 2,
+                width: _indicatorSize.width,
+                height: _indicatorSize.height,
+                child: GestureDetector(
+                  onTap: () => onLocationTap(indicator.location.point),
+                  child: _OffscreenLocationIndicator(
+                    color: indicator.location.displayColor,
+                    angle: indicator.angle,
+                    icon: indicator.location.icon,
+                    arrowColor: indicator.location.displayColor,
+                    avatarName: indicator.location.avatarName,
+                    photoUrl: indicator.location.photoUrl,
+                  ),
+                ),
+              ),
+          ],
+        );
+      },
+    );
+  }
+
+  List<_PositionedOffscreenIndicator> _arrangeIndicators(
+    List<_OffscreenIndicatorCandidate> candidates,
+    Rect bounds,
+  ) {
+    final orderedCandidates = [...candidates]
+      ..sort((first, second) {
+        final edgeOrder = first.indicator.edge.index.compareTo(
+          second.indicator.edge.index,
+        );
+        if (edgeOrder != 0) return edgeOrder;
+
+        final firstPosition = first.indicator.edge.isHorizontal
+            ? first.indicator.position.dx
+            : first.indicator.position.dy;
+        final secondPosition = second.indicator.edge.isHorizontal
+            ? second.indicator.position.dx
+            : second.indicator.position.dy;
+        return firstPosition.compareTo(secondPosition);
+      });
+    final placed = <_PositionedOffscreenIndicator>[];
+    final occupied = <Rect>[];
+
+    for (final candidate in orderedCandidates) {
+      Offset? position;
+      final originalPosition = candidate.indicator.position;
+      final originalBounds = _collisionBounds(originalPosition);
+      if (occupied.every((other) => !other.overlaps(originalBounds))) {
+        position = originalPosition;
+        occupied.add(originalBounds);
+      }
+
+      if (position == null) {
+        final positions = _positionsAlongEdge(
+          candidate.indicator.edge,
+          originalPosition,
+          bounds,
+        );
+        for (final option in positions) {
+          final optionBounds = _collisionBounds(option);
+          if (occupied.every((other) => !other.overlaps(optionBounds))) {
+            position = option;
+            occupied.add(optionBounds);
+            break;
+          }
+        }
+      }
+
+      if (position == null) {
+        for (final edge in _IndicatorEdge.values) {
+          if (edge == candidate.indicator.edge) continue;
+          final edgePosition = _positionOnEdge(edge, originalPosition, bounds);
+          final positions = _positionsAlongEdge(edge, edgePosition, bounds);
+          for (final option in positions) {
+            final optionBounds = _collisionBounds(option);
+            if (occupied.every((other) => !other.overlaps(optionBounds))) {
+              position = option;
+              occupied.add(optionBounds);
+              break;
+            }
+          }
+          if (position != null) break;
+        }
+      }
+
+      if (position != null) {
+        placed.add(
+          _PositionedOffscreenIndicator(
+            location: candidate.location,
+            position: position,
+            angle: candidate.indicator.angle,
+          ),
+        );
+      }
+    }
+
+    return placed;
+  }
+
+  Rect _collisionBounds(Offset position) {
+    return Rect.fromCenter(
+      center: position,
+      width: _collisionSize.width,
+      height: _collisionSize.height,
+    ).inflate(_indicatorGap / 2);
+  }
+
+  Offset _positionOnEdge(_IndicatorEdge edge, Offset origin, Rect bounds) =>
+      switch (edge) {
+        _IndicatorEdge.top => Offset(
+          origin.dx.clamp(bounds.left, bounds.right).toDouble(),
+          bounds.top,
+        ),
+        _IndicatorEdge.right => Offset(
+          bounds.right,
+          origin.dy.clamp(bounds.top, bounds.bottom).toDouble(),
+        ),
+        _IndicatorEdge.bottom => Offset(
+          origin.dx.clamp(bounds.left, bounds.right).toDouble(),
+          bounds.bottom,
+        ),
+        _IndicatorEdge.left => Offset(
+          bounds.left,
+          origin.dy.clamp(bounds.top, bounds.bottom).toDouble(),
+        ),
+      };
+
+  List<Offset> _positionsAlongEdge(
+    _IndicatorEdge edge,
+    Offset origin,
+    Rect bounds,
+  ) {
+    final horizontal = edge.isHorizontal;
+    final axisStart = horizontal ? bounds.left : bounds.top;
+    final axisEnd = horizontal ? bounds.right : bounds.bottom;
+    final crossStart = horizontal ? bounds.top : bounds.left;
+    final crossEnd = horizontal ? bounds.bottom : bounds.right;
+    final axisExtent = horizontal
+        ? _collisionSize.width
+        : _collisionSize.height;
+    final crossExtent = horizontal
+        ? _collisionSize.height
+        : _collisionSize.width;
+    final axisStep = axisExtent + _indicatorGap;
+    final crossStep = crossExtent + _indicatorGap;
+    final originalAxis = horizontal ? origin.dx : origin.dy;
+    final maximumAxisOffset = axisEnd - axisStart;
+    final maximumCrossOffset = crossEnd - crossStart;
+    final maximumBands = (maximumCrossOffset / crossStep).floor();
+    final maximumAxisSteps = (maximumAxisOffset / axisStep).ceil();
+    final axisCenters = _edgeSlotCenters(axisStart, axisEnd, axisStep);
+    final positions = <Offset>[];
+
+    for (var band = 0; band <= maximumBands; band++) {
+      final crossPosition = switch (edge) {
+        _IndicatorEdge.top => bounds.top + band * crossStep,
+        _IndicatorEdge.right => bounds.right - band * crossStep,
+        _IndicatorEdge.bottom => bounds.bottom - band * crossStep,
+        _IndicatorEdge.left => bounds.left + band * crossStep,
+      };
+
+      if (crossPosition < crossStart || crossPosition > crossEnd) continue;
+
+      for (var step = 1; step <= maximumAxisSteps; step++) {
+        for (final offset in [-step * axisStep, step * axisStep]) {
+          final axisPosition = originalAxis + offset;
+          if (axisPosition < axisStart || axisPosition > axisEnd) continue;
+
+          positions.add(
+            horizontal
+                ? Offset(axisPosition, crossPosition)
+                : Offset(crossPosition, axisPosition),
+          );
+        }
+      }
+
+      positions.addAll([
+        for (final axisPosition in axisCenters)
+          if (axisPosition != originalAxis)
+            horizontal
+                ? Offset(axisPosition, crossPosition)
+                : Offset(crossPosition, axisPosition),
+      ]);
+    }
+
+    return positions;
+  }
+
+  List<double> _edgeSlotCenters(double start, double end, double spacing) {
+    final length = end - start;
+    final count = (length / spacing).floor() + 1;
+    final occupiedLength = (count - 1) * spacing;
+    final firstCenter = start + (length - occupiedLength) / 2;
+
+    return List<double>.generate(
+      count,
+      (index) => firstCenter + index * spacing,
+      growable: false,
+    );
+  }
+
+  _IndicatorPlacement? _indicatorPosition({
+    required MapCamera camera,
+    required Rect viewport,
+    required Rect safeBounds,
+    required LatLng point,
+  }) {
+    final projected = camera.latLngToScreenOffset(point);
+
+    if (!projected.dx.isFinite ||
+        !projected.dy.isFinite ||
+        viewport.contains(projected)) {
+      return null;
+    }
+
+    final direction = projected - viewport.center;
+
+    if (direction.distanceSquared == 0) {
+      return null;
+    }
+
+    final origin = safeBounds.center;
+
+    final horizontalScale = direction.dx == 0
+        ? double.infinity
+        : (direction.dx > 0
+                  ? safeBounds.right - origin.dx
+                  : safeBounds.left - origin.dx) /
+              direction.dx;
+
+    final verticalScale = direction.dy == 0
+        ? double.infinity
+        : (direction.dy > 0
+                  ? safeBounds.bottom - origin.dy
+                  : safeBounds.top - origin.dy) /
+              direction.dy;
+
+    final scale = math.min(horizontalScale, verticalScale);
+
+    if (!scale.isFinite || scale < 0) {
+      return null;
+    }
+
+    final edge = horizontalScale <= verticalScale
+        ? direction.dx > 0
+              ? _IndicatorEdge.right
+              : _IndicatorEdge.left
+        : direction.dy > 0
+        ? _IndicatorEdge.bottom
+        : _IndicatorEdge.top;
+
+    return _IndicatorPlacement(
+      position: origin + direction * scale,
+      angle: math.atan2(direction.dy, direction.dx) + math.pi / 2,
+      edge: edge,
+    );
+  }
+}
+
+class _OffscreenLocationIndicator extends StatelessWidget {
+  const _OffscreenLocationIndicator({
+    required this.color,
+    required this.angle,
+    required this.icon,
+    required this.arrowColor,
+    this.avatarName,
+    this.photoUrl,
+  });
+
+  final Color color;
+  final double angle;
+  final Widget icon;
+  final Color arrowColor;
+  final String? avatarName;
+  final String? photoUrl;
+
+  @override
+  Widget build(BuildContext context) {
+    final memberContent = avatarName == null
+        ? icon
+        : UserAvatar(name: avatarName!, photoUrl: photoUrl, radius: 14);
+    final directionAngle = angle - math.pi / 2;
+
+    return Stack(
+      clipBehavior: Clip.none,
+      alignment: Alignment.center,
+      children: [
+        Container(
+          width: 36,
+          height: 36,
+          decoration: BoxDecoration(
+            color: color,
+            shape: BoxShape.circle,
+            boxShadow: const [
+              BoxShadow(
+                color: Colors.black26,
+                blurRadius: 5,
+                offset: Offset(0, 2),
+              ),
+            ],
+          ),
+          child: Center(child: memberContent),
+        ),
+        Transform.translate(
+          offset: Offset(
+            math.cos(directionAngle) * 29,
+            math.sin(directionAngle) * 29,
+          ),
+          child: Transform.rotate(
+            angle: angle,
+            child: Icon(Icons.navigation, size: 17, color: arrowColor),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _OffscreenLocation {
+  const _OffscreenLocation({
+    required this.point,
+    required this.color,
+    this.icon = const Icon(Icons.navigation, size: 20, color: Colors.white),
+    this.avatarName,
+    this.photoUrl,
+    this.stale = false,
+  });
+
+  final LatLng point;
+  final Color color;
+  final Widget icon;
+  final String? avatarName;
+  final String? photoUrl;
+  final bool stale;
+
+  Color get displayColor {
+    return stale ? color.withAlpha(110) : color;
+  }
+}
+
+enum _IndicatorEdge {
+  top,
+  right,
+  bottom,
+  left;
+
+  bool get isHorizontal => this == top || this == bottom;
+}
+
+class _OffscreenIndicatorCandidate {
+  const _OffscreenIndicatorCandidate({
+    required this.location,
+    required this.indicator,
+  });
+
+  final _OffscreenLocation location;
+  final _IndicatorPlacement indicator;
+}
+
+class _PositionedOffscreenIndicator {
+  const _PositionedOffscreenIndicator({
+    required this.location,
+    required this.position,
+    required this.angle,
+  });
+
+  final _OffscreenLocation location;
+  final Offset position;
+  final double angle;
+}
+
+class _IndicatorPlacement {
+  const _IndicatorPlacement({
+    required this.position,
+    required this.angle,
+    required this.edge,
+  });
+
+  final Offset position;
+  final double angle;
+  final _IndicatorEdge edge;
 }

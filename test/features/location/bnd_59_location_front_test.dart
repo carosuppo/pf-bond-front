@@ -1,9 +1,13 @@
 import 'package:bond_front/features/location/constants/location_tracking_config.dart';
+import 'package:bond_front/core/theme/app_colors.dart';
+import 'package:bond_front/features/location/models/location_model.dart';
 import 'package:bond_front/features/location/models/location_permission_status.dart';
+import 'package:bond_front/features/location/models/location_sharing_model.dart';
 import 'package:bond_front/features/location/models/location_state.dart';
 import 'package:bond_front/features/location/models/member_location_model.dart';
 import 'package:bond_front/features/location/providers/location_provider.dart';
 import 'package:bond_front/features/location/widgets/location_map.dart';
+import 'package:bond_front/core/widgets/user_avatar.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -18,9 +22,7 @@ class _FakeLocationProvider extends LocationProvider {
   LocationState build() => initialState;
 }
 
-LocationState _stateWithMembers(
-  Map<int, MemberLocationModel> members,
-) {
+LocationState _stateWithMembers(Map<int, MemberLocationModel> members) {
   return LocationState(
     isLoading: false,
     isTracking: false,
@@ -31,25 +33,18 @@ LocationState _stateWithMembers(
   );
 }
 
-Future<void> _pumpMap(
-  WidgetTester tester,
-  LocationState state,
-) async {
+Future<void> _pumpMap(WidgetTester tester, LocationState state) async {
   await tester.pumpWidget(
     ProviderScope(
       overrides: [
-        locationProvider.overrideWith(
-          () => _FakeLocationProvider(state),
-        ),
+        locationProvider.overrideWith(() => _FakeLocationProvider(state)),
       ],
       child: const MaterialApp(
         home: Scaffold(
           body: SizedBox(
             width: 400,
             height: 700,
-            child: LocationMap(
-              groupId: 20,
-            ),
+            child: LocationMap(groupId: 20),
           ),
         ),
       ),
@@ -59,19 +54,60 @@ Future<void> _pumpMap(
   await tester.pump();
 }
 
-Future<void> _disposeMap(
-  WidgetTester tester,
-) async {
-  await tester.pumpWidget(
-    const SizedBox.shrink(),
-  );
+Future<void> _disposeMap(WidgetTester tester) async {
+  await tester.pumpWidget(const SizedBox.shrink());
 
   await tester.pump();
 }
 
 void main() {
   testWidgets(
-    'BND-59 FE-01 muestra solo miembros activos, en su posicion y con colores distintos',
+    'muestra la ubicación propia en grupos sin compartir obligatoriamente',
+    (tester) async {
+      final currentLocation = LocationModel(
+        latitude: -34.6037,
+        longitude: -58.3816,
+        accuracy: 5,
+        timestamp: DateTime(2026),
+      );
+      final state = LocationState(
+        isLoading: false,
+        isTracking: false,
+        permissionStatus: LocationPermissionStatus.whileInUse,
+        currentLocation: currentLocation,
+        sharing: const [
+          LocationSharingModel(
+            memberId: 1,
+            groupId: 20,
+            locationSharingEnabled: false,
+            shareLocationMandatorily: false,
+            effectiveLocationSharing: false,
+          ),
+        ],
+        visibleMembers: const {},
+        activeGroupId: 20,
+      );
+
+      await _pumpMap(tester, state);
+
+      final markerLayer = tester.widget<MarkerLayer>(find.byType(MarkerLayer));
+      expect(markerLayer.markers, hasLength(1));
+      expect(
+        markerLayer.markers.single.point.latitude,
+        currentLocation.latitude,
+      );
+      expect(
+        markerLayer.markers.single.point.longitude,
+        currentLocation.longitude,
+      );
+      expect(find.text('Vos'), findsOneWidget);
+
+      await _disposeMap(tester);
+    },
+  );
+
+  testWidgets(
+    'BND-59 FE-01 muestra miembros con ubicacion antigua y atenua su avatar',
     (tester) async {
       final now = DateTime.now();
 
@@ -81,27 +117,17 @@ void main() {
         name: 'Ana',
         latitude: -34.6037,
         longitude: -58.3816,
-        lastSeenAt: now.subtract(
-          const Duration(
-            minutes: 1,
-          ),
-        ),
+        lastSeenAt: now.subtract(const Duration(minutes: 1)),
       );
 
-      final expired = MemberLocationModel(
+      final stale = MemberLocationModel(
         memberId: 3,
         userId: 3,
-        name: 'Vencido',
+        name: 'Antiguo',
         latitude: -34.61,
         longitude: -58.39,
         lastSeenAt: now.subtract(
-          Duration(
-            minutes:
-                LocationTrackingConfig
-                        .hideAfter
-                        .inMinutes +
-                    1,
-          ),
+          Duration(minutes: LocationTrackingConfig.staleAfter.inMinutes + 1),
         ),
       );
 
@@ -111,109 +137,66 @@ void main() {
         name: 'Luis',
         latitude: -34.615,
         longitude: -58.4,
-        lastSeenAt: now.subtract(
-          const Duration(
-            minutes: 2,
-          ),
-        ),
+        lastSeenAt: now.subtract(const Duration(minutes: 2)),
       );
 
       await _pumpMap(
         tester,
         _stateWithMembers({
           activeA.memberId: activeA,
-          expired.memberId: expired,
+          stale.memberId: stale,
           activeB.memberId: activeB,
         }),
       );
 
-      final markerLayer =
-          tester.widget<MarkerLayer>(
-        find.byType(MarkerLayer),
-      );
+      final markerLayer = tester.widget<MarkerLayer>(find.byType(MarkerLayer));
 
-      // Solo deben existir los dos miembros activos.
-      expect(
-        markerLayer.markers,
-        hasLength(2),
-      );
+      expect(markerLayer.markers, hasLength(3));
 
-      final firstMarker =
-          markerLayer.markers[0];
+      final firstMarker = markerLayer.markers[0];
 
-      final secondMarker =
-          markerLayer.markers[1];
+      final staleMarker = markerLayer.markers[1];
 
       // Verificamos la posición geográfica de Ana.
-      expect(
-        firstMarker.point.latitude,
-        activeA.latitude,
-      );
+      expect(firstMarker.point.latitude, activeA.latitude);
 
-      expect(
-        firstMarker.point.longitude,
-        activeA.longitude,
-      );
+      expect(firstMarker.point.longitude, activeA.longitude);
 
-      // Verificamos la posición geográfica de Luis.
-      expect(
-        secondMarker.point.latitude,
-        activeB.latitude,
-      );
+      expect(staleMarker.point.latitude, stale.latitude);
 
-      expect(
-        secondMarker.point.longitude,
-        activeB.longitude,
-      );
+      expect(staleMarker.point.longitude, stale.longitude);
 
-      // Inspeccionamos directamente el contenido
-      // de los marcadores.
-      final firstColumn =
-          firstMarker.child as Column;
+      final staleColumn = staleMarker.child as Column;
+      final staleAvatar = staleColumn.children[1] as Opacity;
 
-      final secondColumn =
-          secondMarker.child as Column;
+      expect(staleAvatar.opacity, 0.5);
+      expect(staleAvatar.child, isA<UserAvatar>());
 
-      final firstIcon =
-          firstColumn.children[0]
-              as Icon;
+      final thirdMarker = markerLayer.markers[2];
 
-      final secondIcon =
-          secondColumn.children[0]
-              as Icon;
+      expect(thirdMarker.point.latitude, activeB.latitude);
 
-      final firstName =
-          firstColumn.children[1]
-              as Text;
+      final firstColumn = firstMarker.child as Column;
 
-      final secondName =
-          secondColumn.children[1]
-              as Text;
+      final thirdColumn = thirdMarker.child as Column;
 
-      // Los miembros visibles deben ser Ana y Luis.
-      expect(
-        firstName.data,
-        'Ana',
-      );
+      final firstName = firstColumn.children[0] as Text;
 
-      expect(
-        secondName.data,
-        'Luis',
-      );
+      final thirdName = thirdColumn.children[0] as Text;
 
-      // Cada miembro debe tener un color distinto.
-      expect(
-        firstIcon.color,
-        isNot(
-          equals(
-            secondIcon.color,
-          ),
-        ),
-      );
+      final firstAvatar = firstColumn.children[1] as UserAvatar;
 
-      await _disposeMap(
-        tester,
-      );
+      final thirdAvatar = thirdColumn.children[1] as UserAvatar;
+
+      expect(firstName.data, 'Ana');
+
+      expect(thirdName.data, 'Luis');
+
+      expect(firstAvatar.borderColor, AppColors.primary);
+
+      expect(thirdAvatar.borderColor, AppColors.primary);
+
+      await _disposeMap(tester);
     },
   );
 
@@ -222,38 +205,18 @@ void main() {
     (tester) async {
       await _pumpMap(
         tester,
-        _stateWithMembers(
-          const <
-            int,
-            MemberLocationModel
-          >{},
-        ),
+        _stateWithMembers(const <int, MemberLocationModel>{}),
       );
 
       // El mapa debe seguir existiendo.
-      expect(
-        find.byType(
-          FlutterMap,
-        ),
-        findsOneWidget,
-      );
+      expect(find.byType(FlutterMap), findsOneWidget);
 
-      final markerLayer =
-          tester.widget<MarkerLayer>(
-        find.byType(
-          MarkerLayer,
-        ),
-      );
+      final markerLayer = tester.widget<MarkerLayer>(find.byType(MarkerLayer));
 
       // No debe haber marcadores de miembros.
-      expect(
-        markerLayer.markers,
-        isEmpty,
-      );
+      expect(markerLayer.markers, isEmpty);
 
-      await _disposeMap(
-        tester,
-      );
+      await _disposeMap(tester);
     },
   );
 }

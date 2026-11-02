@@ -34,4 +34,63 @@ void main() {
       isFalse,
     );
   });
+
+  test('keeps tracking when one of two sharing groups remains enabled', () {
+    const twoGroups = <LocationSharingModel>[
+      LocationSharingModel(
+        memberId: 1,
+        groupId: 2,
+        locationSharingEnabled: false,
+        shareLocationMandatorily: false,
+        effectiveLocationSharing: false,
+      ),
+      LocationSharingModel(
+        memberId: 1,
+        groupId: 3,
+        locationSharingEnabled: true,
+        shareLocationMandatorily: false,
+        effectiveLocationSharing: true,
+      ),
+    ];
+
+    expect(
+      shouldRunLocationTracking(twoGroups, LocationPermissionStatus.always),
+      isTrue,
+    );
+  });
+
+  test('stops after the last sharing group is disabled', () {
+    const disabled = <LocationSharingModel>[
+      LocationSharingModel(
+        memberId: 1,
+        groupId: 2,
+        locationSharingEnabled: false,
+        shareLocationMandatorily: false,
+        effectiveLocationSharing: false,
+      ),
+      LocationSharingModel(
+        memberId: 1,
+        groupId: 3,
+        locationSharingEnabled: false,
+        shareLocationMandatorily: false,
+        effectiveLocationSharing: false,
+      ),
+    ];
+
+    expect(
+      shouldRunLocationTracking(disabled, LocationPermissionStatus.always),
+      isFalse,
+    );
+  });
+
+  test('denied and whileInUse never start persistent tracking', () {
+    expect(
+      shouldRunLocationTracking(enabled, LocationPermissionStatus.denied),
+      isFalse,
+    );
+    expect(
+      shouldRunLocationTracking(enabled, LocationPermissionStatus.whileInUse),
+      isFalse,
+    );
+  });
 }

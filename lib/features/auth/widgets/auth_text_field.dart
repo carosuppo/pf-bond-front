@@ -8,6 +8,9 @@ class AuthTextField extends StatelessWidget {
   final bool obscureText;
   final TextInputType keyboardType;
   final String? Function(String?)? validator;
+  final Widget? suffixIcon;
+  final bool readOnly;
+  final VoidCallback? onTap;
 
   const AuthTextField({
     super.key,
@@ -16,6 +19,9 @@ class AuthTextField extends StatelessWidget {
     this.obscureText = false,
     this.keyboardType = TextInputType.text,
     this.validator,
+    this.suffixIcon,
+    this.readOnly = false,
+    this.onTap,
   });
 
   @override
@@ -25,7 +31,7 @@ class AuthTextField extends StatelessWidget {
       style: const TextStyle(color: AppColors.text),
       decoration: InputDecoration(
         labelText: label,
-        labelStyle: const TextStyle(color: AppColors.mutedText),
+        labelStyle: const TextStyle(color: AppColors.placeholder),
         filled: true,
         fillColor: AppColors.fieldColor,
         enabledBorder: OutlineInputBorder(
@@ -44,9 +50,12 @@ class AuthTextField extends StatelessWidget {
           borderRadius: BorderRadius.circular(14),
           borderSide: const BorderSide(color: AppColors.error),
         ),
+        suffixIcon: suffixIcon,
       ),
       obscureText: obscureText,
       keyboardType: keyboardType,
+      readOnly: readOnly,
+      onTap: onTap,
       validator: validator,
     );
   }

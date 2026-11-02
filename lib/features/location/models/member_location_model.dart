@@ -2,6 +2,7 @@ class MemberLocationModel {
   final int memberId;
   final int userId;
   final String name;
+  final String? profilePhoto;
 
   final double latitude;
   final double longitude;
@@ -15,6 +16,7 @@ class MemberLocationModel {
     required this.memberId,
     required this.userId,
     required this.name,
+    this.profilePhoto,
     required this.latitude,
     required this.longitude,
     this.accuracy,
@@ -22,46 +24,29 @@ class MemberLocationModel {
     this.lastSeenAt,
   });
 
-  factory MemberLocationModel.fromJson(
-    Map<String, dynamic> json,
-  ) {
+  factory MemberLocationModel.fromJson(Map<String, dynamic> json) {
     return MemberLocationModel(
-      memberId:
-          json['memberId'] as int,
+      memberId: json['memberId'] as int,
 
-      userId:
-          json['userId'] as int,
+      userId: json['userId'] as int,
 
-      name:
-          json['name'] as String,
+      name: json['name'] as String,
 
-      latitude:
-          (json['latitude'] as num)
-              .toDouble(),
+      profilePhoto: json['profilePhoto'] as String?,
 
-      longitude:
-          (json['longitude'] as num)
-              .toDouble(),
+      latitude: (json['latitude'] as num).toDouble(),
 
-      accuracy:
-          (json['accuracy'] as num?)
-              ?.toDouble(),
+      longitude: (json['longitude'] as num).toDouble(),
 
-      capturedAt:
-          json['capturedAt'] == null
-              ? null
-              : DateTime.parse(
-                  json['capturedAt']
-                      as String,
-                ),
+      accuracy: (json['accuracy'] as num?)?.toDouble(),
 
-      lastSeenAt:
-          json['lastSeenAt'] == null
-              ? null
-              : DateTime.parse(
-                  json['lastSeenAt']
-                      as String,
-                ),
+      capturedAt: json['capturedAt'] == null
+          ? null
+          : DateTime.parse(json['capturedAt'] as String),
+
+      lastSeenAt: json['lastSeenAt'] == null
+          ? null
+          : DateTime.parse(json['lastSeenAt'] as String),
     );
   }
 
@@ -69,6 +54,7 @@ class MemberLocationModel {
     int? memberId,
     int? userId,
     String? name,
+    String? profilePhoto,
     double? latitude,
     double? longitude,
     double? accuracy,
@@ -76,29 +62,23 @@ class MemberLocationModel {
     DateTime? lastSeenAt,
   }) {
     return MemberLocationModel(
-      memberId:
-          memberId ?? this.memberId,
+      memberId: memberId ?? this.memberId,
 
-      userId:
-          userId ?? this.userId,
+      userId: userId ?? this.userId,
 
-      name:
-          name ?? this.name,
+      name: name ?? this.name,
 
-      latitude:
-          latitude ?? this.latitude,
+      profilePhoto: profilePhoto ?? this.profilePhoto,
 
-      longitude:
-          longitude ?? this.longitude,
+      latitude: latitude ?? this.latitude,
 
-      accuracy:
-          accuracy ?? this.accuracy,
+      longitude: longitude ?? this.longitude,
 
-      capturedAt:
-          capturedAt ?? this.capturedAt,
+      accuracy: accuracy ?? this.accuracy,
 
-      lastSeenAt:
-          lastSeenAt ?? this.lastSeenAt,
+      capturedAt: capturedAt ?? this.capturedAt,
+
+      lastSeenAt: lastSeenAt ?? this.lastSeenAt,
     );
   }
 }

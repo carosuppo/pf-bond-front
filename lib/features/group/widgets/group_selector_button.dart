@@ -7,7 +7,14 @@ import '../models/get_groups_model.response.dart';
 import '../providers/group_provider.dart';
 
 class GroupSelectorButton extends StatefulWidget {
-  const GroupSelectorButton({super.key});
+  const GroupSelectorButton({
+    super.key,
+    this.width = 250,
+    this.onMenuVisibilityChanged,
+  });
+
+  final double width;
+  final ValueChanged<bool>? onMenuVisibilityChanged;
 
   @override
   State<GroupSelectorButton> createState() => _GroupSelectorButtonState();
@@ -22,7 +29,7 @@ class _GroupSelectorButtonState extends State<GroupSelectorButton> {
 
   @override
   void dispose() {
-    _removeOverlay();
+    _removeOverlay(rebuild: false);
     super.dispose();
   }
 
@@ -49,7 +56,7 @@ class _GroupSelectorButtonState extends State<GroupSelectorButton> {
               ),
             ),
             Positioned(
-              width: 250,
+              width: widget.width,
               child: CompositedTransformFollower(
                 link: _layerLink,
                 showWhenUnlinked: false,
@@ -60,7 +67,7 @@ class _GroupSelectorButtonState extends State<GroupSelectorButton> {
                 child: Material(
                   color: Colors.transparent,
                   child: SizedBox(
-                    width: 250,
+                    width: widget.width,
                     child: Container(
                       decoration: BoxDecoration(
                         color: AppColors.cardColor,
@@ -90,15 +97,17 @@ class _GroupSelectorButtonState extends State<GroupSelectorButton> {
     );
 
     overlay.insert(_overlayEntry!);
+    widget.onMenuVisibilityChanged?.call(true);
 
     setState(() {});
   }
 
-  void _removeOverlay() {
+  void _removeOverlay({bool rebuild = true}) {
     _overlayEntry?.remove();
     _overlayEntry = null;
 
-    if (mounted) {
+    if (rebuild && mounted) {
+      widget.onMenuVisibilityChanged?.call(false);
       setState(() {});
     }
   }
@@ -118,7 +127,7 @@ class _GroupSelectorButtonState extends State<GroupSelectorButton> {
         link: _layerLink,
         child: Center(
           child: SizedBox(
-            width: 250,
+            width: widget.width,
             child: FilledButton(
               onPressed: _toggleOverlay,
               style: FilledButton.styleFrom(
@@ -126,10 +135,7 @@ class _GroupSelectorButtonState extends State<GroupSelectorButton> {
                 foregroundColor: AppColors.text,
                 elevation: 0,
                 tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                side: const BorderSide(
-                  color: AppColors.border,
-                  width: 1,
-                ),
+                side: const BorderSide(color: AppColors.border, width: 1),
                 padding: const EdgeInsets.symmetric(
                   horizontal: 16,
                   vertical: 11,
@@ -237,12 +243,14 @@ class _GroupList extends StatelessWidget {
               children: [
                 _ActionIcon(icon: Icons.add_rounded),
                 SizedBox(width: 12),
-                Text(
-                  'Crear grupo',
-                  style: TextStyle(
-                    color: AppColors.primary,
-                    fontSize: 14,
-                    fontWeight: FontWeight.w600,
+                Expanded(
+                  child: Text(
+                    'Crear grupo',
+                    style: TextStyle(
+                      color: AppColors.primary,
+                      fontSize: 14,
+                      fontWeight: FontWeight.w600,
+                    ),
                   ),
                 ),
               ],
@@ -260,12 +268,14 @@ class _GroupList extends StatelessWidget {
               children: [
                 _ActionIcon(icon: Icons.group_add_rounded),
                 SizedBox(width: 12),
-                Text(
-                  'Unirse a grupo',
-                  style: TextStyle(
-                    color: AppColors.primary,
-                    fontSize: 14,
-                    fontWeight: FontWeight.w600,
+                Expanded(
+                  child: Text(
+                    'Unirse a grupo',
+                    style: TextStyle(
+                      color: AppColors.primary,
+                      fontSize: 14,
+                      fontWeight: FontWeight.w600,
+                    ),
                   ),
                 ),
               ],

@@ -35,15 +35,26 @@ dependencies:
   # Use with the CupertinoIcons class for iOS style icons.
   cupertino_icons: ^1.0.8
   http: ^1.6.0
+  http_parser: ^4.1.2
   provider: ^6.1.5+1
   geolocator: ^14.0.3
   riverpod: ^3.3.2
   flutter_riverpod: ^3.3.2
-  flutter_dotenv: ^6.0.1
   flutter_map: ^8.3.1
   latlong2: ^0.10.1
   flutter_secure_storage: ^10.3.1
   web_socket_channel: ^3.0.3
+  firebase_core: ^4.14.0
+  firebase_messaging: ^16.6.0
+  flutter_local_notifications: ^22.3.0
+  # Pinned: Android recovery patch is verified against this exact version.
+  flutter_foreground_task: 11.0.2
+  timezone: ^0.11.1
+  image_picker: ^1.2.3
+  permission_handler: ^13.0.2
+  app_links: ^7.2.1
+  share_plus: ^13.3.0
+  url_launcher: ^6.3.2
 
 dev_dependencies:
   flutter_test:
@@ -68,8 +79,11 @@ flutter:
   # the material Icons class.
   uses-material-design: true
   assets:
-    - .env
     - assets/
+  fonts:
+    - family: MyFlutterApp
+      fonts:
+        - asset: assets/flutter_icons/MyFlutterApp.ttf
 
   # To add assets to your application, add an assets section, like this:
   # assets:
@@ -104,16 +118,18 @@ flutter:
 flutter_launcher_icons:
   android: true
   ios: false
-  image_path: "assets/logo_bond.png"
+  image_path: "assets/logo_bond_icon.png"
+  adaptive_icon_background: "#0C1014"
+  adaptive_icon_foreground: "assets/logo_bond_foreground.png"
 
 flutter_native_splash:
-  color: "#1F1F1F"
-  image: assets/logo_bond.png
+  color: "#0C1014"
+  image: assets/logo_bond_splash.png
   android: true
   ios: false
   android_gravity: center
   fullscreen: false
   android_12:
-    image: assets/logo_bond_achicado.png
-    icon_background_color: "#1F1F1F"
-    color: "#1F1F1F"
+    image: assets/logo_bond_splash.png
+    icon_background_color: "#0C1014"
+    color: "#0C1014"

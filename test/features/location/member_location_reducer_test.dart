@@ -30,6 +30,15 @@ void main() {
     expect(result, isEmpty);
   });
 
+  test('removes a departing group member from the active map', () {
+    final result = reduceMemberLocations(
+      const <int, MemberLocationModel>{3: member},
+      const MemberLeft(groupId: 9, memberId: 3, userId: 4),
+      9,
+    );
+    expect(result, isEmpty);
+  });
+
   test('ignores events from another group', () {
     final initial = const <int, MemberLocationModel>{3: member};
     final result = reduceMemberLocations(

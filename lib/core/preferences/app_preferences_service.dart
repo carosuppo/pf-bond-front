@@ -2,11 +2,17 @@ import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
 class AppPreferencesService {
   static const String _activeGroupIdKey = 'active_group_id';
+  static const String _pendingInvitationCodeKey = 'pending_invitation_code';
+  static const String _pendingEmailVerificationTokenKey =
+      'pending_email_verification_token';
 
   static const String _locationPermissionStatusKey =
       'location_permission_status';
+  static const String _notificationPermissionRequestedKey =
+      'notification_permission_requested';
 
   final FlutterSecureStorage _storage;
+  Future<void> _pendingInvitationWrite = Future<void>.value();
 
   AppPreferencesService({FlutterSecureStorage? storage})
     : _storage = storage ?? const FlutterSecureStorage();
@@ -29,11 +35,82 @@ class AppPreferencesService {
     await _storage.delete(key: _activeGroupIdKey);
   }
 
+  Future<void> savePendingInvitationCode(String invitationCode) {
+    final operation = _pendingInvitationWrite.then(
+      (_) =>
+          _storage.write(key: _pendingInvitationCodeKey, value: invitationCode),
+    );
+    _pendingInvitationWrite = operation.catchError((Object _) {});
+    return operation;
+  }
+
+  Future<String?> getPendingInvitationCode() async {
+    await _pendingInvitationWrite;
+    return _storage.read(key: _pendingInvitationCodeKey);
+  }
+
+  Future<bool> clearPendingInvitationCode({String? expectedCode}) {
+    late final Future<bool> operation;
+    operation = _pendingInvitationWrite.then((_) async {
+      if (expectedCode != null) {
+        final currentCode = await _storage.read(key: _pendingInvitationCodeKey);
+        if (currentCode != expectedCode) {
+          return false;
+        }
+      }
+
+      await _storage.delete(key: _pendingInvitationCodeKey);
+      return true;
+    });
+    _pendingInvitationWrite = operation
+        .then<void>((_) {})
+        .catchError((Object _) {});
+    return operation;
+  }
+
+  Future<void> savePendingEmailVerificationToken(String token) {
+    return _storage.write(key: _pendingEmailVerificationTokenKey, value: token);
+  }
+
+  Future<String?> takePendingEmailVerificationToken() async {
+    final token = await _storage.read(key: _pendingEmailVerificationTokenKey);
+    if (token != null) {
+      await _storage.delete(key: _pendingEmailVerificationTokenKey);
+    }
+    return token;
+  }
+
+  Future<bool> clearPendingEmailVerificationToken({
+    String? expectedToken,
+  }) async {
+    if (expectedToken != null) {
+      final currentToken = await _storage.read(
+        key: _pendingEmailVerificationTokenKey,
+      );
+      if (currentToken != expectedToken) return false;
+    }
+
+    await _storage.delete(key: _pendingEmailVerificationTokenKey);
+    return true;
+  }
+
   Future<void> saveLocationPermissionStatus(String status) async {
     await _storage.write(key: _locationPermissionStatusKey, value: status);
   }
 
   Future<String?> getLocationPermissionStatus() async {
     return _storage.read(key: _locationPermissionStatusKey);
+  }
+
+  Future<bool> wasNotificationPermissionRequested() async {
+    return await _storage.read(key: _notificationPermissionRequestedKey) ==
+        'true';
+  }
+
+  Future<void> markNotificationPermissionRequested() async {
+    await _storage.write(
+      key: _notificationPermissionRequestedKey,
+      value: 'true',
+    );
   }
 }

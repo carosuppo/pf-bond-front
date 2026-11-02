@@ -37,4 +37,18 @@ class FormValidators {
 
     return null;
   }
+
+  static String? validatePassword(String? value) {
+    final password = value ?? '';
+
+    if (password.isEmpty) {
+      return 'La contraseña es obligatoria.';
+    }
+
+    if (password.length < 8 || password.length > 16) {
+      return 'La contraseña debe tener entre 8 y 16 caracteres.';
+    }
+
+    return null;
+  }
 }

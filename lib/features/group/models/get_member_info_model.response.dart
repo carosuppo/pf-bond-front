@@ -1,11 +1,13 @@
 class GetMemberInfoResponseModel {
   final int memberId;
   final String name;
+  final String? profilePhoto;
   final DateTime? lastSeenAt;
 
   const GetMemberInfoResponseModel({
     required this.memberId,
     required this.name,
+    this.profilePhoto,
     required this.lastSeenAt,
   });
 
@@ -13,6 +15,7 @@ class GetMemberInfoResponseModel {
     return GetMemberInfoResponseModel(
       memberId: json['memberId'] as int,
       name: json['name'] as String,
+      profilePhoto: json['profilePhoto'] as String?,
       lastSeenAt: json['lastSeenAt'] == null
           ? null
           : DateTime.parse(json['lastSeenAt'] as String),

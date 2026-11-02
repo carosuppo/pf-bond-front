@@ -1,17 +1,45 @@
-import 'dart:io';
-
 import 'package:geolocator/geolocator.dart';
 
-import '../constants/location_tracking_config.dart';
 import '../mappers/location_mapper.dart';
+import '../constants/location_tracking_config.dart';
 import '../models/location_model.dart';
 import '../models/location_permission_status.dart';
 
 class LocationService {
+  // GPS availability is independent of permission; GPS off is recoverable.
+  Future<LocationPermissionStatus> checkBackgroundPermission() async =>
+      mapPermission(await Geolocator.checkPermission());
+
+  Future<LocationModel> getCurrentBackgroundLocation() async => mapPosition(
+    await Geolocator.getCurrentPosition(
+      locationSettings: const LocationSettings(
+        accuracy: LocationAccuracy.high,
+        timeLimit: Duration(seconds: 25),
+      ),
+    ),
+  );
+
+  Stream<LocationModel> getBackgroundLocationStream() =>
+      Geolocator.getPositionStream(
+        locationSettings: const LocationSettings(
+          accuracy: LocationAccuracy.high,
+          distanceFilter: LocationTrackingConfig.distanceFilterMeters,
+        ),
+      ).map(mapPosition);
+
+  /// Durante navegación necesitamos actualizaciones mucho más frecuentes que
+  /// las utilizadas originalmente.
+  ///
+  /// El tracking en segundo plano para compartir ubicación utiliza
+  /// BackgroundLocationService, por lo que bajar este filtro no provoca que
+  /// Bond publique la ubicación del usuario al backend cada 5 metros.
+  static const int _navigationDistanceFilterMeters = 5;
+
   Future<LocationPermissionStatus> checkPermission() async {
     if (!await Geolocator.isLocationServiceEnabled()) {
       return LocationPermissionStatus.serviceDisabled;
     }
+
     return mapPermission(await Geolocator.checkPermission());
   }
 
@@ -21,12 +49,29 @@ class LocationService {
     }
 
     LocationPermission permission = await Geolocator.checkPermission();
+
     if (permission == LocationPermission.denied) {
       permission = await Geolocator.requestPermission();
     }
+
     if (permission == LocationPermission.whileInUse) {
       permission = await Geolocator.requestPermission();
     }
+
+    return mapPermission(permission);
+  }
+
+  Future<LocationPermissionStatus> requestForegroundPermission() async {
+    if (!await Geolocator.isLocationServiceEnabled()) {
+      return LocationPermissionStatus.serviceDisabled;
+    }
+
+    var permission = await Geolocator.checkPermission();
+
+    if (permission == LocationPermission.denied) {
+      permission = await Geolocator.requestPermission();
+    }
+
     return mapPermission(permission);
   }
 
@@ -35,26 +80,21 @@ class LocationService {
   Future<bool> openLocationSettings() => Geolocator.openLocationSettings();
 
   Future<LocationModel> getCurrentLocation() async {
-    return mapPosition(await Geolocator.getCurrentPosition());
+    return mapPosition(
+      await Geolocator.getCurrentPosition(
+        locationSettings: const LocationSettings(
+          accuracy: LocationAccuracy.bestForNavigation,
+        ),
+      ),
+    );
   }
 
   Stream<LocationModel> getLocationStream() {
-    final LocationSettings settings = Platform.isAndroid
-        ? AndroidSettings(
-            accuracy: LocationAccuracy.high,
-            distanceFilter: LocationTrackingConfig.distanceFilterMeters,
-            intervalDuration: LocationTrackingConfig.minimumPublishInterval,
-            foregroundNotificationConfig: const ForegroundNotificationConfig(
-              notificationTitle: 'Bond esta compartiendo tu ubicacion',
-              notificationText:
-                  'Tu ubicacion se comparte con los grupos habilitados.',
-              enableWakeLock: true,
-            ),
-          )
-        : const LocationSettings(
-            accuracy: LocationAccuracy.high,
-            distanceFilter: LocationTrackingConfig.distanceFilterMeters,
-          );
+    const settings = LocationSettings(
+      accuracy: LocationAccuracy.bestForNavigation,
+      distanceFilter: _navigationDistanceFilterMeters,
+    );
+
     return Geolocator.getPositionStream(
       locationSettings: settings,
     ).map(mapPosition);

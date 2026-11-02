@@ -4,12 +4,14 @@ class GetMemberResponseModel {
   final int id;
   final int idUser;
   final String name;
+  final String? profilePhoto;
   final RoleEnum role;
 
   const GetMemberResponseModel({
     required this.id,
     required this.idUser,
     required this.name,
+    this.profilePhoto,
     required this.role,
   });
 
@@ -18,6 +20,7 @@ class GetMemberResponseModel {
       id: json['id'] as int,
       idUser: json['idUser'] as int,
       name: json['name'] as String,
+      profilePhoto: json['profilePhoto'] as String?,
       role: _roleFromJson(json['role'] as String),
     );
   }

@@ -3,6 +3,8 @@ import 'package:provider/provider.dart';
 
 import '../../../core/theme/app_colors.dart';
 import '../../../core/validators/form_validators.dart';
+import '../../../core/widgets/app_screen_header.dart';
+import '../../auth/providers/auth_provider.dart';
 import '../../auth/widgets/auth_submit_button.dart';
 import '../../auth/widgets/auth_text_field.dart';
 import '../providers/profile_provider.dart';
@@ -18,13 +20,10 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
   final _formKey = GlobalKey<FormState>();
 
   final _nameController = TextEditingController();
-  final _emailController = TextEditingController();
 
   String? _initialName;
-  String? _initialEmail;
 
   bool _hasLoaded = false;
-  bool _allowPopAfterSave = false;
 
   @override
   void initState() {
@@ -36,7 +35,6 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
   @override
   void dispose() {
     _nameController.dispose();
-    _emailController.dispose();
 
     super.dispose();
   }
@@ -46,8 +44,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
       return false;
     }
 
-    return _nameController.text.trim() != _initialName ||
-        _emailController.text.trim() != _initialEmail;
+    return _nameController.text.trim() != _initialName;
   }
 
   Future<void> _loadProfile() async {
@@ -63,10 +60,8 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
       final user = profileProvider.user;
 
       _initialName = user?.name;
-      _initialEmail = user?.email;
 
       _nameController.text = user?.name ?? '';
-      _emailController.text = user?.email ?? '';
     }
 
     setState(() {
@@ -82,28 +77,25 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
     final profileProvider = context.read<ProfileProvider>();
 
     final name = _nameController.text.trim();
-    final email = _emailController.text.trim();
 
-    final success = await profileProvider.updateProfile(
-      name: name != _initialName ? name : null,
-      email: email != _initialEmail ? email : null,
-    );
+    final success = await profileProvider.updateProfile(name: name);
 
     if (!mounted) {
       return;
     }
 
     if (success) {
+      final updatedUser = profileProvider.user;
+      if (updatedUser != null) {
+        context.read<AuthProvider>().updateUser(updatedUser);
+      }
+
       setState(() {
         _initialName = name;
-        _initialEmail = email;
-        _allowPopAfterSave = true;
       });
 
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Perfil actualizado correctamente.'),
-        ),
+        const SnackBar(content: Text('Perfil actualizado correctamente.')),
       );
 
       WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -117,8 +109,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(
-            profileProvider.errorMessage ??
-                'No se pudo actualizar el perfil.',
+            profileProvider.errorMessage ?? 'No se pudo actualizar el perfil.',
           ),
         ),
       );
@@ -134,9 +125,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
       context: context,
       builder: (dialogContext) => AlertDialog(
         title: const Text('Descartar cambios'),
-        content: const Text(
-          'Tenés cambios sin guardar. ¿Querés descartarlos?',
-        ),
+        content: const Text('Tenés cambios sin guardar. ¿Querés descartarlos?'),
         actions: [
           TextButton(
             onPressed: () => Navigator.of(dialogContext).pop(false),
@@ -154,6 +143,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
     );
 
     if (shouldDiscard == true && mounted) {
+      context.read<ProfileProvider>().clearSelectedPhoto();
       Navigator.of(context).pop();
     }
   }
@@ -163,16 +153,22 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
     final profileProvider = context.watch<ProfileProvider>();
 
     return PopScope(
-      canPop: _allowPopAfterSave || !_isDirty,
+      canPop: !_isDirty,
       onPopInvokedWithResult: (didPop, result) {
         _handlePopAttempt(didPop);
       },
       child: Scaffold(
-        appBar: AppBar(
-          title: const Text('Modificar mi perfil'),
-        ),
+        backgroundColor: AppColors.background,
         body: SafeArea(
-          child: _buildBody(profileProvider),
+          child: Column(
+            children: [
+              AppScreenHeader(
+                title: 'Modificar mi perfil',
+                onBack: () => Navigator.of(context).maybePop(),
+              ),
+              Expanded(child: _buildBody(profileProvider)),
+            ],
+          ),
         ),
       ),
     );
@@ -180,9 +176,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
 
   Widget _buildBody(ProfileProvider profileProvider) {
     if (!_hasLoaded) {
-      return const Center(
-        child: CircularProgressIndicator(),
-      );
+      return const Center(child: CircularProgressIndicator());
     }
 
     if (profileProvider.user == null) {
@@ -191,16 +185,11 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
             Padding(
-              padding: const EdgeInsets.symmetric(
-                horizontal: 24,
-              ),
+              padding: const EdgeInsets.symmetric(horizontal: 24),
               child: Text(
-                profileProvider.errorMessage ??
-                    'No se pudo cargar tu perfil.',
+                profileProvider.errorMessage ?? 'No se pudo cargar tu perfil.',
                 textAlign: TextAlign.center,
-                style: const TextStyle(
-                  color: AppColors.mutedText,
-                ),
+                style: const TextStyle(color: AppColors.mutedText),
               ),
             ),
             const SizedBox(height: 16),
@@ -214,10 +203,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
     }
 
     return SingleChildScrollView(
-      padding: const EdgeInsets.symmetric(
-        horizontal: 24,
-        vertical: 28,
-      ),
+      padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 28),
       child: Form(
         key: _formKey,
         child: Column(
@@ -227,13 +213,6 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
               controller: _nameController,
               label: 'Nombre',
               validator: FormValidators.validateName,
-            ),
-            const SizedBox(height: 14),
-            AuthTextField(
-              controller: _emailController,
-              label: 'Email',
-              keyboardType: TextInputType.emailAddress,
-              validator: FormValidators.validateEmail,
             ),
             const SizedBox(height: 22),
             AuthSubmitButton(

@@ -2,18 +2,32 @@ import 'dart:async';
 
 import 'package:bond_front/core/theme/app_colors.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter/services.dart';
+import 'package:flutter_map/flutter_map.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart' hide Provider;
+import 'package:latlong2/latlong.dart';
 import 'package:provider/provider.dart';
 
-import '../../../core/widgets/app_bottom_nav_bar.dart';
+import '../../auth/providers/auth_provider.dart';
 import '../../group/models/get_member_info_model.response.dart';
 import '../../group/providers/group_provider.dart';
 import '../../group/services/group_service.dart';
-import '../../group/widgets/group_info_bottom_sheet.dart';
 import '../../group/widgets/group_selector_button.dart';
-import '../../group/widgets/member_info_bottom_sheet.dart';
+import '../../notification/providers/group_inbox_provider.dart';
+import '../../notification/widgets/group_inbox_button.dart';
+import '../../point_of_interest/models/point_of_interest.dart';
+import '../../point_of_interest/models/point_of_interest_color.dart';
+import '../../point_of_interest/providers/point_of_interest_provider.dart';
+import '../../point_of_interest/services/point_of_interest_realtime_sync.dart';
+import '../../point_of_interest/widgets/point_of_interest_editor.dart';
+import '../../point_of_interest/widgets/point_of_interest_marker_icon.dart';
+import '../../routing/models/route_mode.dart';
+import '../../routing/providers/navigation_provider.dart';
+import '../models/location_socket_event.dart';
 import '../providers/location_provider.dart';
+import '../widgets/group_info_sheet.dart';
 import '../widgets/location_map.dart';
+import '../widgets/point_of_interest_sheet.dart';
 
 class MapScreen extends ConsumerStatefulWidget {
   const MapScreen({super.key});
@@ -22,31 +36,122 @@ class MapScreen extends ConsumerStatefulWidget {
   ConsumerState<MapScreen> createState() => _MapScreenState();
 }
 
-class _MapScreenState extends ConsumerState<MapScreen> {
-  static const _minChildSize = 0.2;
-  static const _maxChildSize = 0.5;
-
+class _MapScreenState extends ConsumerState<MapScreen>
+    with WidgetsBindingObserver {
   late final GroupProvider _groupProvider;
+  late final LocationProvider _locationNotifier;
+  late final PointOfInterestProvider _pointProvider;
+  late final NavigationProvider _navigation;
+  GroupInboxProvider? _groupInbox;
   late final DraggableScrollableController _sheetController;
+  late final DraggableScrollableController _poiSheetController;
+  StreamSubscription<LocationSocketEvent>? _groupEventSubscription;
 
   ScrollController? _sheetScrollController;
+  ScrollController? _poiSheetScrollController;
 
   int? _viewingGroupId;
+  bool _sheetExpanded = false;
+  bool _pointsExpanded = false;
   int? _selectedMemberId;
   int _memberInfoRequestId = 0;
   bool _memberInfoLoading = false;
   GetMemberInfoResponseModel? _memberInfo;
 
+  final MapController _mapController = MapController();
+  final GlobalKey<PointOfInterestEditorState> _editorKey = GlobalKey();
+  late final AppLifecycleListener _inboxLifecycleListener;
+
+  PointOfInterest? _editingPoint;
+  PointOfInterest? _selectedPoint;
+  bool _editing = false;
+  LatLng? _draftLocation;
+  double _draftRadius = 100;
+  PointOfInterestColor _draftColor = PointOfInterestColor.blue;
+
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
 
     _groupProvider = context.read<GroupProvider>();
+    _locationNotifier = ref.read(locationProvider.notifier);
+    _pointProvider = context.read<PointOfInterestProvider>();
+    _navigation = context.read<NavigationProvider>();
+    _groupInbox = Provider.of<GroupInboxProvider?>(context, listen: false);
+    _inboxLifecycleListener = AppLifecycleListener(
+      onResume: () {
+        final inbox = _groupInbox;
+        if (inbox != null) unawaited(inbox.load());
+      },
+    );
+    if (_groupInbox != null) unawaited(_groupInbox!.load());
     _groupProvider.addListener(_onGroupChanged);
+    _pointProvider.addListener(_onPointsChanged);
+    _navigation.addListener(_onNavigationChanged);
 
-    _sheetController = DraggableScrollableController();
+    _sheetController = DraggableScrollableController()
+      ..addListener(_onSheetSizeChanged);
+    _poiSheetController = DraggableScrollableController();
+
+    _groupEventSubscription = ref
+        .read(locationSocketServiceProvider)
+        .events
+        .listen(_onGroupEvent);
 
     WidgetsBinding.instance.addPostFrameCallback((_) => _syncViewingGroup());
+  }
+
+  void _onGroupEvent(LocationSocketEvent event) {
+    if (!mounted) return;
+
+    if (event is MemberVisibilityChanged) {
+      final groupId = _viewingGroupId;
+      if (groupId != null) {
+        unawaited(_groupProvider.getGroupDetails(groupId: groupId));
+      }
+      _clearMemberInfo();
+      return;
+    }
+
+    if (event case GroupDeleted(:final groupId)) {
+      _groupProvider.handleGroupDeleted(groupId);
+      return;
+    }
+
+    if (event case MemberLeft(:final groupId)) {
+      if (groupId == _viewingGroupId) {
+        unawaited(_groupProvider.getGroupDetails(groupId: groupId));
+      }
+      return;
+    }
+
+    unawaited(
+      refreshPointsForSocketEvent(
+        event: event,
+        viewingGroupId: _viewingGroupId,
+        loadPoints: context.read<PointOfInterestProvider>().loadPoints,
+      ),
+    );
+  }
+
+  void _onSheetSizeChanged() {
+    final expanded =
+        _sheetController.size >= GroupInfoSheet.maxChildSize - 0.001;
+
+    if (expanded == _sheetExpanded) {
+      return;
+    }
+
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) {
+        return;
+      }
+
+      setState(() {
+        _sheetExpanded = expanded;
+      });
+    });
   }
 
   void _collapseSheet() {
@@ -55,7 +160,7 @@ class _MapScreenState extends ConsumerState<MapScreen> {
     }
 
     _sheetController.animateTo(
-      _minChildSize,
+      GroupInfoSheet.minChildSize,
       duration: const Duration(milliseconds: 250),
       curve: Curves.easeOut,
     );
@@ -75,7 +180,7 @@ class _MapScreenState extends ConsumerState<MapScreen> {
     }
 
     _sheetController.animateTo(
-      _maxChildSize,
+      GroupInfoSheet.maxChildSize,
       duration: const Duration(milliseconds: 250),
       curve: Curves.easeOut,
     );
@@ -167,14 +272,14 @@ class _MapScreenState extends ConsumerState<MapScreen> {
 
     final delta = details.primaryDelta ?? 0;
 
-    final minPixels = _sheetController.sizeToPixels(_minChildSize);
-    final maxPixels = _sheetController.sizeToPixels(_maxChildSize);
+    final minPixels = _sheetController.sizeToPixels(
+      GroupInfoSheet.minChildSize,
+    );
 
-    // Al mover el dedo hacia abajo, delta es positivo,
-    // por lo que reducimos la altura del panel.
-    //
-    // Al moverlo hacia arriba, delta es negativo,
-    // por lo que aumentamos su altura.
+    final maxPixels = _sheetController.sizeToPixels(
+      GroupInfoSheet.maxChildSize,
+    );
+
     final nextPixels = (_sheetController.pixels - delta)
         .clamp(minPixels, maxPixels)
         .toDouble();
@@ -191,22 +296,18 @@ class _MapScreenState extends ConsumerState<MapScreen> {
 
     final velocity = details.primaryVelocity ?? 0;
 
-    // Si el usuario suelta realizando un gesto claro hacia abajo,
-    // terminamos de cerrar el panel.
     if (velocity > 300) {
       _collapseSheet();
       return;
     }
 
-    // Si lo suelta realizando un gesto claro hacia arriba,
-    // terminamos de abrirlo.
     if (velocity < -300) {
       _expandSheet();
       return;
     }
 
-    // Si lo suelta lentamente, se acomoda al estado más cercano.
-    final middleSize = (_minChildSize + _maxChildSize) / 2;
+    final middleSize =
+        (GroupInfoSheet.minChildSize + GroupInfoSheet.maxChildSize) / 2;
 
     if (_sheetController.size < middleSize) {
       _collapseSheet();
@@ -215,14 +316,135 @@ class _MapScreenState extends ConsumerState<MapScreen> {
     }
   }
 
+  double get _poiMinimumSize => PointOfInterestSheet.minimumSize(
+    context,
+    _poiSheetController.isAttached
+        ? _poiSheetController.sizeToPixels(1)
+        : MediaQuery.sizeOf(context).height,
+  );
+
+  double get _poiMaximumSize =>
+      _poiMinimumSize > PointOfInterestSheet.maxChildSize
+      ? _poiMinimumSize
+      : PointOfInterestSheet.maxChildSize;
+
+  void _collapsePoiSheet() {
+    if (!_poiSheetController.isAttached) return;
+
+    _poiSheetController.animateTo(
+      _poiMinimumSize,
+      duration: const Duration(milliseconds: 250),
+      curve: Curves.easeOut,
+    );
+
+    if (_poiSheetScrollController?.hasClients ?? false) {
+      _poiSheetScrollController!.animateTo(
+        0,
+        duration: const Duration(milliseconds: 250),
+        curve: Curves.easeOut,
+      );
+    }
+  }
+
+  void _expandPoiSheet() {
+    if (!_poiSheetController.isAttached) return;
+
+    _poiSheetController.animateTo(
+      _poiMaximumSize,
+      duration: const Duration(milliseconds: 250),
+      curve: Curves.easeOut,
+    );
+  }
+
+  void _handlePoiSheetDragUpdate(DragUpdateDetails details) {
+    if (!_poiSheetController.isAttached) return;
+
+    final delta = details.primaryDelta ?? 0;
+    final minPixels = _poiSheetController.sizeToPixels(_poiMinimumSize);
+    final maxPixels = _poiSheetController.sizeToPixels(_poiMaximumSize);
+    final nextPixels = (_poiSheetController.pixels - delta)
+        .clamp(minPixels, maxPixels)
+        .toDouble();
+
+    _poiSheetController.jumpTo(_poiSheetController.pixelsToSize(nextPixels));
+  }
+
+  void _handlePoiSheetDragEnd(DragEndDetails details) {
+    if (!_poiSheetController.isAttached) return;
+
+    final velocity = details.primaryVelocity ?? 0;
+
+    if (velocity > 300) {
+      _collapsePoiSheet();
+      return;
+    }
+
+    if (velocity < -300) {
+      _expandPoiSheet();
+      return;
+    }
+
+    final middleSize = (_poiMinimumSize + _poiMaximumSize) / 2;
+
+    if (_poiSheetController.size < middleSize) {
+      _collapsePoiSheet();
+    } else {
+      _expandPoiSheet();
+    }
+  }
+
   void _onGroupChanged() {
     final activeGroupId = _groupProvider.activeGroup?.id;
 
     if (activeGroupId != _viewingGroupId) {
       _clearMemberInfo();
+      _selectedPoint = null;
+      unawaited(_navigation.handleActiveGroupChanged(activeGroupId));
     }
 
     _syncViewingGroup();
+  }
+
+  void _onPointsChanged() {
+    final selected = _selectedPoint;
+    if (!_pointProvider.loading &&
+        selected != null &&
+        !_pointProvider.points.any((point) => point.id == selected.id)) {
+      if (mounted) setState(() => _selectedPoint = null);
+    }
+    final targetPointId = _navigation.targetPointId;
+    final targetGroupId = _navigation.targetGroupId;
+    if (_pointProvider.loading ||
+        targetPointId == null ||
+        targetGroupId == null) {
+      return;
+    }
+    if (targetGroupId != _groupProvider.activeGroup?.id) return;
+
+    PointOfInterest? updatedDestination;
+    for (final point in _pointProvider.points) {
+      if (point.id == targetPointId && point.groupId == targetGroupId) {
+        updatedDestination = point;
+        break;
+      }
+    }
+
+    if (updatedDestination == null) {
+      unawaited(_navigation.handleDestinationUnavailable());
+    } else {
+      unawaited(_navigation.handleDestinationUpdated(updatedDestination));
+    }
+  }
+
+  void _onNavigationChanged() {
+    final notice = _navigation.takeNotice();
+    if (notice == null || !mounted) return;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context)
+        ..hideCurrentSnackBar()
+        ..showSnackBar(SnackBar(content: Text(notice)));
+    });
   }
 
   void _syncViewingGroup() {
@@ -237,6 +459,15 @@ class _MapScreenState extends ConsumerState<MapScreen> {
     }
 
     _viewingGroupId = activeGroupId;
+    _closeEditor();
+
+    final pointProvider = context.read<PointOfInterestProvider>();
+
+    if (activeGroupId == null) {
+      pointProvider.clear();
+    } else {
+      pointProvider.loadPoints(activeGroupId);
+    }
 
     final locationNotifier = ref.read(locationProvider.notifier);
 
@@ -247,14 +478,182 @@ class _MapScreenState extends ConsumerState<MapScreen> {
     }
   }
 
+  void _startCreate() {
+    if (_navigation.active) return;
+    setState(() {
+      _editing = true;
+      _editingPoint = null;
+      _selectedPoint = null;
+      _draftLocation = null;
+      _draftRadius = 100;
+      _draftColor = PointOfInterestColor.blue;
+    });
+
+    WidgetsBinding.instance.addPostFrameCallback((_) => _expandPoiSheet());
+  }
+
+  void _startEdit(PointOfInterest point) {
+    if (_navigation.active) return;
+    setState(() {
+      _editing = true;
+      _editingPoint = point;
+      _draftLocation = LatLng(point.latitude, point.longitude);
+      _draftRadius = point.radius;
+      _draftColor = point.color;
+    });
+
+    WidgetsBinding.instance.addPostFrameCallback((_) => _expandPoiSheet());
+  }
+
+  void _closeEditor() {
+    if (!mounted) {
+      return;
+    }
+
+    setState(() {
+      _editing = false;
+      _editingPoint = null;
+      _draftLocation = null;
+      _draftRadius = 100;
+      _draftColor = PointOfInterestColor.blue;
+    });
+  }
+
+  void _selectPoint(PointOfInterest point) {
+    if (_navigation.active) return;
+    setState(() => _selectedPoint = point);
+    _mapController.move(LatLng(point.latitude, point.longitude), 16);
+
+    _collapseSheet();
+  }
+
+  Future<void> _startNavigation(PointOfInterest point) async {
+    if (_navigation.active) return;
+    final selectedMode = await showDialog<RouteMode>(
+      context: context,
+      builder: (dialogContext) => SimpleDialog(
+        title: const Text('Cómo llegar'),
+        children: [
+          SimpleDialogOption(
+            onPressed: () => Navigator.pop(dialogContext, RouteMode.driving),
+            child: const ListTile(
+              leading: Icon(Icons.directions_car_rounded),
+              title: Text('Auto'),
+            ),
+          ),
+          SimpleDialogOption(
+            onPressed: () => Navigator.pop(dialogContext, RouteMode.walking),
+            child: const ListTile(
+              leading: Icon(Icons.directions_walk_rounded),
+              title: Text('Caminando'),
+            ),
+          ),
+        ],
+      ),
+    );
+    if (!mounted || selectedMode == null || _navigation.active) return;
+
+    final success = await _navigation.start(
+      point: point,
+      selectedMode: selectedMode,
+    );
+    if (!mounted) return;
+    if (!success) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            _navigation.errorMessage ?? 'No se pudo calcular la ruta.',
+          ),
+        ),
+      );
+    }
+  }
+
+  Future<void> _confirmDelete(PointOfInterest point) async {
+    if (_navigation.active) return;
+    final messenger = ScaffoldMessenger.of(context);
+
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('¿Eliminar este punto de interés?'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext, false),
+            child: const Text('Cancelar'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(dialogContext, true),
+            child: const Text('Eliminar'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed != true || !mounted || _navigation.active) {
+      return;
+    }
+
+    final provider = context.read<PointOfInterestProvider>();
+
+    final success = await provider.delete(point.groupId, point.id);
+
+    if (!mounted) {
+      return;
+    }
+
+    messenger.showSnackBar(
+      SnackBar(
+        content: Text(
+          success
+              ? 'Punto de interés eliminado.'
+              : provider.errorMessage ?? 'No se pudo eliminar.',
+        ),
+      ),
+    );
+  }
+
+  void _focusDraftLocation() {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      final point = _draftLocation;
+      if (!mounted ||
+          !_editing ||
+          point == null ||
+          !_poiSheetController.isAttached) {
+        return;
+      }
+      final height = _mapController.camera.nonRotatedSize.height;
+      final sheetHeight = _poiSheetController.size * height;
+      final top = MediaQuery.paddingOf(context).top + 72;
+      final visibleHeight = height - sheetHeight;
+      final targetY = (top.clamp(0.0, visibleHeight) + visibleHeight) / 2;
+      _mapController.move(point, 16, offset: Offset(0, targetY - height / 2));
+    });
+  }
+
+  @override
+  void didChangeMetrics() {
+    // Reframe after the keyboard closes or the available viewport changes.
+    if (_editing && _draftLocation != null) {
+      _focusDraftLocation();
+    }
+  }
+
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     _groupProvider.removeListener(_onGroupChanged);
+    _pointProvider.removeListener(_onPointsChanged);
+    _navigation.removeListener(_onNavigationChanged);
+    _inboxLifecycleListener.dispose();
+    unawaited(_groupEventSubscription?.cancel());
     _sheetController.dispose();
+    _poiSheetController.dispose();
 
     if (_viewingGroupId != null) {
-      ref.read(locationProvider.notifier).stopViewingGroup();
+      unawaited(_locationNotifier.stopViewingGroup());
     }
+    unawaited(_navigation.cancel());
 
     super.dispose();
   }
@@ -262,111 +661,572 @@ class _MapScreenState extends ConsumerState<MapScreen> {
   @override
   Widget build(BuildContext context) {
     final groupProvider = context.watch<GroupProvider>();
+    final pointProvider = context.watch<PointOfInterestProvider>();
+    final authProvider = context.watch<AuthProvider>();
+    final navigation = context.watch<NavigationProvider>();
+    final topPadding = MediaQuery.paddingOf(context).top;
+    final screenHeight = MediaQuery.sizeOf(context).height;
+    final groupSelectorWidth = (MediaQuery.sizeOf(context).width - 116)
+        .clamp(180.0, 250.0)
+        .toDouble();
+    final routeSheetFraction = groupProvider.groupDetails == null
+        ? 0.0
+        : _sheetController.isAttached
+        ? _sheetController.size
+        : (_sheetExpanded
+              ? GroupInfoSheet.maxChildSize
+              : GroupInfoSheet.minChildSize);
+    final routeBottomPadding = groupProvider.groupDetails == null
+        ? 32.0
+        : screenHeight * routeSheetFraction + 32;
+    final navigationOverlayTop = topPadding + 72;
 
-    return Scaffold(
-      body: SafeArea(
-        bottom: false,
-        child: Stack(
-          children: [
-            Positioned.fill(
-              child: Stack(
-                children: [
-                  LocationMap(
-                    groupId: groupProvider.activeGroup?.id,
-                    onMapTap: _handleMapTap,
-                    onMemberTap: _handleMemberTap,
-                  ),
-                ],
-              ),
-            ),
-
-            Positioned(
-              top: 12,
-              left: 0,
-              right: 0,
-              child: const GroupSelectorButton(),
-            ),
-
-            if (groupProvider.groupDetails != null)
+    return PopScope(
+      canPop: !_editing,
+      onPopInvokedWithResult: (didPop, _) {
+        if (!didPop && _editing) {
+          _editorKey.currentState?.requestClose();
+        }
+      },
+      child: Scaffold(
+        body: SafeArea(
+          top: false,
+          bottom: false,
+          child: Stack(
+            children: [
               Positioned.fill(
-                child: DraggableScrollableSheet(
-                  controller: _sheetController,
-                  initialChildSize: _minChildSize,
-                  minChildSize: _minChildSize,
-                  maxChildSize: _maxChildSize,
-                  snap: true,
-                  snapSizes: const [_minChildSize, _maxChildSize],
-                  builder: (context, scrollController) {
-                    _sheetScrollController = scrollController;
-
-                    return Material(
-                      elevation: 8,
-                      borderRadius: const BorderRadius.vertical(
-                        top: Radius.circular(20),
+                child: AnnotatedRegion<SystemUiOverlayStyle>(
+                  value: const SystemUiOverlayStyle(
+                    statusBarColor: Colors.transparent,
+                    statusBarIconBrightness: Brightness.dark,
+                    statusBarBrightness: Brightness.light,
+                  ),
+                  child: Stack(
+                    children: [
+                      LocationMap(
+                        groupId: groupProvider.activeGroup?.id,
+                        ownProfilePhoto:
+                            authProvider.authResponse?.user.profilePhoto,
+                        ownProfileName: authProvider.authResponse?.user.name,
+                        points: pointProvider.points,
+                        autoCenter: !_editing,
+                        previewColor: _draftColor,
+                        previewPoint: _editing ? _draftLocation : null,
+                        previewRadius: _editing && _draftLocation != null
+                            ? _draftRadius
+                            : null,
+                        showOffscreenPoints: _pointsExpanded,
+                        showPointOfInterestAreas: _pointsExpanded,
+                        routePoints: navigation.remainingPoints,
+                        routeFitRevision: navigation.routeRevision,
+                        routeFitPadding: EdgeInsets.fromLTRB(
+                          48,
+                          topPadding + 220,
+                          48,
+                          routeBottomPadding,
+                        ),
+                        navigationLocation: navigation.currentLocation,
+                        destinationPointId: navigation.destination?.id,
+                        onPointTap: _editing || navigation.active
+                            ? null
+                            : _selectPoint,
+                        indicatorBottomFraction: _editing
+                            ? _poiMaximumSize
+                            : groupProvider.groupDetails == null
+                            ? 0
+                            : _sheetExpanded
+                            ? GroupInfoSheet.maxChildSize
+                            : GroupInfoSheet.minChildSize,
+                        controller: _mapController,
+                        onMapTap: _editing ? null : _handleMapTap,
+                        onMemberTap: _editing ? null : _handleMemberTap,
+                        onTap: _editing
+                            ? (point) {
+                                setState(() {
+                                  _draftLocation = point;
+                                });
+                              }
+                            : null,
                       ),
-                      clipBehavior: Clip.antiAlias,
-                      child: Column(
-                        children: [
-                          // Manijita del panel.
-                          //
-                          // Esta zona controla directamente el tamaño del
-                          // DraggableScrollableSheet, haciendo que el panel
-                          // acompañe al dedo durante todo el gesto.
-                          GestureDetector(
-                            behavior: HitTestBehavior.opaque,
-                            onVerticalDragUpdate: _handleSheetDragUpdate,
-                            onVerticalDragEnd: _handleSheetDragEnd,
-                            child: Padding(
-                              padding: const EdgeInsets.only(
-                                top: 10,
-                                bottom: 14,
-                              ),
-                              child: Center(
-                                child: Container(
-                                  width: 36,
-                                  height: 4,
-                                  decoration: BoxDecoration(
-                                    color: AppColors.mutedText,
-                                    borderRadius: BorderRadius.circular(2),
-                                  ),
-                                ),
-                              ),
-                            ),
-                          ),
-
-                          Expanded(
-                            child: _memberInfoLoading
-                                ? MemberInfoLoading(
-                                    scrollController: scrollController,
-                                  )
-                                : _memberInfo != null
-                                ? MemberInfoBottomSheet(
-                                    memberInfo: _memberInfo!,
-                                    scrollController: scrollController,
-                                  )
-                                : GroupInfoBottomSheet(
-                                    group: groupProvider.groupDetails!,
-                                    scrollController: scrollController,
-                                  ),
-                          ),
-                        ],
-                      ),
-                    );
-                  },
+                    ],
+                  ),
                 ),
               ),
-          ],
-        ),
-      ),
+              Positioned(
+                top: topPadding + 12,
+                left: 0,
+                right: 0,
+                child: Center(
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const GroupInboxButton(),
+                      const SizedBox(width: 8),
+                      GroupSelectorButton(width: groupSelectorWidth),
+                      if (groupProvider.activeGroup != null &&
+                          !_editing &&
+                          !navigation.active) ...[
+                        const SizedBox(width: 8),
+                        DecoratedBox(
+                          decoration: BoxDecoration(
+                            color: AppColors.cardColor,
+                            borderRadius: BorderRadius.circular(14),
+                            border: Border.all(color: AppColors.border),
+                          ),
+                          child: SizedBox(
+                            width: 40,
+                            height: 40,
+                            child: IconButton(
+                              onPressed: _startCreate,
+                              tooltip: 'Agregar punto de interés',
+                              color: AppColors.primary,
+                              constraints: const BoxConstraints.tightFor(
+                                width: 48,
+                                height: 40,
+                              ),
+                              icon: const Icon(Icons.add_location_alt_rounded),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ],
+                  ),
+                ),
+              ),
+              if (!_editing && navigation.active)
+                Positioned(
+                  top: navigationOverlayTop,
+                  left: 16,
+                  right: 16,
+                  child: _NavigationCard(
+                    navigation: navigation,
+                    onFinish: () => unawaited(navigation.cancel()),
+                  ),
+                )
+              else if (!_editing && _selectedPoint != null)
+                Positioned(
+                  top: navigationOverlayTop,
+                  left: 24,
+                  right: 24,
+                  child: _SelectedPointCard(
+                    point: _selectedPoint!,
+                    onDirections: () => _startNavigation(_selectedPoint!),
+                    onClose: () => setState(() => _selectedPoint = null),
+                  ),
+                ),
+              if (groupProvider.groupDetails != null && !_editing)
+                GroupInfoSheet(
+                  controller: _sheetController,
+                  group: groupProvider.groupDetails!,
+                  memberInfo: _memberInfo,
+                  memberInfoLoading: _memberInfoLoading,
+                  pointsContent: _buildPointOfInterestContent(
+                    pointProvider,
+                    navigationActive: navigation.active,
+                  ),
+                  pointsCount: pointProvider.points.length,
+                  onScrollControllerChanged: (controller) {
+                    _sheetScrollController = controller;
+                  },
+                  onDragUpdate: _handleSheetDragUpdate,
+                  onDragEnd: _handleSheetDragEnd,
+                  onPointsSectionChanged: (visible) {
+                    if (_pointsExpanded == visible) {
+                      return;
+                    }
 
-      bottomNavigationBar: SafeArea(
-        top: false,
-        child: AppBottomNavBar(
-          selectedDestination: AppBottomDestination.map,
-          onDestinationSelected: (destination) =>
-              navigateToAppDestination(context, destination),
+                    setState(() {
+                      _pointsExpanded = visible;
+                    });
+                  },
+                ),
+              if (_editing)
+                PointOfInterestSheet(
+                  controller: _poiSheetController,
+                  editorKey: _editorKey,
+                  editingPoint: _editingPoint,
+                  draftLocation: _draftLocation,
+                  draftRadius: _draftRadius,
+                  draftColor: _draftColor,
+                  onScrollControllerChanged: (controller) {
+                    _poiSheetScrollController = controller;
+                  },
+                  onDragUpdate: _handlePoiSheetDragUpdate,
+                  onDragEnd: _handlePoiSheetDragEnd,
+                  onLocationChanged: (point) {
+                    setState(() {
+                      _draftLocation = point;
+                    });
+
+                    FocusScope.of(context).unfocus();
+                    _focusDraftLocation();
+                  },
+                  onColorChanged: (color) =>
+                      setState(() => _draftColor = color),
+                  onRadiusChanged: (radius) {
+                    setState(() {
+                      _draftRadius = radius;
+                    });
+                  },
+                  onCreate: (request) async {
+                    final groupId = groupProvider.activeGroup!.id;
+                    final success = await pointProvider.create(
+                      groupId,
+                      request,
+                    );
+
+                    if (!success) {
+                      throw Exception(
+                        pointProvider.errorMessage ??
+                            'No se pudo registrar el punto de interés.',
+                      );
+                    }
+
+                    return true;
+                  },
+                  onUpdate: (request) async {
+                    final point = _editingPoint!;
+                    final success = await pointProvider.update(
+                      point.groupId,
+                      point.id,
+                      request,
+                    );
+
+                    if (!success) {
+                      throw Exception(
+                        pointProvider.errorMessage ??
+                            'No se pudo actualizar el punto de interés.',
+                      );
+                    }
+
+                    return true;
+                  },
+                  onClosed: _closeEditor,
+                ),
+            ],
+          ),
         ),
       ),
     );
   }
+
+  Widget _buildPointOfInterestContent(
+    PointOfInterestProvider pointProvider, {
+    required bool navigationActive,
+  }) {
+    return ListTileTheme.merge(
+      minLeadingWidth: 22,
+      horizontalTitleGap: 8,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          if (pointProvider.loading) const LinearProgressIndicator(),
+          if (!pointProvider.loading && pointProvider.points.isNotEmpty)
+            LayoutBuilder(
+              builder: (context, constraints) {
+                final cardWidth = (constraints.maxWidth - 12) / 2;
+
+                return Wrap(
+                  alignment: WrapAlignment.center,
+                  spacing: 12,
+                  runSpacing: 12,
+                  children: [
+                    for (final point in pointProvider.points)
+                      SizedBox(
+                        width: cardWidth,
+                        child: _PointOfInterestListItem(
+                          point: point,
+                          navigationActive: navigationActive,
+                          onTap: _selectPoint,
+                          onEdit: _startEdit,
+                          onDelete: (point) {
+                            unawaited(_confirmDelete(point));
+                          },
+                          onDirections: (point) {
+                            unawaited(_startNavigation(point));
+                          },
+                        ),
+                      ),
+                  ],
+                );
+              },
+            ),
+        ],
+      ),
+    );
+  }
+}
+
+enum _PointOfInterestAction { edit, delete }
+
+class _PointOfInterestListItem extends StatelessWidget {
+  final PointOfInterest point;
+  final bool navigationActive;
+  final ValueChanged<PointOfInterest> onTap;
+  final ValueChanged<PointOfInterest> onEdit;
+  final ValueChanged<PointOfInterest> onDelete;
+  final ValueChanged<PointOfInterest> onDirections;
+
+  const _PointOfInterestListItem({
+    required this.point,
+    required this.navigationActive,
+    required this.onTap,
+    required this.onEdit,
+    required this.onDelete,
+    required this.onDirections,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Card(
+      margin: EdgeInsets.zero,
+      child: InkWell(
+        onTap: navigationActive ? null : () => onTap(point),
+        child: Padding(
+          padding: const EdgeInsets.all(12),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              SizedBox(
+                height: 48,
+                child: Row(
+                  children: [
+                    PointOfInterestMarkerIcon(
+                      color: point.color.visualColor,
+                      size: 24,
+                    ),
+                    const SizedBox(width: 4),
+                    Expanded(
+                      child: Text(
+                        point.name,
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                        textAlign: TextAlign.center,
+                        style: const TextStyle(
+                          color: AppColors.text,
+                          fontSize: 16,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ),
+                    if (!navigationActive)
+                      PopupMenuButton<_PointOfInterestAction>(
+                        padding: EdgeInsets.zero,
+                        iconSize: 18,
+                        tooltip: 'Opciones del punto de interés',
+                        position: PopupMenuPosition.under,
+                        onSelected: (action) {
+                          switch (action) {
+                            case _PointOfInterestAction.edit:
+                              onEdit(point);
+                            case _PointOfInterestAction.delete:
+                              onDelete(point);
+                          }
+                        },
+                        itemBuilder: (context) => [
+                          const PopupMenuItem<_PointOfInterestAction>(
+                            value: _PointOfInterestAction.edit,
+                            child: Row(
+                              children: [
+                                Icon(Icons.edit_outlined),
+                                SizedBox(width: 8),
+                                Text('Editar'),
+                              ],
+                            ),
+                          ),
+                          const PopupMenuItem<_PointOfInterestAction>(
+                            value: _PointOfInterestAction.delete,
+                            child: Row(
+                              children: [
+                                Icon(Icons.delete_outline),
+                                SizedBox(width: 8),
+                                Text('Eliminar'),
+                              ],
+                            ),
+                          ),
+                        ],
+                        icon: Icon(
+                          Icons.more_vert,
+                          color: Colors.white.withValues(alpha: 0.15),
+                        ),
+                      ),
+                  ],
+                ),
+              ),
+              if (point.isTemporary) ...[
+                const SizedBox(height: 4),
+                Text(
+                  _temporaryLabel(point),
+                  textAlign: TextAlign.center,
+                  style: const TextStyle(
+                    color: AppColors.primary,
+                    fontSize: 14,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ],
+              const SizedBox(height: 4),
+              Text(
+                'Radio: ${_formatPointRadius(point.radius)} m',
+                textAlign: TextAlign.center,
+                style: const TextStyle(
+                  color: AppColors.mutedText,
+                  fontSize: 14,
+                ),
+              ),
+              if (!navigationActive) ...[
+                const SizedBox(height: 8),
+                OutlinedButton.icon(
+                  onPressed: () => onDirections(point),
+                  style: OutlinedButton.styleFrom(
+                    backgroundColor: AppColors.primary,
+                    foregroundColor: Colors.black,
+                    side: const BorderSide(color: AppColors.primary),
+                  ),
+                  icon: const Icon(Icons.directions_rounded),
+                  label: const Text('Cómo llegar'),
+                ),
+              ],
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _SelectedPointCard extends StatelessWidget {
+  const _SelectedPointCard({
+    required this.point,
+    required this.onDirections,
+    required this.onClose,
+  });
+
+  final PointOfInterest point;
+  final VoidCallback onDirections;
+  final VoidCallback onClose;
+
+  @override
+  Widget build(BuildContext context) {
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(16, 10, 8, 10),
+        child: Row(
+          children: [
+            PointOfInterestMarkerIcon(color: point.color.visualColor),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Text(
+                point.name,
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(fontWeight: FontWeight.w600),
+              ),
+            ),
+            TextButton.icon(
+              onPressed: onDirections,
+              icon: const Icon(Icons.directions_rounded),
+              label: const Text('Cómo llegar'),
+            ),
+            IconButton(
+              tooltip: 'Cerrar',
+              onPressed: onClose,
+              icon: const Icon(Icons.close),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _NavigationCard extends StatelessWidget {
+  const _NavigationCard({required this.navigation, required this.onFinish});
+
+  final NavigationProvider navigation;
+  final VoidCallback onFinish;
+
+  @override
+  Widget build(BuildContext context) {
+    final point = navigation.destination!;
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(14),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Row(
+              children: [
+                const Icon(Icons.navigation_rounded, color: AppColors.primary),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    point.name,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                      fontSize: 17,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ),
+                Text(navigation.mode?.label ?? ''),
+              ],
+            ),
+            const SizedBox(height: 6),
+            Text(
+              '${_formatDistance(navigation.remainingDistanceMeters)} restantes'
+              ' · ~${_formatDuration(navigation.durationSeconds)}',
+            ),
+            if (navigation.recalculating) ...[
+              const SizedBox(height: 6),
+              const Text(
+                'Recalculando ruta...',
+                style: TextStyle(color: AppColors.primary),
+              ),
+            ],
+            if (navigation.errorMessage != null) ...[
+              const SizedBox(height: 6),
+              Text(
+                navigation.errorMessage!,
+                style: const TextStyle(color: AppColors.error),
+              ),
+            ],
+            const SizedBox(height: 8),
+            OutlinedButton(
+              onPressed: onFinish,
+              child: const Text('Finalizar ruta'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+String _temporaryLabel(PointOfInterest point) {
+  final endTime = point.endTime?.toLocal();
+  if (endTime == null) return 'Temporal';
+  final hour = endTime.hour.toString().padLeft(2, '0');
+  final minute = endTime.minute.toString().padLeft(2, '0');
+  return 'Temporal · vence $hour:$minute';
+}
+
+String _formatDistance(double meters) {
+  if (meters >= 1000) return '${(meters / 1000).toStringAsFixed(1)} km';
+  return '${meters.round()} m';
+}
+
+String _formatDuration(double seconds) {
+  final minutes = (seconds / 60).ceil();
+  if (minutes < 60) return '$minutes min';
+  final hours = minutes ~/ 60;
+  final remainingMinutes = minutes % 60;
+  return remainingMinutes == 0 ? '$hours h' : '$hours h $remainingMinutes min';
+}
+
+String _formatPointRadius(double radius) {
+  return radius == radius.roundToDouble()
+      ? radius.toInt().toString()
+      : radius.toString();
 }

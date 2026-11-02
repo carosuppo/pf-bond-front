@@ -4,14 +4,17 @@ import 'package:flutter/widgets.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/network/api_client.dart';
+import '../../../core/network/api_exception.dart';
 import '../../../core/preferences/app_preferences_service.dart';
 import '../../../core/storage/session_storage_service.dart';
-import '../constants/location_tracking_config.dart';
 import '../models/location_model.dart';
 import '../models/location_permission_status.dart';
+import '../models/mandatory_group_location_action.dart';
+import '../models/member_location_model.dart';
 import '../models/location_socket_event.dart';
 import '../models/location_state.dart';
 import '../services/location_backend_service.dart';
+import '../services/background_location_service.dart';
 import '../services/location_service.dart';
 import '../services/location_socket_service.dart';
 import '../utils/location_tracking_policy.dart';
@@ -37,6 +40,10 @@ final locationBackendServiceProvider = Provider<LocationBackendService>(
   (ref) => LocationBackendService(ref.read(apiClientProvider)),
 );
 
+final backgroundLocationServiceProvider = Provider<BackgroundLocationService>(
+  (ref) => BackgroundLocationService(),
+);
+
 final locationSocketServiceProvider = Provider<LocationSocketService>((ref) {
   final service = LocationSocketService(ref.read(sessionStorageProvider));
 
@@ -58,19 +65,66 @@ class LocationProvider extends Notifier<LocationState> {
 
   late final AppPreferencesService _preferencesService;
 
-  StreamSubscription<LocationModel>? _locationSubscription;
+  late final BackgroundLocationService _backgroundLocationService;
 
   StreamSubscription<LocationSocketEvent>? _socketSubscription;
-
-  Timer? _heartbeatTimer;
-
-  LocationModel? _lastPublishedLocation;
-
-  DateTime? _lastPublishedAt;
+  StreamSubscription<LocationModel>? _foregroundLocationSubscription;
 
   late final AppLifecycleListener _lifecycleListener;
+  Future<bool> Function(int groupId)? _leaveMandatoryGroup;
+  Future<MandatoryGroupLocationAction?> Function(int groupId)?
+  _promptMandatoryGroupLocationAction;
 
-  bool _syncing = false;
+  int? _syncingVersion;
+  int _sessionVersion = 0;
+  bool _sessionActive = false;
+  Future<void> _operations = Future<void>.value();
+  Future<void>? _restoring;
+
+  Future<T> _enqueue<T>(Future<T> Function() action) {
+    final operation = _operations.then((_) => action());
+    _operations = operation.then<void>((_) {}, onError: (Object _) {});
+    return operation;
+  }
+
+  void setMandatoryGroupExitHandler(
+    Future<bool> Function(int groupId) handler,
+  ) {
+    _leaveMandatoryGroup = handler;
+  }
+
+  void setMandatoryGroupLocationPrompt(
+    Future<MandatoryGroupLocationAction?> Function(int groupId) handler,
+  ) {
+    _promptMandatoryGroupLocationAction = handler;
+  }
+
+  Future<void> resetSessionState() async {
+    _sessionVersion++;
+    _sessionActive = false;
+    _restoring = null;
+    _syncingVersion = null;
+    final subscription = _socketSubscription;
+    _socketSubscription = null;
+    state = LocationState.initial();
+
+    try {
+      await _backgroundLocationService.stop();
+    } catch (error) {
+      debugPrint('No se pudo detener el tracking de ubicación: $error');
+    }
+    try {
+      await subscription?.cancel();
+    } catch (error) {
+      debugPrint('No se pudo cancelar la suscripción de ubicación: $error');
+    }
+    await _stopForegroundLocationStream();
+    try {
+      await _socketService.disconnect();
+    } catch (error) {
+      debugPrint('No se pudo cerrar el socket de ubicación: $error');
+    }
+  }
 
   @override
   LocationState build() {
@@ -82,53 +136,91 @@ class LocationProvider extends Notifier<LocationState> {
 
     _preferencesService = ref.read(appPreferencesProvider);
 
+    _backgroundLocationService = ref.read(backgroundLocationServiceProvider);
+    _backgroundLocationService.addLocationListener(_onBackgroundLocation);
+
     // Cuando la app vuelve a primer plano, re-chequeamos los permisos:
     // si el usuario los habilitó en Ajustes, el tracking se reanuda solo.
     _lifecycleListener = AppLifecycleListener(
+      onPause: () => unawaited(_stopForegroundLocationStream()),
       onResume: () => unawaited(_onAppResumed()),
     );
 
     ref.onDispose(() {
       _lifecycleListener.dispose();
 
-      _locationSubscription?.cancel();
-
       _socketSubscription?.cancel();
-
-      _heartbeatTimer?.cancel();
+      _foregroundLocationSubscription?.cancel();
+      _backgroundLocationService.removeLocationListener(_onBackgroundLocation);
     });
 
     return LocationState.initial();
   }
 
-  Future<void> restoreSharingAndTracking() async {
+  Future<void> restoreSharingAndTracking() {
+    _sessionActive = true;
+    final version = _sessionVersion;
+    return _restoring ??=
+        _enqueue(() async {
+          if (version != _sessionVersion) return;
+          await _restoreSharingAndTracking(version);
+        }).whenComplete(() {
+          if (version == _sessionVersion) _restoring = null;
+        });
+  }
+
+  Future<void> _restoreSharingAndTracking(int sessionVersion) async {
     state = state.copyWith(isLoading: true, clearError: true);
 
     try {
       await _restoreSavedPermissionStatus();
+      if (sessionVersion != _sessionVersion) return;
 
       final sharing = await _backendService.getSharing();
+      if (sessionVersion != _sessionVersion) return;
 
       state = state.copyWith(sharing: sharing);
 
       await _syncTracking(requestPermission: true);
     } catch (error) {
-      state = state.copyWith(errorMessage: _message(error));
+      if (sessionVersion == _sessionVersion) {
+        if (error is ApiException && error.isUnauthorized) {
+          await _stopTracking();
+        }
+        if (sessionVersion != _sessionVersion) return;
+        state = state.copyWith(errorMessage: _message(error));
+      }
     } finally {
-      state = state.copyWith(isLoading: false);
+      if (sessionVersion == _sessionVersion) {
+        state = state.copyWith(isLoading: false);
+      }
     }
   }
 
-  Future<bool> setGroupSharing(int groupId, bool enabled) async {
+  Future<bool> setGroupSharing(int groupId, bool enabled) {
+    final version = _sessionVersion;
+    return _enqueue(() async {
+      if (version != _sessionVersion) return false;
+      return _setGroupSharing(groupId, enabled, version);
+    });
+  }
+
+  Future<bool> _setGroupSharing(
+    int groupId,
+    bool enabled,
+    int sessionVersion,
+  ) async {
     state = state.copyWith(isLoading: true, clearError: true);
 
     try {
       if (enabled) {
         final permission = await _locationService.requestBackgroundPermission();
+        if (sessionVersion != _sessionVersion) return false;
 
         state = state.copyWith(permissionStatus: permission);
 
         await _persistPermission(permission);
+        if (sessionVersion != _sessionVersion) return false;
 
         if (permission != LocationPermissionStatus.always) {
           state = state.copyWith(errorMessage: _permissionMessage(permission));
@@ -148,6 +240,7 @@ class LocationProvider extends Notifier<LocationState> {
         groupId,
         enabled,
       );
+      if (sessionVersion != _sessionVersion) return false;
 
       final sharing = [...state.sharing];
 
@@ -161,19 +254,24 @@ class LocationProvider extends Notifier<LocationState> {
 
       state = state.copyWith(sharing: sharing);
 
-      await _syncTracking(requestPermission: false);
+      await _syncTracking();
 
       return true;
     } catch (error) {
-      state = state.copyWith(errorMessage: _message(error));
+      if (sessionVersion == _sessionVersion) {
+        state = state.copyWith(errorMessage: _message(error));
+      }
 
       return false;
     } finally {
-      state = state.copyWith(isLoading: false);
+      if (sessionVersion == _sessionVersion) {
+        state = state.copyWith(isLoading: false);
+      }
     }
   }
 
   Future<void> startViewingGroup(int groupId) async {
+    final sessionVersion = _sessionVersion;
     state = state.copyWith(
       isLoading: true,
       activeGroupId: groupId,
@@ -184,25 +282,58 @@ class LocationProvider extends Notifier<LocationState> {
     try {
       // Importante:
       // refrescar sharing al entrar al grupo.
-      final sharing = await _backendService.getSharing();
-
-      state = state.copyWith(sharing: sharing);
-
+      await _enqueue(() async {
+        if (sessionVersion != _sessionVersion) return;
+        final sharing = await _backendService.getSharing();
+        if (sessionVersion != _sessionVersion) return;
+        state = state.copyWith(sharing: sharing);
+        await _syncTracking(requestPermission: true);
+      });
+      if (sessionVersion != _sessionVersion ||
+          state.sharingForGroup(groupId) == null) {
+        return;
+      }
       final members = await _backendService.getGroupMembers(groupId);
+      if (sessionVersion != _sessionVersion) return;
 
       state = state.copyWith(
         visibleMembers: {for (final member in members) member.memberId: member},
       );
 
       await _socketSubscription?.cancel();
+      if (sessionVersion != _sessionVersion) return;
 
       _socketSubscription = _socketService.events.listen(_handleSocketEvent);
 
       await _socketService.connect(groupId);
     } catch (error) {
-      state = state.copyWith(errorMessage: _message(error));
+      if (sessionVersion == _sessionVersion) {
+        state = state.copyWith(errorMessage: _message(error));
+      }
     } finally {
-      state = state.copyWith(isLoading: false);
+      if (sessionVersion == _sessionVersion) {
+        state = state.copyWith(isLoading: false);
+      }
+    }
+  }
+
+  Future<void> refreshVisibleMembers() async {
+    final groupId = state.activeGroupId;
+    if (groupId == null) return;
+
+    final sessionVersion = _sessionVersion;
+    try {
+      final members = await _backendService.getGroupMembers(groupId);
+      if (sessionVersion != _sessionVersion || state.activeGroupId != groupId) {
+        return;
+      }
+      state = state.copyWith(
+        visibleMembers: {for (final member in members) member.memberId: member},
+      );
+    } catch (error) {
+      if (sessionVersion == _sessionVersion) {
+        state = state.copyWith(errorMessage: _message(error));
+      }
     }
   }
 
@@ -216,12 +347,45 @@ class LocationProvider extends Notifier<LocationState> {
     state = state.copyWith(visibleMembers: {}, clearActiveGroup: true);
   }
 
-  Future<void> _onAppResumed() async {
-    if (!state.hasEffectiveSharing) {
-      return;
-    }
+  Future<bool> get mayBeBatteryRestricted =>
+      _backgroundLocationService.mayBeBatteryRestricted;
 
-    await _syncTracking(requestPermission: true);
+  Future<void> openBatterySettings() async {
+    try {
+      await _backgroundLocationService.openBatterySettings();
+    } catch (error) {
+      state = state.copyWith(errorMessage: _message(error));
+    }
+  }
+
+  Future<bool> openPermissionSettings() => _locationService.openAppSettings();
+  Future<bool> openGpsSettings() => _locationService.openLocationSettings();
+
+  Future<void> _onAppResumed() async {
+    if (!_sessionActive) return;
+    await refreshAfterAppResume();
+  }
+
+  Future<void> refreshAfterAppResume() {
+    final sessionVersion = _sessionVersion;
+
+    return _enqueue(() async {
+      if (sessionVersion != _sessionVersion) return;
+
+      try {
+        final sharing = await _backendService.getSharing();
+        if (sessionVersion != _sessionVersion) return;
+        state = state.copyWith(sharing: sharing);
+      } catch (error) {
+        if (sessionVersion == _sessionVersion) {
+          state = state.copyWith(errorMessage: _message(error));
+        }
+      }
+
+      if (sessionVersion == _sessionVersion) {
+        await _syncTracking(requestPermission: false);
+      }
+    });
   }
 
   Future<LocationPermissionStatus> _resolvePermission({
@@ -232,15 +396,21 @@ class LocationProvider extends Notifier<LocationState> {
     final shouldRequest =
         requestIfNeeded &&
         (state.permissionStatus == LocationPermissionStatus.unknown ||
-            permission == LocationPermissionStatus.unknown);
+            permission == LocationPermissionStatus.unknown ||
+            (state.hasEffectiveSharing &&
+                permission == LocationPermissionStatus.whileInUse));
 
-    return shouldRequest
+    if (!shouldRequest) return permission;
+
+    return state.hasEffectiveSharing
         ? _locationService.requestBackgroundPermission()
-        : permission;
+        : _locationService.requestForegroundPermission();
   }
 
   Future<void> _restoreSavedPermissionStatus() async {
+    final sessionVersion = _sessionVersion;
     final saved = await _preferencesService.getLocationPermissionStatus();
+    if (sessionVersion != _sessionVersion) return;
 
     if (saved == null) {
       return;
@@ -264,129 +434,180 @@ class LocationProvider extends Notifier<LocationState> {
     await _preferencesService.saveLocationPermissionStatus(permission.name);
   }
 
-  Future<void> _syncTracking({required bool requestPermission}) async {
-    if (_syncing) {
+  Future<void> _syncTracking({bool requestPermission = false}) async {
+    if (_syncingVersion == _sessionVersion) {
       return;
     }
 
-    _syncing = true;
+    final sessionVersion = _sessionVersion;
+    _syncingVersion = sessionVersion;
 
     try {
-      if (!state.hasEffectiveSharing) {
-        await _stopTracking();
-        return;
-      }
-
       final permission = await _resolvePermission(
         requestIfNeeded: requestPermission,
       );
+      if (sessionVersion != _sessionVersion) return;
 
       if (state.permissionStatus != permission) {
         state = state.copyWith(permissionStatus: permission);
 
         await _persistPermission(permission);
+        if (sessionVersion != _sessionVersion) return;
       }
 
-      if (!shouldRunLocationTracking(state.sharing, permission)) {
+      final shouldTrack = shouldRunLocationTracking(state.sharing, permission);
+
+      if (!shouldTrack) {
         await _stopTracking();
+        if (sessionVersion != _sessionVersion) return;
 
-        state = state.copyWith(errorMessage: _permissionMessage(permission));
-
-        return;
-      }
-
-      if (state.isTracking) {
-        if (_heartbeatTimer?.isActive != true) {
-          _startHeartbeat();
+        if (state.hasEffectiveSharing) {
+          state = state.copyWith(errorMessage: _permissionMessage(permission));
+        } else {
+          state = state.copyWith(clearError: true);
         }
 
+        if (permission != LocationPermissionStatus.always) {
+          await _handleMandatoryGroupsWithoutPermission(
+            sessionVersion,
+            permission,
+          );
+        }
+
+        if (sessionVersion != _sessionVersion) return;
+
+        if (permission != LocationPermissionStatus.whileInUse &&
+            permission != LocationPermissionStatus.always) {
+          await _stopForegroundLocationStream();
+          state = state.copyWith(clearCurrentLocation: true);
+          return;
+        }
+
+        _startForegroundLocationStream();
+      } else {
+        await _stopForegroundLocationStream();
+        await _backgroundLocationService.ensureRunning();
+        if (sessionVersion != _sessionVersion) return;
+        state = state.copyWith(isTracking: true, clearError: true);
+      }
+
+      if (permission != LocationPermissionStatus.whileInUse &&
+          permission != LocationPermissionStatus.always) {
+        state = state.copyWith(clearCurrentLocation: true);
         return;
       }
 
-      await _publish(await _locationService.getCurrentLocation(), force: true);
-
-      _locationSubscription = _locationService.getLocationStream().listen(
-        (location) => _publish(location),
-
-        onError: (Object error) =>
-            state = state.copyWith(errorMessage: _message(error)),
-      );
-
-      state = state.copyWith(isTracking: true, clearError: true);
-
-      _startHeartbeat();
+      try {
+        final location = await _locationService.getCurrentLocation();
+        if (sessionVersion == _sessionVersion) {
+          state = state.copyWith(currentLocation: location);
+        }
+      } catch (_) {}
     } finally {
-      _syncing = false;
+      if (_syncingVersion == sessionVersion) _syncingVersion = null;
     }
   }
 
-  void _startHeartbeat() {
-    _heartbeatTimer?.cancel();
+  Future<void> _handleMandatoryGroupsWithoutPermission(
+    int sessionVersion,
+    LocationPermissionStatus permission,
+  ) async {
+    final prompt = _promptMandatoryGroupLocationAction;
+    if (prompt == null) return;
 
-    _heartbeatTimer = Timer.periodic(
-      LocationTrackingConfig.heartbeatInterval,
+    final mandatoryGroups = state.sharing
+        .where((item) => item.shareLocationMandatorily)
+        .toList(growable: false);
 
-      (_) => unawaited(_sendHeartbeat()),
-    );
-  }
+    for (final group in mandatoryGroups) {
+      if (sessionVersion != _sessionVersion) return;
+      if (state.sharingForGroup(group.groupId) == null) continue;
 
-  Future<void> _sendHeartbeat() async {
-    if (!state.isTracking || !state.hasEffectiveSharing) {
-      return;
-    }
+      final action = await prompt(group.groupId);
+      if (sessionVersion != _sessionVersion) return;
 
-    try {
-      await _backendService.sendHeartbeat();
-    } catch (_) {
-      // No mostramos un SnackBar cada minuto
-      // si el dispositivo pierde Internet.
-      // El siguiente heartbeat volverá a intentar.
+      if (action == MandatoryGroupLocationAction.activateLocation) {
+        try {
+          if (permission == LocationPermissionStatus.serviceDisabled) {
+            await _locationService.openLocationSettings();
+          } else {
+            await _locationService.openAppSettings();
+          }
+        } catch (error) {
+          state = state.copyWith(errorMessage: _message(error));
+        }
+        return;
+      }
+
+      if (action != MandatoryGroupLocationAction.leaveGroup) return;
+
+      final leaveHandler = _leaveMandatoryGroup;
+      if (leaveHandler == null) return;
+
+      final left = await leaveHandler(group.groupId);
+      if (sessionVersion != _sessionVersion) return;
+      if (!left) return;
+
+      state = state.copyWith(
+        sharing: state.sharing
+            .where((item) => item.groupId != group.groupId)
+            .toList(growable: false),
+      );
     }
   }
 
   Future<void> _stopTracking() async {
-    _heartbeatTimer?.cancel();
-
-    _heartbeatTimer = null;
-
-    await _locationSubscription?.cancel();
-
-    _locationSubscription = null;
-
-    state = state.copyWith(isTracking: false);
+    final version = _sessionVersion;
+    await _backgroundLocationService.stop();
+    if (version == _sessionVersion) state = state.copyWith(isTracking: false);
   }
 
-  Future<void> _publish(LocationModel location, {bool force = false}) async {
-    state = state.copyWith(currentLocation: location);
+  void _startForegroundLocationStream() {
+    if (_foregroundLocationSubscription != null) return;
 
-    final now = DateTime.now();
+    _foregroundLocationSubscription = _locationService
+        .getLocationStream()
+        .listen(_onForegroundLocation, onError: (_) {});
+  }
 
-    final enoughTime =
-        _lastPublishedAt == null ||
-        now.difference(_lastPublishedAt!) >=
-            LocationTrackingConfig.minimumPublishInterval;
+  Future<void> _stopForegroundLocationStream() async {
+    final subscription = _foregroundLocationSubscription;
+    _foregroundLocationSubscription = null;
+    await subscription?.cancel();
+  }
 
-    final enoughDistance =
-        _lastPublishedLocation == null ||
-        _locationService.distanceBetween(_lastPublishedLocation!, location) >=
-            LocationTrackingConfig.minimumPublishDistanceMeters;
-
-    if (!force && (!enoughTime || !enoughDistance)) {
+  void _onForegroundLocation(LocationModel location) {
+    if (state.isTracking ||
+        (state.permissionStatus != LocationPermissionStatus.whileInUse &&
+            state.permissionStatus != LocationPermissionStatus.always)) {
       return;
     }
+    state = state.copyWith(currentLocation: location);
+  }
 
-    try {
-      await _backendService.publishCurrentLocation(location);
-
-      _lastPublishedLocation = location;
-
-      _lastPublishedAt = now;
-    } catch (error) {
-      state = state.copyWith(errorMessage: _message(error));
+  void _onBackgroundLocation(LocationModel location) {
+    if (!state.hasEffectiveSharing ||
+        (state.permissionStatus != LocationPermissionStatus.whileInUse &&
+            state.permissionStatus != LocationPermissionStatus.always)) {
+      return;
     }
+    state = state.copyWith(currentLocation: location);
   }
 
   void _handleSocketEvent(LocationSocketEvent event) {
+    if (event is MemberVisibilityChanged) {
+      final visibleMembers = Map<int, MemberLocationModel>.of(
+        state.visibleMembers,
+      )..removeWhere((_, member) => member.userId == event.userId);
+      state = state.copyWith(visibleMembers: visibleMembers);
+      if (!event.isBlocked) unawaited(refreshVisibleMembers());
+      return;
+    }
+
+    if (event is PointOfInterestSocketEvent) {
+      return;
+    }
+
     final activeGroupId = state.activeGroupId;
 
     if (activeGroupId == null) {

@@ -9,9 +9,11 @@ class SettingsOption {
     required this.icon,
     required this.title,
     this.onTap,
+    this.isDestructive = false,
   });
 
   final IconData icon;
   final String title;
   final VoidCallback? onTap;
+  final bool isDestructive;
 }

@@ -4,25 +4,19 @@ sealed class LocationSocketEvent {
   const LocationSocketEvent();
 }
 
-class LocationSocketAuthenticated
-    extends LocationSocketEvent {
+class LocationSocketAuthenticated extends LocationSocketEvent {
   const LocationSocketAuthenticated();
 }
 
-class MemberLocationUpdated
-    extends LocationSocketEvent {
+class MemberLocationUpdated extends LocationSocketEvent {
   final int groupId;
 
   final MemberLocationModel member;
 
-  const MemberLocationUpdated({
-    required this.groupId,
-    required this.member,
-  });
+  const MemberLocationUpdated({required this.groupId, required this.member});
 }
 
-class MemberLocationRemoved
-    extends LocationSocketEvent {
+class MemberLocationRemoved extends LocationSocketEvent {
   final int groupId;
   final int memberId;
   final int userId;
@@ -34,8 +28,7 @@ class MemberLocationRemoved
   });
 }
 
-class MemberLocationHeartbeat
-    extends LocationSocketEvent {
+class MemberLocationHeartbeat extends LocationSocketEvent {
   final int groupId;
   final int memberId;
   final int userId;
@@ -47,4 +40,109 @@ class MemberLocationHeartbeat
     required this.userId,
     required this.lastSeenAt,
   });
+}
+
+class MemberVisibilityChanged extends LocationSocketEvent {
+  final int userId;
+  final bool isBlocked;
+
+  const MemberVisibilityChanged({
+    required this.userId,
+    required this.isBlocked,
+  });
+}
+
+class GroupDeleted extends LocationSocketEvent {
+  final int groupId;
+
+  const GroupDeleted({required this.groupId});
+}
+
+class MemberLeft extends LocationSocketEvent {
+  final int groupId;
+  final int memberId;
+  final int userId;
+
+  const MemberLeft({
+    required this.groupId,
+    required this.memberId,
+    required this.userId,
+  });
+}
+
+sealed class PointOfInterestSocketEvent extends LocationSocketEvent {
+  final int groupId;
+  final int pointOfInterestId;
+
+  const PointOfInterestSocketEvent({
+    required this.groupId,
+    required this.pointOfInterestId,
+  });
+}
+
+class PointOfInterestCreated extends PointOfInterestSocketEvent {
+  const PointOfInterestCreated({
+    required super.groupId,
+    required super.pointOfInterestId,
+  });
+}
+
+class PointOfInterestUpdated extends PointOfInterestSocketEvent {
+  const PointOfInterestUpdated({
+    required super.groupId,
+    required super.pointOfInterestId,
+  });
+}
+
+class PointOfInterestDeleted extends PointOfInterestSocketEvent {
+  const PointOfInterestDeleted({
+    required super.groupId,
+    required super.pointOfInterestId,
+  });
+}
+
+LocationSocketEvent? parseLocationSocketEvent(
+  String event,
+  Map<String, dynamic> data,
+) {
+  return switch (event) {
+    'memberLocationUpdated' => MemberLocationUpdated(
+      groupId: data['groupId'] as int,
+      member: MemberLocationModel.fromJson(data),
+    ),
+    'memberLocationRemoved' => MemberLocationRemoved(
+      groupId: data['groupId'] as int,
+      memberId: data['memberId'] as int,
+      userId: data['userId'] as int,
+    ),
+    'memberLocationHeartbeat' => MemberLocationHeartbeat(
+      groupId: data['groupId'] as int,
+      memberId: data['memberId'] as int,
+      userId: data['userId'] as int,
+      lastSeenAt: DateTime.parse(data['lastSeenAt'] as String),
+    ),
+    'memberVisibilityChanged' => MemberVisibilityChanged(
+      userId: data['userId'] as int,
+      isBlocked: data['isBlocked'] as bool,
+    ),
+    'groupDeleted' => GroupDeleted(groupId: data['groupId'] as int),
+    'memberLeft' => MemberLeft(
+      groupId: data['groupId'] as int,
+      memberId: data['memberId'] as int,
+      userId: data['userId'] as int,
+    ),
+    'pointOfInterestCreated' => PointOfInterestCreated(
+      groupId: data['groupId'] as int,
+      pointOfInterestId: data['pointOfInterestId'] as int,
+    ),
+    'pointOfInterestUpdated' => PointOfInterestUpdated(
+      groupId: data['groupId'] as int,
+      pointOfInterestId: data['pointOfInterestId'] as int,
+    ),
+    'pointOfInterestDeleted' => PointOfInterestDeleted(
+      groupId: data['groupId'] as int,
+      pointOfInterestId: data['pointOfInterestId'] as int,
+    ),
+    _ => null,
+  };
 }

@@ -1,14 +1,30 @@
 class AppRoutes {
+  static const notifications = '/notifications';
+  static const inbox = '/notifications/inbox';
   const AppRoutes._();
 
   static const String splash = '/';
   static const String login = '/login';
   static const String register = '/register';
+  static const String emailVerificationRequired =
+      '/email-verification-required';
   static const String groups = '/groups';
   static const String map = '/map';
   static const String settings = '/settings';
   static const String editProfile = '/edit-profile';
+  static const String changePassword = '/change-password';
   static const String joinGroup = '/groups/join-group';
   static const String createGroup = '/groups/create-group';
   static const String updateGroup = '/groups/update-group';
+  static const String events = '/events';
+  static const String createEvent = '/events/create-event';
+  static const String expenseAccounts = '/expense-accounts';
+  static const String createExpenseAccount =
+      '/expense-accounts/create-expense-account';
+  static const String editExpenseAccount = '/expense-accounts/edit';
+  static const String expenseAccountDetail = '/expense-accounts/detail';
+  static const String expenseAccountBalance = '/expense-accounts/balance';
+  static const String expenseAccountMovements = '/expense-accounts/movements';
+  static const String expenseAccountPayments = '/expense-accounts/payments';
+  static const String createExpense = '/expense-accounts/create-expense';
 }

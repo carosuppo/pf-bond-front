@@ -1,16 +1,32 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 
+import '../../features/auth/screens/change_password_screen.dart';
+import '../../features/auth/screens/email_verification_required_screen.dart';
 import '../../features/auth/screens/login_screen.dart';
 import '../../features/auth/screens/register_screen.dart';
+import '../../features/event/screens/create_event_screen.dart';
+import '../../features/expense_account/screens/create_expense_account_screen.dart';
+import '../../features/expense_account/screens/create_expense_screen.dart';
+import '../../features/expense_account/screens/expense_account_balance_screen.dart';
+import '../../features/expense_account/screens/expense_account_detail_screen.dart';
+import '../../features/expense_account/screens/expense_account_movements_screen.dart';
+import '../../features/expense_account/screens/expense_account_payments_screen.dart';
+import '../../features/expense_account/screens/edit_expense_account_screen.dart';
+import '../../features/expense_account/models/expense_account_detail_model.response.dart';
 import '../../features/group/models/get_group_model.response.dart';
 import '../../features/group/screens/create_group_screen.dart';
 import '../../features/group/screens/edit_group_screen.dart';
 import '../../features/group/screens/groups_screen.dart';
 import '../../features/group/screens/join_group_screen.dart';
-import '../../features/location/screens/map_screen.dart';
+import '../../features/notification/providers/notification_preferences_provider.dart';
+import '../../features/notification/screens/group_inbox_screen.dart';
+import '../../features/notification/screens/notification_preferences_screen.dart';
+import '../../features/notification/services/notification_api_service.dart';
 import '../../features/profile/screens/edit_profile_screen.dart';
-import '../../features/settings/screens/settings_screen.dart';
+import '../screens/app_shell.dart';
 import '../screens/splash_screen.dart';
+import '../widgets/app_bottom_nav_bar.dart';
 import 'app_routes.dart';
 
 class AppRouter {
@@ -30,6 +46,14 @@ class AppRouter {
           settings: settings,
         );
 
+      case AppRoutes.emailVerificationRequired:
+        return MaterialPageRoute(
+          builder: (_) => EmailVerificationRequiredScreen(
+            email: settings.arguments as String,
+          ),
+          settings: settings,
+        );
+
       case AppRoutes.register:
         return MaterialPageRoute(
           builder: (_) => const RegisterScreen(),
@@ -44,19 +68,43 @@ class AppRouter {
 
       case AppRoutes.map:
         return MaterialPageRoute(
-          builder: (_) => const MapScreen(),
+          builder: (_) => const AppShell(),
+          settings: settings,
+        );
+
+      case AppRoutes.notifications:
+        return MaterialPageRoute(
+          builder: (context) => ChangeNotifierProvider(
+            create: (context) => NotificationPreferencesProvider(
+              context.read<NotificationApiService>(),
+            )..load(),
+            child: const NotificationPreferencesScreen(),
+          ),
+          settings: settings,
+        );
+
+      case AppRoutes.inbox:
+        return MaterialPageRoute(
+          builder: (_) => const GroupInboxScreen(),
           settings: settings,
         );
 
       case AppRoutes.settings:
         return MaterialPageRoute(
-          builder: (_) => const SettingsScreen(),
+          builder: (_) =>
+              const AppShell(initialDestination: AppBottomDestination.settings),
           settings: settings,
         );
 
       case AppRoutes.editProfile:
         return MaterialPageRoute(
           builder: (_) => const EditProfileScreen(),
+          settings: settings,
+        );
+
+      case AppRoutes.changePassword:
+        return MaterialPageRoute(
+          builder: (_) => const ChangePasswordScreen(),
           settings: settings,
         );
 
@@ -80,6 +128,96 @@ class AppRouter {
             group: args['group'] as GetGroupResponseModel,
             isCurrentUserAdmin: args['isCurrentUserAdmin'] as bool,
           ),
+        );
+
+      case AppRoutes.events:
+        return MaterialPageRoute(
+          builder: (_) =>
+              const AppShell(initialDestination: AppBottomDestination.events),
+          settings: settings,
+        );
+
+      case AppRoutes.createEvent:
+        return MaterialPageRoute(
+          builder: (_) => const CreateEventScreen(),
+          settings: settings,
+        );
+
+      case AppRoutes.expenseAccounts:
+        return MaterialPageRoute(
+          builder: (_) => const AppShell(
+            initialDestination: AppBottomDestination.expenseAccounts,
+          ),
+          settings: settings,
+        );
+
+      case AppRoutes.createExpenseAccount:
+        return MaterialPageRoute(
+          builder: (_) => const CreateExpenseAccountScreen(),
+          settings: settings,
+        );
+
+      case AppRoutes.expenseAccountDetail:
+        final detailArgs = settings.arguments as Map<String, dynamic>;
+
+        return MaterialPageRoute(
+          builder: (_) => ExpenseAccountDetailScreen(
+            accountId: detailArgs['accountId'] as int,
+          ),
+          settings: settings,
+        );
+
+      case AppRoutes.expenseAccountBalance:
+        final balanceArgs = settings.arguments as Map<String, dynamic>;
+
+        return MaterialPageRoute(
+          builder: (_) => ExpenseAccountBalanceScreen(
+            accountId: balanceArgs['accountId'] as int,
+          ),
+          settings: settings,
+        );
+
+      case AppRoutes.expenseAccountMovements:
+        final movementsArgs = settings.arguments as Map<String, dynamic>;
+
+        return MaterialPageRoute(
+          builder: (_) => ExpenseAccountMovementsScreen(
+            accountId: movementsArgs['accountId'] as int,
+          ),
+          settings: settings,
+        );
+
+      case AppRoutes.editExpenseAccount:
+        final editArgs = settings.arguments as Map<String, dynamic>;
+
+        return MaterialPageRoute(
+          builder: (_) =>
+              EditExpenseAccountScreen(accountId: editArgs['accountId'] as int),
+          settings: settings,
+        );
+
+      case AppRoutes.expenseAccountPayments:
+        final paymentArgs = settings.arguments as Map<String, dynamic>;
+
+        return MaterialPageRoute(
+          builder: (_) => ExpenseAccountPaymentsScreen(
+            accountId: paymentArgs['accountId'] as int,
+            groupId: paymentArgs['groupId'] as int,
+          ),
+          settings: settings,
+        );
+
+      case AppRoutes.createExpense:
+        final expenseArgs = settings.arguments as Map<String, dynamic>;
+
+        return MaterialPageRoute(
+          builder: (_) => CreateExpenseScreen(
+            accountId: expenseArgs['accountId'] as int,
+            expense: expenseArgs['expense'] as AccountMovementModel?,
+            hasConfirmedPayments:
+                expenseArgs['hasConfirmedPayments'] as bool? ?? false,
+          ),
+          settings: settings,
         );
 
       default:

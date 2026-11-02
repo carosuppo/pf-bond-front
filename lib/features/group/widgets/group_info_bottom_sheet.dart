@@ -5,53 +5,129 @@ import 'package:provider/provider.dart';
 import '../../../core/routes/app_routes.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/widgets/buttons/app_primary_button.dart';
+import '../../../core/widgets/user_avatar.dart';
 import '../../auth/providers/auth_provider.dart';
+import '../../profile/widgets/profile_photo_editor.dart';
 import '../formatters/invitation_code_formatter.dart';
 import '../models/get_group_model.response.dart';
 import '../models/get_member_model.response.dart';
 import '../providers/group_provider.dart';
+import '../services/group_invitation_share_service.dart';
 
-class GroupInfoBottomSheet extends StatelessWidget {
+class GroupInfoBottomSheet extends StatefulWidget {
   final GetGroupResponseModel group;
   final ScrollController scrollController;
+  final Widget? bottomContent;
+  final bool showMembersSection;
 
   const GroupInfoBottomSheet({
     super.key,
     required this.group,
     required this.scrollController,
+    this.bottomContent,
+    this.showMembersSection = true,
   });
+
+  @override
+  State<GroupInfoBottomSheet> createState() => _GroupInfoBottomSheetState();
+}
+
+class _GroupInfoBottomSheetState extends State<GroupInfoBottomSheet> {
+  Future<void> _shareViaWhatsApp(
+    BuildContext context,
+    GetGroupResponseModel displayedGroup,
+  ) async {
+    try {
+      await context.read<GroupInvitationShareService>().shareViaWhatsApp(
+        groupName: displayedGroup.name,
+        invitationCode: displayedGroup.invitationCode,
+      );
+    } catch (_) {
+      if (!context.mounted) {
+        return;
+      }
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'No se pudo compartir. Podés copiar el código manualmente.',
+          ),
+        ),
+      );
+    }
+  }
+
+  Future<void> _openImageEditor(GetGroupResponseModel group) async {
+    await showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: AppColors.cardColor,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      builder: (_) => Consumer<GroupProvider>(
+        builder: (context, provider, child) {
+          return PhotoEditorModal(
+            title: 'Editar imagen del grupo',
+            name: group.name,
+            currentPhotoUrl: group.image,
+            selectedPhoto: provider.selectedGroupImage,
+            isSaving: provider.isSavingGroupImage,
+            errorMessage: provider.errorMessage,
+            selectionDescription: 'Elegí una imagen para personalizar tu grupo',
+            onGallery: provider.pickGroupImageFromGallery,
+            onCamera: provider.pickGroupImageFromCamera,
+            onConfirm: () => provider.saveGroupImage(
+              groupId: group.id,
+              isCurrentUserAdmin: true,
+            ),
+            onCancel: provider.clearSelectedGroupImage,
+          );
+        },
+      ),
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
     final authProvider = context.watch<AuthProvider>();
     final groupProvider = context.watch<GroupProvider>();
-    final displayedGroup = groupProvider.groupDetails?.id == group.id
+    final displayedGroup = groupProvider.groupDetails?.id == widget.group.id
         ? groupProvider.groupDetails!
-        : group;
+        : widget.group;
     final isCurrentUserAdmin = displayedGroup.members.any(
       (member) =>
           member.idUser == authProvider.authResponse?.user.id &&
           member.role == RoleEnum.admin,
+    );
+    final isCurrentUserMember = displayedGroup.members.any(
+      (member) => member.idUser == authProvider.authResponse?.user.id,
     );
     final adminCount = displayedGroup.members
         .where((member) => member.role == RoleEnum.admin)
         .length;
 
     return SafeArea(
+      top: false,
       child: SingleChildScrollView(
-        controller: scrollController,
-        padding: const EdgeInsets.fromLTRB(20, 12, 20, 80),
+        controller: widget.scrollController,
+        padding: const EdgeInsets.fromLTRB(20, 0, 20, 80),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const SizedBox(height: 24),
+            _GroupImage(
+              name: displayedGroup.name,
+              imageUrl: displayedGroup.image,
+              canEdit: isCurrentUserAdmin,
+              onEdit: () => _openImageEditor(displayedGroup),
+            ),
+            const SizedBox(height: 16),
             Center(
               child: Text(
                 displayedGroup.name,
                 textAlign: TextAlign.center,
                 style: const TextStyle(
                   color: AppColors.text,
-                  fontSize: 24,
+                  fontSize: 25,
                   fontWeight: FontWeight.w600,
                 ),
               ),
@@ -119,6 +195,16 @@ class GroupInfoBottomSheet extends StatelessWidget {
                       ),
                     ],
                   ),
+                  const SizedBox(height: 12),
+                  SizedBox(
+                    width: double.infinity,
+                    child: OutlinedButton.icon(
+                      onPressed: () =>
+                          _shareViaWhatsApp(context, displayedGroup),
+                      icon: const Icon(Icons.share_rounded),
+                      label: const Text('Invitar por WhatsApp'),
+                    ),
+                  ),
                 ],
               ),
             ),
@@ -131,7 +217,7 @@ class GroupInfoBottomSheet extends StatelessWidget {
                     width: 42,
                     height: 42,
                     decoration: BoxDecoration(
-                      color: AppColors.fieldColor,
+                      color: AppColors.surface,
                       borderRadius: BorderRadius.circular(12),
                     ),
                     child: Icon(
@@ -190,70 +276,420 @@ class GroupInfoBottomSheet extends StatelessWidget {
               ),
             ],
 
-            const SizedBox(height: 28),
-            Row(
-              children: [
-                const Icon(
-                  Icons.group_rounded,
-                  color: AppColors.primary,
-                  size: 22,
-                ),
-                const SizedBox(width: 8),
-                const Text(
-                  'Miembros',
-                  style: TextStyle(
-                    color: AppColors.text,
-                    fontSize: 19,
-                    fontWeight: FontWeight.w600,
+            if (widget.showMembersSection) ...[
+              const SizedBox(height: 28),
+              Row(
+                children: [
+                  const Icon(
+                    Icons.group_rounded,
+                    color: AppColors.primary,
+                    size: 22,
                   ),
-                ),
-                const SizedBox(width: 8),
-                Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 8,
-                    vertical: 3,
-                  ),
-                  decoration: BoxDecoration(
-                    color: AppColors.fieldColor,
-                    borderRadius: BorderRadius.circular(10),
-                  ),
-                  child: Text(
-                    '${displayedGroup.members.length}',
-                    style: const TextStyle(
-                      color: AppColors.mutedText,
-                      fontSize: 12,
+                  const SizedBox(width: 8),
+                  const Text(
+                    'Miembros',
+                    style: TextStyle(
+                      color: AppColors.text,
+                      fontSize: 19,
                       fontWeight: FontWeight.w600,
                     ),
                   ),
-                ),
-              ],
-            ),
-
-            const SizedBox(height: 12),
-            _GroupSectionCard(
-              padding: EdgeInsets.zero,
-              child: Column(
-                children: [
-                  for (int i = 0; i < displayedGroup.members.length; i++) ...[
-                    _MemberListItem(
-                      member: displayedGroup.members[i],
-                      isCurrentUser:
-                          displayedGroup.members[i].idUser ==
-                          authProvider.authResponse?.user.id,
-                      isCurrentUserAdmin: isCurrentUserAdmin,
-                      isOnlyAdmin: adminCount == 1,
-                      isLoading: groupProvider.isLoading,
+                  const SizedBox(width: 8),
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 8,
+                      vertical: 3,
                     ),
-                    if (i < displayedGroup.members.length - 1)
-                      const Divider(height: 1, color: AppColors.divider),
-                  ],
+                    decoration: BoxDecoration(
+                      color: AppColors.cardColor,
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    child: Text(
+                      '${displayedGroup.members.length}',
+                      style: const TextStyle(
+                        color: AppColors.mutedText,
+                        fontSize: 12,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ),
                 ],
               ),
-            ),
+              const SizedBox(height: 12),
+              _GroupSectionCard(
+                padding: EdgeInsets.zero,
+                child: Column(
+                  children: [
+                    for (int i = 0; i < displayedGroup.members.length; i++) ...[
+                      _MemberListItem(
+                        member: displayedGroup.members[i],
+                        isCurrentUser:
+                            displayedGroup.members[i].idUser ==
+                            authProvider.authResponse?.user.id,
+                        isCurrentUserAdmin: isCurrentUserAdmin,
+                        isOnlyAdmin: adminCount == 1,
+                        isLoading: groupProvider.isLoading,
+                      ),
+                      if (i < displayedGroup.members.length - 1)
+                        const Divider(height: 1, color: AppColors.fieldColor),
+                    ],
+                  ],
+                ),
+              ),
+              if (isCurrentUserMember) ...[
+                const SizedBox(height: 12),
+                _LeaveGroupButton(
+                  group: displayedGroup,
+                  isLoading: groupProvider.isLoading,
+                ),
+              ],
+            ],
+            if (widget.bottomContent != null) ...[
+              const SizedBox(height: 24),
+              widget.bottomContent!,
+            ],
+            if (isCurrentUserAdmin) ...[
+              const SizedBox(height: 24),
+              SizedBox(
+                width: double.infinity,
+                child: OutlinedButton.icon(
+                  key: const Key('delete-group-button'),
+                  onPressed: groupProvider.isLoading
+                      ? null
+                      : () => _confirmDelete(
+                          context,
+                          displayedGroup,
+                          isCurrentUserAdmin,
+                        ),
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: AppColors.error,
+                    side: const BorderSide(color: AppColors.error),
+                  ),
+                  icon: const Icon(Icons.delete_outline_rounded),
+                  label: const Text('Eliminar grupo'),
+                ),
+              ),
+            ],
           ],
         ),
       ),
     );
+  }
+
+  Future<void> _confirmDelete(
+    BuildContext context,
+    GetGroupResponseModel group,
+    bool isCurrentUserAdmin,
+  ) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Eliminar grupo'),
+        content: Text(
+          '¿Querés eliminar "${group.name}"? Se removerá a todos sus miembros y esta acción es definitiva.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(false),
+            child: const Text('Cancelar'),
+          ),
+          FilledButton(
+            style: FilledButton.styleFrom(backgroundColor: AppColors.error),
+            onPressed: () => Navigator.of(dialogContext).pop(true),
+            child: const Text('Eliminar'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed != true || !context.mounted) {
+      return;
+    }
+
+    final groupProvider = context.read<GroupProvider>();
+    final scaffoldMessenger = ScaffoldMessenger.of(context);
+    final success = await groupProvider.deleteGroup(
+      groupId: group.id,
+      isCurrentUserAdmin: isCurrentUserAdmin,
+    );
+
+    if (success) {
+      scaffoldMessenger
+        ..hideCurrentSnackBar()
+        ..showSnackBar(
+          const SnackBar(content: Text('Grupo eliminado correctamente.')),
+        );
+      return;
+    }
+
+    if (!context.mounted) {
+      return;
+    }
+
+    scaffoldMessenger
+      ..hideCurrentSnackBar()
+      ..showSnackBar(
+        SnackBar(
+          content: Text(
+            groupProvider.errorMessage ?? 'No se pudo eliminar el grupo.',
+          ),
+        ),
+      );
+  }
+}
+
+Future<void> _confirmLeaveGroup(
+  BuildContext context,
+  GetGroupResponseModel group,
+) async {
+  final isOnlyMember = group.members.length == 1;
+  final confirmed = await showDialog<bool>(
+    context: context,
+    builder: (dialogContext) => AlertDialog(
+      title: const Text('Abandonar grupo'),
+      content: Text(
+        isOnlyMember
+            ? 'Sos el único miembro. Si abandonás "${group.name}", el grupo y su información se eliminarán automáticamente y su código de invitación dejará de ser válido.'
+            : '¿Querés abandonar "${group.name}"? Dejarás de tener acceso a su información y funcionalidades.',
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.of(dialogContext).pop(false),
+          child: const Text('Cancelar'),
+        ),
+        FilledButton(
+          style: FilledButton.styleFrom(backgroundColor: AppColors.error),
+          onPressed: () => Navigator.of(dialogContext).pop(true),
+          child: const Text('Abandonar'),
+        ),
+      ],
+    ),
+  );
+
+  if (confirmed != true || !context.mounted) {
+    return;
+  }
+
+  final groupProvider = context.read<GroupProvider>();
+  final scaffoldMessenger = ScaffoldMessenger.of(context);
+  final success = await groupProvider.leaveGroup(group.id);
+
+  if (!context.mounted) {
+    return;
+  }
+
+  scaffoldMessenger
+    ..hideCurrentSnackBar()
+    ..showSnackBar(
+      SnackBar(
+        content: Text(
+          success
+              ? 'Abandonaste el grupo.'
+              : groupProvider.errorMessage ?? 'No se pudo abandonar el grupo.',
+        ),
+      ),
+    );
+}
+
+class _GroupImage extends StatelessWidget {
+  final String name;
+  final String? imageUrl;
+  final bool canEdit;
+  final VoidCallback onEdit;
+
+  const _GroupImage({
+    required this.name,
+    required this.imageUrl,
+    required this.canEdit,
+    required this.onEdit,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final image = imageUrl?.trim();
+    final avatar = image == null || image.isEmpty
+        ? CircleAvatar(
+            radius: 54,
+            backgroundColor: AppColors.primary,
+            child: Text(
+              name.isEmpty ? '?' : name[0].toUpperCase(),
+              style: const TextStyle(
+                color: AppColors.onPrimary,
+                fontSize: 38,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+          )
+        : ClipOval(
+            child: Image.network(
+              image,
+              width: 108,
+              height: 108,
+              fit: BoxFit.cover,
+              errorBuilder: (context, error, stackTrace) => CircleAvatar(
+                radius: 54,
+                backgroundColor: AppColors.primary,
+                child: const Icon(
+                  Icons.groups_rounded,
+                  color: AppColors.onPrimary,
+                  size: 42,
+                ),
+              ),
+            ),
+          );
+
+    return Center(
+      child: Stack(
+        clipBehavior: Clip.none,
+        children: [
+          avatar,
+          if (canEdit)
+            Positioned(
+              right: -2,
+              bottom: -2,
+              child: PhotoEditButton(
+                onPressed: onEdit,
+                tooltip: 'Editar imagen del grupo',
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+}
+
+class GroupMembersBottomSheet extends StatelessWidget {
+  final GetGroupResponseModel group;
+  final ScrollController scrollController;
+
+  const GroupMembersBottomSheet({
+    super.key,
+    required this.group,
+    required this.scrollController,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final authProvider = context.watch<AuthProvider>();
+    final groupProvider = context.watch<GroupProvider>();
+    final displayedGroup = groupProvider.groupDetails?.id == group.id
+        ? groupProvider.groupDetails!
+        : group;
+    final isCurrentUserAdmin = displayedGroup.members.any(
+      (member) =>
+          member.idUser == authProvider.authResponse?.user.id &&
+          member.role == RoleEnum.admin,
+    );
+    final isCurrentUserMember = displayedGroup.members.any(
+      (member) => member.idUser == authProvider.authResponse?.user.id,
+    );
+    final adminCount = displayedGroup.members
+        .where((member) => member.role == RoleEnum.admin)
+        .length;
+
+    return SafeArea(
+      child: SingleChildScrollView(
+        controller: scrollController,
+        padding: const EdgeInsets.fromLTRB(20, 12, 20, 80),
+        child: LayoutBuilder(
+          builder: (context, constraints) {
+            final cardWidth = (constraints.maxWidth - 12) / 2;
+
+            return Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Wrap(
+                  alignment: WrapAlignment.center,
+                  spacing: 12,
+                  runSpacing: 12,
+                  children: [
+                    for (final member in displayedGroup.members)
+                      SizedBox(
+                        width: cardWidth,
+                        height: 170,
+                        child: _MemberListItem(
+                          member: member,
+                          isCurrentUser:
+                              member.idUser ==
+                              authProvider.authResponse?.user.id,
+                          isCurrentUserAdmin: isCurrentUserAdmin,
+                          isOnlyAdmin: adminCount == 1,
+                          isLoading: groupProvider.isLoading,
+                          onRemove:
+                              isCurrentUserAdmin &&
+                                  member.idUser !=
+                                      authProvider.authResponse?.user.id
+                              ? () => _confirmRemove(
+                                  context,
+                                  member.name,
+                                  member.id,
+                                  isCurrentUserAdmin,
+                                )
+                              : null,
+                        ),
+                      ),
+                  ],
+                ),
+                if (isCurrentUserMember) ...[
+                  const SizedBox(height: 16),
+                  _LeaveGroupButton(
+                    group: displayedGroup,
+                    isLoading: groupProvider.isLoading,
+                  ),
+                ],
+              ],
+            );
+          },
+        ),
+      ),
+    );
+  }
+
+  Future<void> _confirmRemove(
+    BuildContext context,
+    String memberName,
+    int memberId,
+    bool isCurrentUserAdmin,
+  ) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Expulsar miembro'),
+        content: Text('¿Querés expulsar a $memberName del grupo?'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(false),
+            child: const Text('Cancelar'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(dialogContext).pop(true),
+            child: const Text('Expulsar'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed != true || !context.mounted) {
+      return;
+    }
+
+    final groupProvider = context.read<GroupProvider>();
+    final success = await groupProvider.removeMember(
+      memberId: memberId,
+      isCurrentUserAdmin: isCurrentUserAdmin,
+    );
+
+    if (!context.mounted) {
+      return;
+    }
+
+    final message = success
+        ? 'Miembro expulsado correctamente.'
+        : groupProvider.errorMessage ?? 'No se pudo expulsar al miembro.';
+
+    ScaffoldMessenger.of(context)
+      ..hideCurrentSnackBar()
+      ..showSnackBar(SnackBar(content: Text(message)));
   }
 }
 
@@ -281,12 +717,38 @@ class _GroupSectionCard extends StatelessWidget {
   }
 }
 
+class _LeaveGroupButton extends StatelessWidget {
+  final GetGroupResponseModel group;
+  final bool isLoading;
+
+  const _LeaveGroupButton({required this.group, required this.isLoading});
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      width: double.infinity,
+      child: OutlinedButton.icon(
+        key: const Key('leave-group-button'),
+        onPressed: isLoading ? null : () => _confirmLeaveGroup(context, group),
+        style: OutlinedButton.styleFrom(
+          foregroundColor: Colors.white,
+          backgroundColor: AppColors.error,
+          side: const BorderSide(color: AppColors.error),
+        ),
+        icon: const Icon(Icons.exit_to_app_rounded),
+        label: const Text('Abandonar grupo'),
+      ),
+    );
+  }
+}
+
 class _MemberListItem extends StatelessWidget {
   final GetMemberResponseModel member;
   final bool isCurrentUser;
   final bool isCurrentUserAdmin;
   final bool isOnlyAdmin;
   final bool isLoading;
+  final VoidCallback? onRemove;
 
   const _MemberListItem({
     required this.member,
@@ -294,50 +756,63 @@ class _MemberListItem extends StatelessWidget {
     required this.isCurrentUserAdmin,
     required this.isOnlyAdmin,
     required this.isLoading,
+    this.onRemove,
   });
 
   @override
   Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-      child: Row(
+    return Card(
+      margin: EdgeInsets.zero,
+      child: Stack(
         children: [
-          Container(
-            width: 40,
-            height: 40,
-            decoration: BoxDecoration(
-              color: AppColors.fieldColor,
-              shape: BoxShape.circle,
-            ),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(12, 12, 12, 10),
             child: Center(
-              child: Text(
-                member.name.isNotEmpty ? member.name[0].toUpperCase() : '?',
-                style: const TextStyle(
-                  color: AppColors.primary,
-                  fontSize: 16,
-                  fontWeight: FontWeight.w600,
+              child: SizedBox(
+                width: double.infinity,
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  crossAxisAlignment: CrossAxisAlignment.center,
+                  children: [
+                    UserAvatar(
+                      name: member.name,
+                      photoUrl: member.profilePhoto,
+                      radius: 30,
+                    ),
+                    const SizedBox(height: 6),
+                    Text(
+                      member.name,
+                      textAlign: TextAlign.center,
+                      style: const TextStyle(
+                        color: AppColors.text,
+                        fontSize: 16,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                    const SizedBox(height: 6),
+                    _MemberRoleSelector(
+                      member: member,
+                      isCurrentUser: isCurrentUser,
+                      isCurrentUserAdmin: isCurrentUserAdmin,
+                      isOnlyAdmin: isOnlyAdmin,
+                      isLoading: isLoading,
+                    ),
+                  ],
                 ),
               ),
             ),
           ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Text(
-              member.name,
-              style: const TextStyle(
-                color: AppColors.text,
-                fontSize: 15,
-                fontWeight: FontWeight.w500,
+          if (onRemove != null)
+            Positioned(
+              top: 2,
+              right: 2,
+              child: IconButton(
+                tooltip: 'Expulsar miembro',
+                onPressed: isLoading ? null : onRemove,
+                color: AppColors.error,
+                icon: const Icon(Icons.person_remove_outlined),
               ),
             ),
-          ),
-          _MemberRoleSelector(
-            member: member,
-            isCurrentUser: isCurrentUser,
-            isCurrentUserAdmin: isCurrentUserAdmin,
-            isOnlyAdmin: isOnlyAdmin,
-            isLoading: isLoading,
-          ),
         ],
       ),
     );
@@ -486,7 +961,7 @@ class _RoleBadge extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 5),
       decoration: BoxDecoration(
-        color: AppColors.fieldColor,
+        color: AppColors.surface,
         borderRadius: BorderRadius.circular(10),
         border: Border.all(color: AppColors.border),
       ),

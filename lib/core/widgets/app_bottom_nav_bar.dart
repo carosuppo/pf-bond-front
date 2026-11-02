@@ -1,22 +1,16 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 
-import '../routes/app_routes.dart';
+import '../../features/auth/providers/auth_provider.dart';
 import '../theme/app_colors.dart';
+import 'user_avatar.dart';
 
-enum AppBottomDestination { map, settings }
-
-extension AppBottomDestinationRoute on AppBottomDestination {
-  String get route => switch (this) {
-    AppBottomDestination.map => AppRoutes.map,
-    AppBottomDestination.settings => AppRoutes.settings,
-  };
-}
-
-void navigateToAppDestination(
-  BuildContext context,
-  AppBottomDestination destination,
-) {
-  Navigator.of(context).pushReplacementNamed(destination.route);
+enum AppBottomDestination {
+  map,
+  events,
+  expenseAccounts,
+  documentation,
+  settings,
 }
 
 class _BottomNavItem {
@@ -43,14 +37,32 @@ class AppBottomNavBar extends StatelessWidget {
   static const _items = [
     _BottomNavItem(
       destination: AppBottomDestination.map,
-      icon: Icons.location_on_outlined,
-      selectedIcon: Icons.location_on,
+      icon: Icons.person_pin_circle_outlined,
+      selectedIcon: Icons.person_pin_circle_rounded,
       tooltip: 'Ubicación',
     ),
     _BottomNavItem(
+      destination: AppBottomDestination.events,
+      icon: Icons.event_outlined,
+      selectedIcon: Icons.event_rounded,
+      tooltip: 'Eventos',
+    ),
+    _BottomNavItem(
+      destination: AppBottomDestination.expenseAccounts,
+      icon: Icons.account_balance_wallet_outlined,
+      selectedIcon: Icons.account_balance_wallet_rounded,
+      tooltip: 'Cuentas',
+    ),
+    _BottomNavItem(
+      destination: AppBottomDestination.documentation,
+      icon: Icons.folder_outlined,
+      selectedIcon: Icons.folder_rounded,
+      tooltip: 'Documentación',
+    ),
+    _BottomNavItem(
       destination: AppBottomDestination.settings,
-      icon: Icons.settings_outlined,
-      selectedIcon: Icons.settings,
+      icon: Icons.person_outline,
+      selectedIcon: Icons.person,
       tooltip: 'Configuración',
     ),
   ];
@@ -63,7 +75,7 @@ class AppBottomNavBar extends StatelessWidget {
     return Container(
       width: double.infinity,
       decoration: BoxDecoration(
-        color: AppColors.bottomBarBackground,
+        color: AppColors.background,
         border: Border(
           top: BorderSide(
             color: Colors.white.withValues(alpha: 0.25),
@@ -71,21 +83,19 @@ class AppBottomNavBar extends StatelessWidget {
           ),
         ),
       ),
-      padding: const EdgeInsets.symmetric(
-        horizontal: 40,
-        vertical: 2,
-      ),
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 2),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-        children: [
-          for (final item in _items) _buildButton(item),
-        ],
+        children: [for (final item in _items) _buildButton(context, item)],
       ),
     );
   }
 
-  Widget _buildButton(_BottomNavItem item) {
+  Widget _buildButton(BuildContext context, _BottomNavItem item) {
     final isSelected = item.destination == selectedDestination;
+    final user = item.destination == AppBottomDestination.settings
+        ? context.watch<AuthProvider>().authResponse?.user
+        : null;
 
     return IconButton(
       tooltip: item.tooltip,
@@ -93,15 +103,20 @@ class AppBottomNavBar extends StatelessWidget {
           ? null
           : () => onDestinationSelected(item.destination),
       padding: EdgeInsets.zero,
-      constraints: const BoxConstraints(
-        minWidth: 40,
-        minHeight: 36,
-      ),
-      icon: Icon(
-        isSelected ? item.selectedIcon : item.icon,
-        size: 30,
-        color: Colors.white,
-      ),
+      constraints: const BoxConstraints(minWidth: 40, minHeight: 36),
+      icon: item.destination == AppBottomDestination.settings
+          ? UserAvatar(
+              name: user?.name ?? '',
+              photoUrl: user?.profilePhoto,
+              radius: 15,
+              borderColor: isSelected ? Colors.white : null,
+              borderWidth: isSelected ? 1 : 0,
+            )
+          : Icon(
+              isSelected ? item.selectedIcon : item.icon,
+              size: 30,
+              color: Colors.white,
+            ),
     );
   }
 }

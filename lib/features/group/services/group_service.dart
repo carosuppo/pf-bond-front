@@ -1,10 +1,17 @@
+import 'package:http/http.dart' as http;
+import 'package:http_parser/http_parser.dart';
+
 import '../../../core/network/api_client.dart';
+import '../../../core/network/api_exception.dart';
 import '../models/create_group_model.request.dart';
 import '../models/create_group_model.response.dart';
 import '../models/get_group_model.response.dart';
-import '../models/get_member_info_model.response.dart';
 import '../models/get_groups_model.response.dart';
+import '../models/get_member_info_model.response.dart';
 import '../models/get_member_model.response.dart';
+import '../models/blocked_user_model.dart';
+import '../models/member_report_request.dart';
+import '../models/group_join_request.dart';
 import '../models/group_model.response.dart';
 import '../models/join_group_model.request.dart';
 import '../models/join_group_model.response.dart';
@@ -29,12 +36,26 @@ class GroupService {
   Future<JoinGroupResponseModel> joinGroup({
     required JoinGroupRequest request,
   }) async {
-    final response = await _apiClient.authenticatedPost(
-      '/group/join',
-      request.toJson(),
-    );
+    try {
+      final response = await _apiClient.authenticatedPost(
+        '/group/join-request',
+        request.toJson(),
+      );
 
-    return JoinGroupResponseModel.fromJson(response);
+      return JoinGroupResponseModel.fromJson(response);
+    } on ApiException catch (error) {
+      final responseBody = error.responseBody;
+      if (error.statusCode == 409 &&
+          responseBody != null &&
+          responseBody['group'] is Map<String, dynamic>) {
+        return JoinGroupResponseModel.fromJson(
+          responseBody,
+          alreadyMember: true,
+        );
+      }
+
+      rethrow;
+    }
   }
 
   Future<GroupResponseModel> updateGroup({
@@ -48,6 +69,24 @@ class GroupService {
     return GroupResponseModel.fromJson(response);
   }
 
+  Future<GroupResponseModel> updateGroupImage({
+    required int groupId,
+    required String filePath,
+    String? mimeType,
+  }) async {
+    final file = await http.MultipartFile.fromPath(
+      'file',
+      filePath,
+      contentType: _imageMediaType(filePath, mimeType),
+    );
+    final response = await _apiClient.authenticatedMultipartPatch(
+      '/group/$groupId/image',
+      file: file,
+    );
+
+    return GroupResponseModel.fromJson(response);
+  }
+
   Future<void> updateMemberRole({
     required int memberId,
     required RoleEnum role,
@@ -57,6 +96,39 @@ class GroupService {
     await _apiClient.authenticatedPut(
       '/member/$memberId/role',
       request.toJson(),
+    );
+  }
+
+  Future<void> removeMember({required int memberId}) async {
+    await _apiClient.authenticatedDelete('/member/$memberId');
+  }
+
+  Future<void> deleteGroup({required int groupId}) async {
+    await _apiClient.authenticatedDelete('/group/$groupId');
+  }
+
+  Future<void> leaveGroup({required int groupId}) async {
+    await _apiClient.authenticatedDelete('/group/$groupId/leave');
+  }
+
+  Future<List<GroupJoinRequest>> getJoinRequests() async {
+    final response = await _apiClient.authenticatedGetList(
+      '/group/join-requests/inbox',
+    );
+    return response.map(GroupJoinRequest.fromJson).toList(growable: false);
+  }
+
+  Future<void> acceptJoinRequest({required int requestId}) async {
+    await _apiClient.authenticatedPost(
+      '/group/join-requests/$requestId/accept',
+      <String, dynamic>{},
+    );
+  }
+
+  Future<void> rejectJoinRequest({required int requestId}) async {
+    await _apiClient.authenticatedPost(
+      '/group/join-requests/$requestId/reject',
+      <String, dynamic>{},
     );
   }
 
@@ -78,5 +150,52 @@ class GroupService {
     final response = await _apiClient.authenticatedGet('/member/$memberId');
 
     return GetMemberInfoResponseModel.fromJson(response);
+  }
+
+  Future<void> reportMember({
+    required int memberId,
+    required MemberReportRequest request,
+  }) async {
+    await _apiClient.authenticatedPost(
+      '/member/$memberId/report',
+      request.toJson(),
+    );
+  }
+
+  Future<void> blockMember({required int memberId}) async {
+    await _apiClient.authenticatedPost('/member/$memberId/block', const {});
+  }
+
+  Future<List<BlockedUserModel>> getBlockedUsers() async {
+    final response = await _apiClient.authenticatedGetList('/member/blocks');
+    return response.map(BlockedUserModel.fromJson).toList(growable: false);
+  }
+
+  Future<void> unblockUser({required int userId}) async {
+    await _apiClient.authenticatedDelete('/member/blocks/$userId');
+  }
+
+  MediaType _imageMediaType(String filePath, String? mimeType) {
+    final normalizedMimeType = mimeType?.toLowerCase();
+
+    if (normalizedMimeType == 'image/jpg' ||
+        normalizedMimeType == 'image/jpeg') {
+      return MediaType('image', 'jpeg');
+    }
+
+    if (normalizedMimeType == 'image/png') {
+      return MediaType('image', 'png');
+    }
+
+    if (normalizedMimeType == 'image/webp') {
+      return MediaType('image', 'webp');
+    }
+
+    return switch (filePath.toLowerCase().split('.').last) {
+      'jpg' || 'jpeg' => MediaType('image', 'jpeg'),
+      'png' => MediaType('image', 'png'),
+      'webp' => MediaType('image', 'webp'),
+      _ => MediaType('application', 'octet-stream'),
+    };
   }
 }
