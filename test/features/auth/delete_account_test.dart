@@ -184,12 +184,20 @@ Future<void> _showSettings(WidgetTester tester, _Fixture fixture) async {
   await tester.pumpAndSettle();
 }
 
+Future<void> _scrollToDeleteOption(WidgetTester tester) async {
+  final deleteOption = find.text('Eliminar cuenta');
+  await tester.drag(find.byType(ListView).first, const Offset(0, -500));
+  await tester.pumpAndSettle();
+  expect(deleteOption, findsOneWidget);
+}
+
 void main() {
   testWidgets('la opcion destructiva confirma y cancelar no altera nada', (
     tester,
   ) async {
     final fixture = _Fixture();
     await _showSettings(tester, fixture);
+    await _scrollToDeleteOption(tester);
     final option = find.text('Eliminar cuenta');
     expect(option, findsOneWidget);
     final text = tester.widget<Text>(option);
@@ -209,6 +217,7 @@ void main() {
     final fixture = _Fixture();
     fixture.api.onDelete = () async => throw Exception('Fallo del servidor');
     await _showSettings(tester, fixture);
+    await _scrollToDeleteOption(tester);
     await tester.tap(find.text('Eliminar cuenta'));
     await tester.pumpAndSettle();
     await tester.tap(find.text('Eliminar cuenta').last);
@@ -227,6 +236,7 @@ void main() {
   ) async {
     final fixture = _Fixture();
     await _showSettings(tester, fixture);
+    await _scrollToDeleteOption(tester);
     await tester.tap(find.text('Eliminar cuenta'));
     await tester.pumpAndSettle();
     await tester.tap(find.text('Eliminar cuenta').last);
@@ -274,6 +284,7 @@ void main() {
       fixture.preferences.failClear = failedStep == 'preferences';
       fixture.background.failStop = failedStep == 'tracking';
       await _showSettings(tester, fixture);
+      await _scrollToDeleteOption(tester);
       await tester.tap(find.text('Eliminar cuenta'));
       await tester.pumpAndSettle();
       await tester.tap(find.text('Eliminar cuenta').last);

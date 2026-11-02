@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:url_launcher/url_launcher.dart';
 
+import '../../../core/config/api_config.dart';
 import '../../../core/routes/app_routes.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/widgets/user_avatar.dart';
@@ -9,6 +11,7 @@ import '../../auth/providers/auth_provider.dart';
 import '../../profile/providers/profile_provider.dart';
 import '../../profile/widgets/profile_photo_editor.dart';
 import '../models/settings_option.dart';
+import '../widgets/blocked_users_sheet.dart';
 import '../widgets/settings_option_tile.dart';
 
 class SettingsScreen extends StatefulWidget {
@@ -177,6 +180,46 @@ class _SettingsScreenState extends State<SettingsScreen> {
     );
   }
 
+  Future<void> _openPrivacyPolicy() async {
+    final opened = await launchUrl(
+      ApiConfig.privacyPolicyUri,
+      mode: LaunchMode.externalApplication,
+    );
+    if (!opened && mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('No se pudo abrir la política de privacidad.'),
+        ),
+      );
+    }
+  }
+
+  Future<void> _openTermsOfUse() async {
+    final opened = await launchUrl(
+      ApiConfig.termsOfUseUri,
+      mode: LaunchMode.externalApplication,
+    );
+    if (!opened && mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('No se pudieron abrir los Términos de uso.'),
+        ),
+      );
+    }
+  }
+
+  Future<void> _openBlockedUsers() async {
+    await showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: AppColors.cardColor,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      builder: (_) => const BlockedUsersSheet(),
+    );
+  }
+
   List<SettingsOption> _buildOptions(BuildContext context) {
     final authProvider = context.watch<AuthProvider>();
 
@@ -195,6 +238,21 @@ class _SettingsScreenState extends State<SettingsScreen> {
         icon: Icons.lock_outline,
         title: 'Modificar mi contraseña',
         onTap: () => Navigator.of(context).pushNamed(AppRoutes.changePassword),
+      ),
+      SettingsOption(
+        icon: Icons.privacy_tip_outlined,
+        title: 'Política de privacidad',
+        onTap: _openPrivacyPolicy,
+      ),
+      SettingsOption(
+        icon: Icons.description_outlined,
+        title: 'Términos de uso',
+        onTap: _openTermsOfUse,
+      ),
+      SettingsOption(
+        icon: Icons.block_outlined,
+        title: 'Usuarios bloqueados',
+        onTap: _openBlockedUsers,
       ),
       SettingsOption(
         icon: Icons.logout,

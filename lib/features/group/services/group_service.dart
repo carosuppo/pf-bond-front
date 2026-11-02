@@ -9,6 +9,8 @@ import '../models/get_group_model.response.dart';
 import '../models/get_groups_model.response.dart';
 import '../models/get_member_info_model.response.dart';
 import '../models/get_member_model.response.dart';
+import '../models/blocked_user_model.dart';
+import '../models/member_report_request.dart';
 import '../models/group_join_request.dart';
 import '../models/group_model.response.dart';
 import '../models/join_group_model.request.dart';
@@ -148,6 +150,29 @@ class GroupService {
     final response = await _apiClient.authenticatedGet('/member/$memberId');
 
     return GetMemberInfoResponseModel.fromJson(response);
+  }
+
+  Future<void> reportMember({
+    required int memberId,
+    required MemberReportRequest request,
+  }) async {
+    await _apiClient.authenticatedPost(
+      '/member/$memberId/report',
+      request.toJson(),
+    );
+  }
+
+  Future<void> blockMember({required int memberId}) async {
+    await _apiClient.authenticatedPost('/member/$memberId/block', const {});
+  }
+
+  Future<List<BlockedUserModel>> getBlockedUsers() async {
+    final response = await _apiClient.authenticatedGetList('/member/blocks');
+    return response.map(BlockedUserModel.fromJson).toList(growable: false);
+  }
+
+  Future<void> unblockUser({required int userId}) async {
+    await _apiClient.authenticatedDelete('/member/blocks/$userId');
   }
 
   MediaType _imageMediaType(String filePath, String? mimeType) {

@@ -19,8 +19,6 @@ class ProfilePhotoPickerService {
     : _imagePicker = imagePicker ?? ImagePicker();
 
   Future<XFile?> pickFromGallery() async {
-    await _requestGalleryPermission();
-
     return _pickImage(ImageSource.gallery);
   }
 
@@ -73,23 +71,5 @@ class ProfilePhotoPickerService {
     }
 
     return image;
-  }
-
-  Future<void> _requestGalleryPermission() async {
-    final photosPermission = await Permission.photos.request();
-
-    if (photosPermission.isGranted || photosPermission.isLimited) {
-      return;
-    }
-
-    final storagePermission = await Permission.storage.request();
-
-    if (storagePermission.isGranted) {
-      return;
-    }
-
-    throw const ProfilePhotoPickerException(
-      'Necesitás permitir el acceso a las imágenes para elegir una foto.',
-    );
   }
 }

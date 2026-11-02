@@ -10,6 +10,7 @@ import '../../../core/storage/session_storage_service.dart';
 import '../models/location_model.dart';
 import '../models/location_permission_status.dart';
 import '../models/mandatory_group_location_action.dart';
+import '../models/member_location_model.dart';
 import '../models/location_socket_event.dart';
 import '../models/location_state.dart';
 import '../services/location_backend_service.dart';
@@ -316,6 +317,26 @@ class LocationProvider extends Notifier<LocationState> {
     }
   }
 
+  Future<void> refreshVisibleMembers() async {
+    final groupId = state.activeGroupId;
+    if (groupId == null) return;
+
+    final sessionVersion = _sessionVersion;
+    try {
+      final members = await _backendService.getGroupMembers(groupId);
+      if (sessionVersion != _sessionVersion || state.activeGroupId != groupId) {
+        return;
+      }
+      state = state.copyWith(
+        visibleMembers: {for (final member in members) member.memberId: member},
+      );
+    } catch (error) {
+      if (sessionVersion == _sessionVersion) {
+        state = state.copyWith(errorMessage: _message(error));
+      }
+    }
+  }
+
   Future<void> stopViewingGroup() async {
     await _socketSubscription?.cancel();
 
@@ -574,6 +595,15 @@ class LocationProvider extends Notifier<LocationState> {
   }
 
   void _handleSocketEvent(LocationSocketEvent event) {
+    if (event is MemberVisibilityChanged) {
+      final visibleMembers = Map<int, MemberLocationModel>.of(
+        state.visibleMembers,
+      )..removeWhere((_, member) => member.userId == event.userId);
+      state = state.copyWith(visibleMembers: visibleMembers);
+      if (!event.isBlocked) unawaited(refreshVisibleMembers());
+      return;
+    }
+
     if (event is PointOfInterestSocketEvent) {
       return;
     }

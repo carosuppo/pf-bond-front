@@ -73,7 +73,9 @@ class LocationSharingControls extends ConsumerWidget {
         builder: (context) => AlertDialog(
           title: const Text('Compartir ubicación en segundo plano'),
           content: const Text(
-            'Bond recopila tu ubicación para compartirla con los miembros de los grupos habilitados, incluso cuando la app está cerrada o no está en uso. '
+            'Bond recopila y envía la ubicación de tu dispositivo a sus servidores para mostrarla a los miembros de los grupos donde activaste compartir. '
+            'La precisión depende del permiso de ubicación que elijas. '
+            'La ubicación se recopila también en segundo plano, incluso cuando la app está cerrada o no está en uso. '
             'Para compartir continuamente, elegí Permitir siempre en los permisos de ubicación. Podés dejar de compartir desde el grupo; si es obligatorio, podés salir del grupo.',
           ),
           actions: [

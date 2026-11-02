@@ -3,6 +3,8 @@ import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 class AppPreferencesService {
   static const String _activeGroupIdKey = 'active_group_id';
   static const String _pendingInvitationCodeKey = 'pending_invitation_code';
+  static const String _pendingEmailVerificationTokenKey =
+      'pending_email_verification_token';
 
   static const String _locationPermissionStatusKey =
       'location_permission_status';
@@ -64,6 +66,32 @@ class AppPreferencesService {
         .then<void>((_) {})
         .catchError((Object _) {});
     return operation;
+  }
+
+  Future<void> savePendingEmailVerificationToken(String token) {
+    return _storage.write(key: _pendingEmailVerificationTokenKey, value: token);
+  }
+
+  Future<String?> takePendingEmailVerificationToken() async {
+    final token = await _storage.read(key: _pendingEmailVerificationTokenKey);
+    if (token != null) {
+      await _storage.delete(key: _pendingEmailVerificationTokenKey);
+    }
+    return token;
+  }
+
+  Future<bool> clearPendingEmailVerificationToken({
+    String? expectedToken,
+  }) async {
+    if (expectedToken != null) {
+      final currentToken = await _storage.read(
+        key: _pendingEmailVerificationTokenKey,
+      );
+      if (currentToken != expectedToken) return false;
+    }
+
+    await _storage.delete(key: _pendingEmailVerificationTokenKey);
+    return true;
   }
 
   Future<void> saveLocationPermissionStatus(String status) async {

@@ -2,11 +2,11 @@ import 'dart:async';
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
-import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:latlong2/latlong.dart';
 
+import '../../../core/config/api_config.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/widgets/user_avatar.dart';
 import '../../point_of_interest/models/point_of_interest.dart';
@@ -14,8 +14,8 @@ import '../../point_of_interest/models/point_of_interest_color.dart';
 import '../../point_of_interest/widgets/point_of_interest_marker_icon.dart';
 import '../constants/default_location.dart';
 import '../constants/location_tracking_config.dart';
-import '../models/member_location_model.dart';
 import '../models/location_model.dart';
+import '../models/member_location_model.dart';
 import '../providers/location_provider.dart';
 import '../utils/marker_colors.dart';
 
@@ -415,12 +415,9 @@ class _LocationMapState extends ConsumerState<LocationMap>
         (ownLocation == null
             ? defaultLocation
             : LatLng(ownLocation.latitude, ownLocation.longitude));
-    final String? cartoApiKey = dotenv.isInitialized
-        ? dotenv.env['CARTO_API_KEY']
-        : null;
-    final String tileUrl = cartoApiKey == null || cartoApiKey.isEmpty
-        ? 'https://tile.openstreetmap.org/{z}/{x}/{y}.png'
-        : 'https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}.png?key=$cartoApiKey';
+    final String cartoApiKey = ApiConfig.cartoApiKey;
+    final String tileUrl =
+        'https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}.png${cartoApiKey.isEmpty ? '' : '?key=$cartoApiKey'}';
 
     return FlutterMap(
       mapController: _mapController,
@@ -1021,8 +1018,8 @@ class _MemberCluster {
 
 class _OffscreenLocationIndicatorLayer extends StatelessWidget {
   static const _indicatorSize = Size(54, 78);
-  static const _collisionSize = Size(84, 84);
-  static const _indicatorGap = 4.0;
+  static const _collisionSize = Size(50, 50);
+  static const _indicatorGap = 2.0;
 
   static const _edgePadding = EdgeInsets.fromLTRB(12, 72, 12, 12);
 

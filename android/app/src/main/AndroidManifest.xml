@@ -7,15 +7,10 @@
   <uses-permission android:name="android.permission.WAKE_LOCK" />
   <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
   <uses-permission android:name="android.permission.CAMERA" />
-  <uses-permission android:name="android.permission.READ_MEDIA_IMAGES" />
-  <uses-permission
-      android:name="android.permission.READ_EXTERNAL_STORAGE"
-      android:maxSdkVersion="32" />
     <application
         android:label="Bond"
         android:name="${applicationName}"
-        android:icon="@mipmap/ic_launcher"
-        android:usesCleartextTraffic="true">
+        android:icon="@mipmap/ic_launcher">
         <meta-data
             android:name="com.google.firebase.messaging.default_notification_channel_id"
             android:value="bond_default" />
@@ -60,6 +55,14 @@
                 <data
                     android:scheme="bond"
                     android:host="invite" />
+            </intent-filter>
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data
+                    android:scheme="bond"
+                    android:host="verify-email" />
             </intent-filter>
         </activity>
         <!-- Don't delete the meta-data below.

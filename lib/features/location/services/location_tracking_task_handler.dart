@@ -1,7 +1,6 @@
 import 'dart:async';
 import 'dart:ui';
 
-import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:flutter_foreground_task/flutter_foreground_task.dart';
 
 import '../../../core/network/api_client.dart';
@@ -57,7 +56,6 @@ class LocationTrackingTaskHandler extends TaskHandler {
   Future<void> onStart(DateTime timestamp, TaskStarter starter) async {
     if (initializePlugins) {
       DartPluginRegistrant.ensureInitialized();
-      await dotenv.load(fileName: '.env');
     }
 
     _lastStreamEvent ??= timestamp;

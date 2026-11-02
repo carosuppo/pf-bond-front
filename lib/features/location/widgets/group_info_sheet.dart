@@ -101,15 +101,11 @@ class _GroupInfoSheetState extends State<GroupInfoSheet> {
                 ),
                 Expanded(
                   child: widget.memberInfoLoading
-                      ? MemberInfoLoading(
-                          scrollController: scrollController,
-                          bottomContent: widget.pointsContent,
-                        )
+                      ? MemberInfoLoading(scrollController: scrollController)
                       : widget.memberInfo != null
                       ? MemberInfoBottomSheet(
                           memberInfo: widget.memberInfo!,
                           scrollController: scrollController,
-                          bottomContent: widget.pointsContent,
                         )
                       : _buildSection(context, scrollController),
                 ),

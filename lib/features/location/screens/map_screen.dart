@@ -105,6 +105,15 @@ class _MapScreenState extends ConsumerState<MapScreen>
   void _onGroupEvent(LocationSocketEvent event) {
     if (!mounted) return;
 
+    if (event is MemberVisibilityChanged) {
+      final groupId = _viewingGroupId;
+      if (groupId != null) {
+        unawaited(_groupProvider.getGroupDetails(groupId: groupId));
+      }
+      _clearMemberInfo();
+      return;
+    }
+
     if (event case GroupDeleted(:final groupId)) {
       _groupProvider.handleGroupDeleted(groupId);
       return;

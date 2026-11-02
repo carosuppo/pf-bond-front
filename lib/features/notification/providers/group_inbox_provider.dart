@@ -17,10 +17,13 @@ class GroupInboxProvider extends ChangeNotifier {
   bool isProcessing = false;
   String? errorMessage;
   bool _reloadRequested = false;
+  bool _markAllNotificationsReadOnLoad = false;
 
   int get unreadCount => items.where((item) => !item.isRead).length;
 
-  Future<void> load() async {
+  Future<void> load({bool markAllNotificationsRead = false}) async {
+    if (markAllNotificationsRead) _markAllNotificationsReadOnLoad = true;
+
     if (isLoading) {
       _reloadRequested = true;
       return;
@@ -39,7 +42,17 @@ class GroupInboxProvider extends ChangeNotifier {
         ...notifications.map(GroupInboxItem.fromNotification),
         ...requests.map(GroupInboxItem.fromJoinRequest),
       ]..sort((first, second) => second.createdAt.compareTo(first.createdAt));
+
+      if (_markAllNotificationsReadOnLoad) {
+        _markAllNotificationsReadOnLoad = false;
+        await Future.wait(
+          items
+              .where((item) => item.notificationId != null && !item.isRead)
+              .map(markRead),
+        );
+      }
     } catch (_) {
+      if (!_reloadRequested) _markAllNotificationsReadOnLoad = false;
       errorMessage = 'No se pudo cargar el buzón. Intentá de nuevo.';
     } finally {
       isLoading = false;

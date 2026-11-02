@@ -2,12 +2,14 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:provider/provider.dart';
 
-import '../../core/routes/navigation/post_auth_navigator.dart';
 import '../../features/auth/providers/auth_provider.dart';
 import '../../features/group/providers/group_provider.dart';
 import '../../features/group/services/group_invitation_coordinator.dart';
 import '../../features/location/providers/location_provider.dart';
+import '../deep_links/app_link_service.dart';
+import '../routes/app_navigation.dart';
 import '../routes/app_routes.dart';
+import '../routes/navigation/post_auth_navigator.dart';
 
 class SplashScreen extends ConsumerStatefulWidget {
   const SplashScreen({super.key});
@@ -62,7 +64,14 @@ class _SplashScreenState extends ConsumerState<SplashScreen>
     }
 
     final authProvider = context.read<AuthProvider>();
-    final hasSession = await authProvider.restoreSession();
+    final verificationToken = await context
+        .read<AppLinkService>()
+        .takePendingEmailVerificationToken();
+    final hasSession = verificationToken == null
+        ? await authProvider.restoreSession()
+        : await authProvider.completeEmailVerification(
+            token: verificationToken,
+          );
 
     if (!mounted) {
       return;
@@ -70,6 +79,15 @@ class _SplashScreenState extends ConsumerState<SplashScreen>
 
     if (!hasSession) {
       Navigator.of(context).pushReplacementNamed(AppRoutes.login);
+      if (verificationToken != null) {
+        context.read<AppLinkService>().releaseEmailVerificationToken(
+          verificationToken,
+        );
+        AppNavigation.showMessage(
+          authProvider.errorMessage ??
+              'No se pudo verificar el correo. Intentá abrir el enlace nuevamente.',
+        );
+      }
       return;
     }
 

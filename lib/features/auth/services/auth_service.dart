@@ -30,8 +30,25 @@ class AuthService {
     return true;
   }
 
+  Future<void> resendVerificationEmail(String email) async {
+    await _apiClient.post('/user/resend-verification-email', {'email': email});
+  }
+
   Future<AuthResponse> login(LoginRequest request) async {
     final json = await _apiClient.post('/user/login', request.toJson());
+    return _saveAuthenticatedSession(json);
+  }
+
+  Future<AuthResponse> completeEmailVerification(String token) async {
+    final json = await _apiClient.post('/user/verify-email-session', {
+      'token': token,
+    });
+    return _saveAuthenticatedSession(json);
+  }
+
+  Future<AuthResponse> _saveAuthenticatedSession(
+    Map<String, dynamic> json,
+  ) async {
     final response = AuthResponse.fromJson(json);
 
     await _sessionStorage.saveSession(

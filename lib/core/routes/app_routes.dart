@@ -6,6 +6,8 @@ class AppRoutes {
   static const String splash = '/';
   static const String login = '/login';
   static const String register = '/register';
+  static const String emailVerificationRequired =
+      '/email-verification-required';
   static const String groups = '/groups';
   static const String map = '/map';
   static const String settings = '/settings';

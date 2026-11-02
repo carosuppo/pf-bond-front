@@ -42,6 +42,16 @@ class MemberLocationHeartbeat extends LocationSocketEvent {
   });
 }
 
+class MemberVisibilityChanged extends LocationSocketEvent {
+  final int userId;
+  final bool isBlocked;
+
+  const MemberVisibilityChanged({
+    required this.userId,
+    required this.isBlocked,
+  });
+}
+
 class GroupDeleted extends LocationSocketEvent {
   final int groupId;
 
@@ -110,6 +120,10 @@ LocationSocketEvent? parseLocationSocketEvent(
       memberId: data['memberId'] as int,
       userId: data['userId'] as int,
       lastSeenAt: DateTime.parse(data['lastSeenAt'] as String),
+    ),
+    'memberVisibilityChanged' => MemberVisibilityChanged(
+      userId: data['userId'] as int,
+      isBlocked: data['isBlocked'] as bool,
     ),
     'groupDeleted' => GroupDeleted(groupId: data['groupId'] as int),
     'memberLeft' => MemberLeft(

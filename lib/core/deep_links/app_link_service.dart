@@ -34,13 +34,19 @@ class AppLinkService {
   final AppLinkSource _source;
   final StreamController<String> _invitationController =
       StreamController<String>.broadcast();
+  final StreamController<String> _emailVerificationController =
+      StreamController<String>.broadcast();
   final Set<String> _receivedInvitationCodes = <String>{};
+  final Set<String> _receivedEmailVerificationTokens = <String>{};
+  final Set<String> _claimedEmailVerificationTokens = <String>{};
 
   StreamSubscription<Uri>? _subscription;
   Future<void> _pendingHandling = Future<void>.value();
   bool _initialized = false;
 
   Stream<String> get invitationCodes => _invitationController.stream;
+  Stream<String> get emailVerificationTokens =>
+      _emailVerificationController.stream;
 
   Future<void> initialize() async {
     if (_initialized) {
@@ -73,12 +79,28 @@ class AppLinkService {
         .then((_) => processUri(uri))
         .then<void>((_) {})
         .catchError((Object error, StackTrace stackTrace) {
-          debugPrint('No se pudo guardar la invitación pendiente: $error');
+          debugPrint('No se pudo procesar el enlace de Bond: $error');
           debugPrintStack(stackTrace: stackTrace);
         });
   }
 
   Future<bool> processUri(Uri uri) async {
+    final emailVerificationToken = parseEmailVerificationToken(uri);
+    if (emailVerificationToken != null) {
+      if (_receivedEmailVerificationTokens.contains(emailVerificationToken)) {
+        return false;
+      }
+
+      await _preferences.savePendingEmailVerificationToken(
+        emailVerificationToken,
+      );
+      if (!_receivedEmailVerificationTokens.add(emailVerificationToken)) {
+        return false;
+      }
+      _emailVerificationController.add(emailVerificationToken);
+      return true;
+    }
+
     final invitationCode = parseInvitationCode(uri);
     if (invitationCode == null ||
         _receivedInvitationCodes.contains(invitationCode)) {
@@ -104,8 +126,47 @@ class AppLinkService {
     return InvitationCode.isValid(invitationCode) ? invitationCode : null;
   }
 
+  static String? parseEmailVerificationToken(Uri uri) {
+    if (uri.scheme.toLowerCase() != AppLinkConfig.scheme ||
+        uri.host.toLowerCase() != AppLinkConfig.emailVerificationHost ||
+        uri.path.isNotEmpty) {
+      return null;
+    }
+
+    final token = uri.queryParameters['token'];
+    if (token == null || !RegExp(r'^[A-Za-z0-9_-]{64}$').hasMatch(token)) {
+      return null;
+    }
+
+    return token;
+  }
+
+  Future<String?> takePendingEmailVerificationToken() {
+    return _takePendingEmailVerificationToken();
+  }
+
+  Future<bool> claimEmailVerificationToken(String token) async {
+    if (!_claimedEmailVerificationTokens.add(token)) return false;
+    await _preferences.clearPendingEmailVerificationToken(expectedToken: token);
+    return true;
+  }
+
+  void releaseEmailVerificationToken(String token) {
+    _claimedEmailVerificationTokens.remove(token);
+    _receivedEmailVerificationTokens.remove(token);
+  }
+
+  Future<String?> _takePendingEmailVerificationToken() async {
+    final token = await _preferences.takePendingEmailVerificationToken();
+    if (token == null || !_claimedEmailVerificationTokens.add(token)) {
+      return null;
+    }
+    return token;
+  }
+
   Future<void> dispose() async {
     await _subscription?.cancel();
     await _invitationController.close();
+    await _emailVerificationController.close();
   }
 }

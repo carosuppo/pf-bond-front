@@ -2,10 +2,10 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:provider/provider.dart' as provider;
 
+import 'core/config/api_config.dart';
 import 'core/deep_links/app_link_service.dart';
 import 'core/network/api_client.dart';
 import 'core/preferences/app_preferences_service.dart';
@@ -47,13 +47,12 @@ import 'features/routing/services/route_service.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  ApiConfig.validateStartup();
   final preferencesService = AppPreferencesService();
   final appLinkService = AppLinkService(preferencesService);
   await appLinkService.initialize();
 
   BackgroundLocationService.initialize();
-
-  await dotenv.load(fileName: '.env');
 
   AppTimezone.initialize();
 
@@ -310,6 +309,8 @@ class _BondMaterialApp extends ConsumerStatefulWidget {
 
 class _BondMaterialAppState extends ConsumerState<_BondMaterialApp> {
   StreamSubscription<String>? _invitationSubscription;
+  StreamSubscription<String>? _emailVerificationSubscription;
+  final Set<String> _handledEmailVerificationTokens = <String>{};
   bool _isHandlingInvitation = false;
   bool _handleAgain = false;
   bool _mandatoryGroupLocationHandlersConfigured = false;
@@ -321,6 +322,10 @@ class _BondMaterialAppState extends ConsumerState<_BondMaterialApp> {
         .read<AppLinkService>()
         .invitationCodes
         .listen(_handleInvitation);
+    _emailVerificationSubscription ??= context
+        .read<AppLinkService>()
+        .emailVerificationTokens
+        .listen(_handleEmailVerificationToken);
 
     if (!_mandatoryGroupLocationHandlersConfigured) {
       final groups = context.read<GroupProvider>();
@@ -401,9 +406,65 @@ class _BondMaterialAppState extends ConsumerState<_BondMaterialApp> {
     }
   }
 
+  Future<void> _handleEmailVerificationToken(String token) async {
+    if (!_handledEmailVerificationTokens.add(token)) return;
+
+    final appLinkService = context.read<AppLinkService>();
+    final claimed = await appLinkService.claimEmailVerificationToken(token);
+    if (!claimed) {
+      _handledEmailVerificationTokens.remove(token);
+      return;
+    }
+    if (!mounted) return;
+
+    final authProvider = context.read<AuthProvider>();
+    if (authProvider.authResponse != null) {
+      await authProvider.logout();
+      if (!mounted) return;
+    }
+
+    final authenticated = await authProvider.completeEmailVerification(
+      token: token,
+    );
+    if (!mounted) return;
+
+    final navigator = AppNavigation.navigatorKey.currentState;
+    final navigatorContext = AppNavigation.navigatorKey.currentContext;
+    if (navigator == null ||
+        navigatorContext == null ||
+        !navigatorContext.mounted) {
+      if (!authenticated) {
+        _handledEmailVerificationTokens.remove(token);
+        appLinkService.releaseEmailVerificationToken(token);
+      }
+      return;
+    }
+
+    if (!authenticated) {
+      _handledEmailVerificationTokens.remove(token);
+      appLinkService.releaseEmailVerificationToken(token);
+      navigator.pushNamedAndRemoveUntil(AppRoutes.login, (_) => false);
+      AppNavigation.showMessage(
+        authProvider.errorMessage ??
+            'No se pudo verificar el correo. Intentá abrir el enlace nuevamente.',
+      );
+      return;
+    }
+
+    await const PostAuthNavigator().navigate(
+      context: navigatorContext,
+      groupProvider: context.read<GroupProvider>(),
+      locationNotifier: ref.read(locationProvider.notifier),
+      invitationCoordinator: context.read<GroupInvitationCoordinator>(),
+      authProvider: authProvider,
+      navigator: navigator,
+    );
+  }
+
   @override
   void dispose() {
     _invitationSubscription?.cancel();
+    _emailVerificationSubscription?.cancel();
     super.dispose();
   }
 

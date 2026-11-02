@@ -85,6 +85,49 @@ void main() {
     expect(provider.unreadCount, 1);
   });
 
+  testWidgets('marca como vistas las notificaciones al abrir el buzón', (
+    tester,
+  ) async {
+    final notifications = _NotificationService()
+      ..notifications = [
+        GroupInboxNotification(
+          id: 5,
+          groupId: 3,
+          groupName: 'Familia',
+          type: 'EVENT_UPDATED',
+          title: 'Evento actualizado',
+          body: 'Se modificó el evento.',
+          data: const {},
+          readAt: null,
+          createdAt: DateTime(2026, 10, 8),
+        ),
+        GroupInboxNotification(
+          id: 6,
+          groupId: 3,
+          groupName: 'Familia',
+          type: 'EVENT_CREATED',
+          title: 'Nuevo evento',
+          body: 'Se creó un evento.',
+          data: const {},
+          readAt: DateTime(2026, 10, 9),
+          createdAt: DateTime(2026, 10, 9),
+        ),
+      ];
+    final provider = GroupInboxProvider(notifications, _GroupService());
+
+    await tester.pumpWidget(
+      ChangeNotifierProvider<GroupInboxProvider>.value(
+        value: provider,
+        child: const MaterialApp(home: GroupInboxScreen()),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(notifications.readIds, [5]);
+    expect(provider.items.every((item) => item.isRead), isTrue);
+    expect(provider.unreadCount, 0);
+  });
+
   testWidgets('muestra la solicitud y permite rechazarla desde el modal', (
     tester,
   ) async {

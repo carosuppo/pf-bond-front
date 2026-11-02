@@ -331,9 +331,9 @@ void main() {
       bounds.add(
         Rect.fromCenter(
           center: tester.getCenter(indicator),
-          width: 84,
-          height: 84,
-        ).inflate(2),
+          width: 30,
+          height: 30,
+        ).inflate(1),
       );
     }
 

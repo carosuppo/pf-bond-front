@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../../features/auth/screens/change_password_screen.dart';
+import '../../features/auth/screens/email_verification_required_screen.dart';
 import '../../features/auth/screens/login_screen.dart';
 import '../../features/auth/screens/register_screen.dart';
 import '../../features/event/screens/create_event_screen.dart';
@@ -38,6 +39,14 @@ class AppRouter {
       case AppRoutes.login:
         return MaterialPageRoute(
           builder: (_) => const LoginScreen(),
+          settings: settings,
+        );
+
+      case AppRoutes.emailVerificationRequired:
+        return MaterialPageRoute(
+          builder: (_) => EmailVerificationRequiredScreen(
+            email: settings.arguments as String,
+          ),
           settings: settings,
         );
 

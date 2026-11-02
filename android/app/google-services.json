@@ -7,9 +7,9 @@
   "client": [
     {
       "client_info": {
-        "mobilesdk_app_id": "1:796021858174:android:efef128f79a4ffb0aa5d2f",
+        "mobilesdk_app_id": "1:796021858174:android:3611ec1fc010e24caa5d2f",
         "android_client_info": {
-          "package_name": "com.example.bond_front"
+          "package_name": "cloud.hstgr.srv2008002"
         }
       },
       "oauth_client": [],

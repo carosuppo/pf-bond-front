@@ -22,7 +22,13 @@ class _GroupInboxScreenState extends State<GroupInboxScreen> {
   void initState() {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (mounted) unawaited(context.read<GroupInboxProvider>().load());
+      if (mounted) {
+        unawaited(
+          context.read<GroupInboxProvider>().load(
+            markAllNotificationsRead: true,
+          ),
+        );
+      }
     });
   }
 
@@ -43,7 +49,8 @@ class _GroupInboxScreenState extends State<GroupInboxScreen> {
               child: provider.isLoading && provider.items.isEmpty
                   ? const Center(child: CircularProgressIndicator())
                   : RefreshIndicator(
-                      onRefresh: provider.load,
+                      onRefresh: () =>
+                          provider.load(markAllNotificationsRead: true),
                       child: ListView(
                         physics: const AlwaysScrollableScrollPhysics(),
                         padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),

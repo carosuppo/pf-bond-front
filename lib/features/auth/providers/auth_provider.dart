@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../../../core/network/api_exception.dart';
 import '../models/auth_response.dart';
 import '../models/change_password_request.dart';
 import '../models/login_request.dart';
@@ -27,13 +28,20 @@ class AuthProvider extends ChangeNotifier {
   bool isLoading = false;
   bool isChangingPassword = false;
   bool isDeletingAccount = false;
+  bool emailVerificationRequired = false;
+  bool ageVerificationRequired = false;
+  bool termsAcceptanceRequired = false;
+  bool isResendingVerificationEmail = false;
   String? errorMessage;
+  String? resendVerificationErrorMessage;
   AuthResponse? authResponse;
 
   Future<bool> register({
     required String name,
     required String email,
     required String password,
+    required String birthDate,
+    required String termsVersion,
   }) async {
     isLoading = true;
     errorMessage = null;
@@ -44,6 +52,8 @@ class AuthProvider extends ChangeNotifier {
         name: name,
         email: email,
         password: password,
+        birthDate: birthDate,
+        termsVersion: termsVersion,
       );
 
       await _authService.register(request);
@@ -58,18 +68,60 @@ class AuthProvider extends ChangeNotifier {
     }
   }
 
-  Future<bool> login({required String email, required String password}) async {
+  Future<bool> login({
+    required String email,
+    required String password,
+    String? birthDate,
+    String? termsVersion,
+  }) async {
+    return _establishSession(
+      () => _authService.login(
+        LoginRequest(
+          email: email,
+          password: password,
+          birthDate: birthDate,
+          termsVersion: termsVersion,
+        ),
+      ),
+    );
+  }
+
+  void cancelAgeVerification() {
+    ageVerificationRequired = false;
+    errorMessage = null;
+    notifyListeners();
+  }
+
+  void cancelTermsAcceptance() {
+    termsAcceptanceRequired = false;
+    errorMessage = null;
+    notifyListeners();
+  }
+
+  Future<bool> completeEmailVerification({required String token}) async {
+    return _establishSession(
+      () => _authService.completeEmailVerification(token),
+      showEligibilitySteps: false,
+    );
+  }
+
+  Future<bool> _establishSession(
+    Future<AuthResponse> Function() authenticate, {
+    bool showEligibilitySteps = true,
+  }) async {
     final version = ++_sessionVersion;
     isLoading = true;
     errorMessage = null;
+    emailVerificationRequired = false;
+    resendVerificationErrorMessage = null;
     authResponse = null;
     notifyListeners();
 
     try {
-      final request = LoginRequest(email: email, password: password);
-
-      final response = await _authService.login(request);
+      final response = await authenticate();
       if (version != _sessionVersion) return false;
+      ageVerificationRequired = false;
+      termsAcceptanceRequired = false;
       authResponse = response;
       await onSessionReady?.call();
       if (version != _sessionVersion) return false;
@@ -77,13 +129,54 @@ class AuthProvider extends ChangeNotifier {
       return true;
     } catch (error) {
       if (version != _sessionVersion) return false;
-      errorMessage = error.toString().replaceFirst('Exception: ', '');
+      ageVerificationRequired =
+          showEligibilitySteps &&
+          error is ApiException &&
+          error.message == 'AGE_VERIFICATION_REQUIRED';
+      termsAcceptanceRequired =
+          showEligibilitySteps &&
+          error is ApiException &&
+          error.message == 'TERMS_ACCEPTANCE_REQUIRED';
+      emailVerificationRequired =
+          error is ApiException &&
+          error.statusCode == 403 &&
+          error.message.contains('verificar tu correo electrónico');
+      errorMessage = ageVerificationRequired
+          ? 'Completá la verificación de fecha de nacimiento para continuar.'
+          : termsAcceptanceRequired
+          ? 'Aceptá los Términos de uso para continuar.'
+          : !showEligibilitySteps &&
+                error is ApiException &&
+                (error.message == 'AGE_VERIFICATION_REQUIRED' ||
+                    error.message == 'TERMS_ACCEPTANCE_REQUIRED')
+          ? 'El correo quedó verificado. Iniciá sesión para completar la validación de tu cuenta.'
+          : error.toString().replaceFirst('Exception: ', '');
       return false;
     } finally {
       if (version == _sessionVersion) {
         isLoading = false;
         notifyListeners();
       }
+    }
+  }
+
+  Future<bool> resendVerificationEmail({required String email}) async {
+    isResendingVerificationEmail = true;
+    resendVerificationErrorMessage = null;
+    notifyListeners();
+
+    try {
+      await _authService.resendVerificationEmail(email);
+      return true;
+    } catch (error) {
+      resendVerificationErrorMessage = error.toString().replaceFirst(
+        'Exception: ',
+        '',
+      );
+      return false;
+    } finally {
+      isResendingVerificationEmail = false;
+      notifyListeners();
     }
   }
 
