@@ -59,11 +59,10 @@ class ApiClient {
     Map<String, dynamic> body,
   ) async {
     final uri = Uri.parse('${ApiConfig.baseUrl}$path');
+    final headers = await _buildHeaders();
 
-    final response = await http.post(
-      uri,
-      headers: await _buildHeaders(),
-      body: jsonEncode(body),
+    final response = await _send(
+      () => http.post(uri, headers: headers, body: jsonEncode(body)),
     );
 
     return _handleResponse(response);
@@ -74,11 +73,10 @@ class ApiClient {
     Map<String, dynamic> body,
   ) async {
     final uri = Uri.parse('${ApiConfig.baseUrl}$path');
+    final headers = await _buildHeaders(authenticated: true);
 
-    final response = await http.post(
-      uri,
-      headers: await _buildHeaders(authenticated: true),
-      body: jsonEncode(body),
+    final response = await _send(
+      () => http.post(uri, headers: headers, body: jsonEncode(body)),
     );
 
     return _handleResponse(response);

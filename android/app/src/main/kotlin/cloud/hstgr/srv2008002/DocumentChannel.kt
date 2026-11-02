@@ -1,4 +1,4 @@
-package com.example.bond_front
+package cloud.hstgr.srv2008002
 
 import android.app.Activity
 import android.content.Intent
