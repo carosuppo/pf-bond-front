@@ -152,7 +152,7 @@ class AppRouter {
         );
 
       case AppRoutes.createExpenseAccount:
-        return MaterialPageRoute(
+        return MaterialPageRoute<bool?>(
           builder: (_) => const CreateExpenseAccountScreen(),
           settings: settings,
         );
