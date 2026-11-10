@@ -17,21 +17,65 @@ import '../models/expense_model.response.dart';
 import '../models/expense_payment_model.response.dart';
 import '../providers/expense_account_provider.dart';
 import '../widgets/account_group_details_loader.dart';
-import '../widgets/account_movement_card.dart';
 import '../widgets/account_new_movement_sheet.dart';
 import '../widgets/account_payment_status_badge.dart';
+import '../widgets/account_separated_list.dart';
+import '../widgets/movement_date_header.dart';
+import '../widgets/movement_list_item.dart';
 
-class ExpenseAccountMovementsScreen extends StatelessWidget {
+class ExpenseAccountMovementsScreen extends StatefulWidget {
   const ExpenseAccountMovementsScreen({super.key, required this.accountId});
 
   final int accountId;
 
   @override
+  State<ExpenseAccountMovementsScreen> createState() =>
+      _ExpenseAccountMovementsScreenState();
+}
+
+class _ExpenseAccountMovementsScreenState
+    extends State<ExpenseAccountMovementsScreen> {
+  late final ScrollController _scrollController;
+  bool _isFabExtended = true;
+  double _previousScrollOffset = 0;
+
+  @override
+  void initState() {
+    super.initState();
+    _scrollController = ScrollController()..addListener(_handleScroll);
+  }
+
+  void _handleScroll() {
+    if (!_scrollController.hasClients) return;
+
+    final currentOffset = _scrollController.offset;
+    final difference = currentOffset - _previousScrollOffset;
+    if (difference > 0 && _isFabExtended) {
+      setState(() => _isFabExtended = false);
+    } else if (difference < 0 && !_isFabExtended) {
+      setState(() => _isFabExtended = true);
+    }
+    _previousScrollOffset = currentOffset;
+  }
+
+  @override
+  void dispose() {
+    _scrollController
+      ..removeListener(_handleScroll)
+      ..dispose();
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: AppColors.background,
-      body: SafeArea(child: _MovementsContent(accountId: accountId)),
+      body: PrimaryScrollController(
+        controller: _scrollController,
+        child: SafeArea(child: _MovementsContent(accountId: widget.accountId)),
+      ),
       floatingActionButton: FloatingActionButton.extended(
+        isExtended: _isFabExtended,
         backgroundColor: AppColors.primary,
         foregroundColor: AppColors.onPrimary,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
@@ -52,7 +96,7 @@ class ExpenseAccountMovementsScreen extends StatelessWidget {
       case NewAccountMovementType.expense:
         await Navigator.of(context).pushNamed(
           AppRoutes.createExpense,
-          arguments: {'accountId': accountId},
+          arguments: {'accountId': widget.accountId},
         );
         break;
       case NewAccountMovementType.payment:
@@ -63,7 +107,7 @@ class ExpenseAccountMovementsScreen extends StatelessWidget {
         if (groupId == null) return;
         await Navigator.of(context).pushNamed(
           AppRoutes.expenseAccountPayments,
-          arguments: {'accountId': accountId, 'groupId': groupId},
+          arguments: {'accountId': widget.accountId, 'groupId': groupId},
         );
         break;
     }
@@ -213,6 +257,13 @@ class _MovementListItem {
 
   final AccountMovementModel movement;
   final bool isAnnulled;
+}
+
+class _MovementDateGroup {
+  _MovementDateGroup(this.date);
+
+  final DateTime date;
+  final List<_MovementListItem> items = [];
 }
 
 class _MovementPaymentStatus {
@@ -433,19 +484,84 @@ class _MovementsList extends StatelessWidget {
     return memberMovementAmountCents(movement, memberId) != null;
   }
 
-  String _creatorSubtitle(
-    AccountMovementModel movement, {
-    required ExpenseAccountProvider provider,
-    required List<AccountMovementModel> allMovements,
-  }) => accountMovementCreatorSubtitle(
-    movement: movement,
-    accountId: accountId,
-    allMovements: allMovements,
-    groupMembers: groupDetails.members,
-    currentUserId: currentUserId,
-    createdExpense: provider.createdExpense,
-    updatedExpense: provider.updatedExpense,
-  );
+  GetMemberResponseModel? _movementAuthor(
+    AccountMovementModel movement,
+    ExpenseAccountProvider provider,
+  ) {
+    var creatorUserId = movement.kind == 'ADJUSTMENT'
+        ? movement.createdByUserId
+        : accountMovementCreatorUserId(
+            movement: movement,
+            accountId: accountId,
+            createdExpense: provider.createdExpense,
+            updatedExpense: provider.updatedExpense,
+          );
+
+    if (creatorUserId == null &&
+        movement.kind == 'PAYMENT' &&
+        movement.fromMemberId != null) {
+      for (final member in groupDetails.members) {
+        if (member.id == movement.fromMemberId) {
+          creatorUserId = member.idUser;
+          break;
+        }
+      }
+    }
+
+    var viewerUserId = currentUserId;
+    if (viewerUserId == null) {
+      for (final member in groupDetails.members) {
+        if (member.id == memberId) {
+          viewerUserId = member.idUser;
+          break;
+        }
+      }
+    }
+
+    if (creatorUserId == null || creatorUserId == viewerUserId) return null;
+    for (final member in groupDetails.members) {
+      if (member.idUser == creatorUserId) return member;
+    }
+    return null;
+  }
+
+  String _movementTypeLabel(AccountMovementModel movement) {
+    if (movement.kind == 'ADJUSTMENT') return 'Ajuste económico';
+    if (movement.kind == 'PAYMENT') {
+      return movement.adjustmentId == null ? 'Pago' : 'Pago de ajuste';
+    }
+    return 'Gasto';
+  }
+
+  String _movementTitle(AccountMovementModel movement) {
+    final title = movement.title?.trim();
+    if (title != null && title.isNotEmpty) return title;
+    final expenseTitle = movement.expenseTitle?.trim();
+    if (expenseTitle != null && expenseTitle.isNotEmpty) return expenseTitle;
+    return _movementTypeLabel(movement);
+  }
+
+  bool _isPending(_MovementListItem item) {
+    if (item.isAnnulled) return false;
+    final movement = item.movement;
+
+    if (movement.kind == 'ADJUSTMENT') return movement.status == 'PENDING';
+    if (movement.kind != 'EXPENSE') return false;
+
+    if (detail.movements.any(
+      (candidate) =>
+          candidate.kind == 'ADJUSTMENT' &&
+          candidate.expenseId == movement.id &&
+          candidate.status == 'PENDING',
+    )) {
+      return true;
+    }
+
+    final status = _statusForItem(item)?.label;
+    return status == 'Pendiente' ||
+        status == 'Cobros pendientes' ||
+        status == 'Ajuste pendiente';
+  }
 
   Future<void> _confirmAnnulPayment(
     BuildContext context,
@@ -503,8 +619,6 @@ class _MovementsList extends StatelessWidget {
       context,
       title: 'Eliminar gasto',
       message:
-          'Gasto: ${accountMovementTitle(expense)}\n'
-          'Importe: ${MoneyFormatter.formatCentsShort(expense.amountCents)}\n\n'
           'La eliminación es definitiva y no se puede deshacer. Se '
           'actualizarán los saldos de los miembros afectados.',
       confirmText: 'Eliminar gasto',
@@ -596,11 +710,16 @@ class _MovementsList extends StatelessWidget {
     final isCurrentMovementBusy =
         provider.deletingExpenseId == movement.id ||
         provider.annullingExpensePaymentId == movement.id;
-
     return PopupMenuButton<_MovementAction>(
       tooltip: 'Acciones del movimiento',
       padding: EdgeInsets.zero,
       enabled: !isBusy,
+      color: AppColors.cardColor,
+      surfaceTintColor: AppColors.cardColor,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(16),
+        side: const BorderSide(color: AppColors.border),
+      ),
       icon: isCurrentMovementBusy
           ? const SizedBox(
               width: 18,
@@ -618,8 +737,8 @@ class _MovementsList extends StatelessWidget {
             value: _MovementAction.editExpense,
             child: ListTile(
               contentPadding: EdgeInsets.zero,
-              leading: Icon(Icons.edit_outlined, color: AppColors.primary),
-              title: Text('Editar gasto'),
+              leading: Icon(Icons.edit_outlined, color: AppColors.text),
+              title: Text('Editar'),
             ),
           ),
         if (canManageExpense)
@@ -628,11 +747,11 @@ class _MovementsList extends StatelessWidget {
             value: _MovementAction.deleteExpense,
             child: ListTile(
               contentPadding: EdgeInsets.zero,
-              leading: Icon(Icons.delete_outline, color: AppColors.error),
-              title: Text(
-                'Eliminar gasto',
-                style: TextStyle(color: AppColors.error),
+              leading: Icon(
+                Icons.delete_outline_rounded,
+                color: AppColors.error,
               ),
+              title: Text('Eliminar', style: TextStyle(color: AppColors.error)),
             ),
           ),
         if (canAnnulPayment)
@@ -642,10 +761,7 @@ class _MovementsList extends StatelessWidget {
             child: ListTile(
               contentPadding: EdgeInsets.zero,
               leading: Icon(Icons.block_outlined, color: AppColors.error),
-              title: Text(
-                'Anular pago',
-                style: TextStyle(color: AppColors.error),
-              ),
+              title: Text('Anular', style: TextStyle(color: AppColors.error)),
             ),
           ),
       ],
@@ -700,30 +816,25 @@ class _MovementsList extends StatelessWidget {
       items: items,
       itemBuilder: (context, item) {
         final movement = item.movement;
-        final status = _statusForItem(item);
-        final creatorSubtitle = _creatorSubtitle(
-          movement,
-          provider: provider,
-          allMovements: detail.movements,
-        );
-        return AccountMovementCard(
+        final author = _movementAuthor(movement, provider);
+        final isAdjustment =
+            movement.kind == 'ADJUSTMENT' ||
+            (movement.kind == 'PAYMENT' && movement.adjustmentId != null);
+        return MovementListItem(
           icon: movement.kind == 'EXPENSE'
               ? Icons.receipt_long_outlined
               : movement.kind == 'ADJUSTMENT'
               ? Icons.compare_arrows_rounded
               : Icons.payments_outlined,
-          accentColor: item.isAnnulled
-              ? AppColors.error
-              : movement.kind == 'PAYMENT'
-              ? AppColors.success
-              : AppColors.primary,
-          title: accountMovementTitle(movement),
-          subtitle: creatorSubtitle,
+          title: _movementTitle(movement),
+          typeLabel: _movementTypeLabel(movement),
           amountCents: movement.amountCents,
-          createdAt: _movementDate(movement),
-          statusLabel: status?.label,
-          statusColor: status?.color ?? AppColors.primary,
+          authorName: author?.name,
+          authorPhotoUrl: author?.profilePhoto,
+          isPayment: movement.kind == 'PAYMENT',
+          isAdjustment: isAdjustment,
           isAnnulled: item.isAnnulled,
+          isPending: _isPending(item),
           onTap: () => _showMovementDetails(context, item),
           trailing: _movementActions(context, item, provider),
         );
@@ -759,9 +870,10 @@ class _FilteredMovementListState extends State<_FilteredMovementList> {
             case _MovementFilter.all:
               return true;
             case _MovementFilter.expenses:
-              return item.movement.kind == 'EXPENSE';
+              return item.movement.kind == 'EXPENSE' ||
+                  item.movement.kind == 'ADJUSTMENT';
             case _MovementFilter.payments:
-              return item.movement.kind != 'EXPENSE';
+              return item.movement.kind == 'PAYMENT';
           }
         })
         .toList(growable: false);
@@ -773,9 +885,25 @@ class _FilteredMovementListState extends State<_FilteredMovementList> {
     _MovementFilter.payments => 'Pagos',
   };
 
+  List<_MovementDateGroup> _groupByDate(List<_MovementListItem> items) {
+    final groups = <_MovementDateGroup>[];
+    for (final item in items) {
+      final movement = item.movement;
+      final date =
+          movement.confirmedAt ?? movement.settledAt ?? movement.createdAt;
+      if (groups.isEmpty ||
+          !EventDateFormatter.isSameLocalDay(groups.last.date, date)) {
+        groups.add(_MovementDateGroup(date));
+      }
+      groups.last.items.add(item);
+    }
+    return groups;
+  }
+
   @override
   Widget build(BuildContext context) {
     final filteredItems = _filteredItems;
+    final dateGroups = _groupByDate(filteredItems);
 
     return Column(
       children: [
@@ -828,16 +956,42 @@ class _FilteredMovementListState extends State<_FilteredMovementList> {
                     ),
                   ),
                 )
-              : ListView.builder(
-                  padding: const EdgeInsets.fromLTRB(16, 4, 16, 112),
-                  itemCount: filteredItems.length,
-                  itemBuilder: (context, index) =>
-                      widget.itemBuilder(context, filteredItems[index]),
+              : ListView(
+                  primary: true,
+                  padding: const EdgeInsets.fromLTRB(16, 4, 16, 128),
+                  children: [
+                    for (final group in dateGroups) ...[
+                      MovementDateHeader(date: group.date),
+                      AccountSeparatedList(
+                        itemCount: group.items.length,
+                        itemBuilder: (context, index) =>
+                            widget.itemBuilder(context, group.items[index]),
+                      ),
+                    ],
+                  ],
                 ),
         ),
       ],
     );
   }
+}
+
+class _SharePaymentSummary {
+  const _SharePaymentSummary({
+    required this.paidCents,
+    required this.outstandingCents,
+    required this.pendingPaymentCents,
+    required this.pendingRefundCents,
+    required this.paidAdjustmentCents,
+    required this.hasAdjustment,
+  });
+
+  final int paidCents;
+  final int outstandingCents;
+  final int pendingPaymentCents;
+  final int pendingRefundCents;
+  final int paidAdjustmentCents;
+  final bool hasAdjustment;
 }
 
 class _MovementDetailsSheet extends StatelessWidget {
@@ -863,16 +1017,107 @@ class _MovementDetailsSheet extends StatelessWidget {
   DateTime get _movementDate =>
       movement.confirmedAt ?? movement.settledAt ?? movement.createdAt;
 
-  Widget _sectionTitle(String title) {
+  String get _movementTypeLabel => switch (movement.kind) {
+    'EXPENSE' => 'Gasto',
+    'ADJUSTMENT' => 'Ajuste económico',
+    _ => 'Pago',
+  };
+
+  IconData get _movementIcon => switch (movement.kind) {
+    'EXPENSE' => Icons.receipt_long_outlined,
+    'ADJUSTMENT' => Icons.compare_arrows_rounded,
+    _ => Icons.payments_outlined,
+  };
+
+  Color get _movementAccentColor {
+    if (item.isAnnulled || movement.status == 'CANCELED') {
+      return AppColors.error;
+    }
+    if (movement.kind == 'PAYMENT' || movement.status == 'PAID') {
+      return AppColors.success;
+    }
+    return AppColors.primary;
+  }
+
+  String? get _movementStatusLabel {
+    if (item.isAnnulled || movement.status == 'CANCELED') return 'Anulado';
+    if (movement.kind == 'ADJUSTMENT') {
+      return switch (movement.status) {
+        'PENDING' => 'Pendiente',
+        'PAID' => 'Pagado',
+        _ => null,
+      };
+    }
+    if (movement.kind == 'PAYMENT' && movement.confirmedAt != null) {
+      return 'Confirmado';
+    }
+    return null;
+  }
+
+  Widget _detailsSection({
+    required String title,
+    required IconData icon,
+    required List<Widget> children,
+  }) {
+    return Container(
+      margin: const EdgeInsets.only(top: 14),
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: AppColors.fieldColor,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: AppColors.border),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Row(
+            children: [
+              Icon(icon, color: AppColors.primary, size: 19),
+              const SizedBox(width: 9),
+              Expanded(
+                child: Text(
+                  title,
+                  style: const TextStyle(
+                    color: AppColors.text,
+                    fontSize: 14,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          if (children.isNotEmpty) ...[
+            const SizedBox(height: 10),
+            const Divider(height: 1, color: AppColors.border),
+            const SizedBox(height: 6),
+            ...children,
+          ],
+        ],
+      ),
+    );
+  }
+
+  Widget _summaryAmountRow(String label, int cents, {Color? color}) {
     return Padding(
-      padding: const EdgeInsets.only(top: 16, bottom: 8),
-      child: Text(
-        title,
-        style: const TextStyle(
-          color: AppColors.text,
-          fontSize: 14,
-          fontWeight: FontWeight.w700,
-        ),
+      padding: const EdgeInsets.symmetric(vertical: 4),
+      child: Row(
+        children: [
+          Expanded(
+            child: Text(
+              label,
+              style: const TextStyle(color: AppColors.mutedText, fontSize: 12),
+            ),
+          ),
+          const SizedBox(width: 8),
+          Text(
+            MoneyFormatter.formatCentsShort(cents),
+            style: TextStyle(
+              color: color ?? AppColors.text,
+              fontSize: 12,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -920,44 +1165,198 @@ class _MovementDetailsSheet extends StatelessWidget {
       )
       .toList(growable: false);
 
-  Widget _participantRow(AccountShareModel share) {
-    final status = _statusForShare(share);
-    return Container(
-      padding: const EdgeInsets.symmetric(vertical: 8),
-      decoration: const BoxDecoration(
-        border: Border(bottom: BorderSide(color: AppColors.border)),
+  _SharePaymentSummary _sharePaymentSummary(AccountShareModel share) {
+    final payerMemberId = movement.payerMemberId;
+    final relatedAdjustments = _expenseAdjustments
+        .where(
+          (adjustment) =>
+              adjustment.debtorMemberId == share.memberId ||
+              adjustment.creditorMemberId == share.memberId,
+        )
+        .toList(growable: false);
+    final directPaymentsCents = allMovements
+        .where(
+          (candidate) =>
+              candidate.kind == 'PAYMENT' &&
+              candidate.expenseId == movement.id &&
+              candidate.expenseShareId != null &&
+              candidate.adjustmentId == null &&
+              candidate.fromMemberId == share.memberId &&
+              candidate.toMemberId == payerMemberId,
+        )
+        .fold<int>(0, (total, payment) => total + payment.amountCents);
+    final paidByMemberCents = relatedAdjustments
+        .where(
+          (adjustment) =>
+              adjustment.status == 'PAID' &&
+              adjustment.debtorMemberId == share.memberId,
+        )
+        .fold<int>(0, (total, adjustment) => total + adjustment.amountCents);
+    final refundedToMemberCents = relatedAdjustments
+        .where(
+          (adjustment) =>
+              adjustment.status == 'PAID' &&
+              adjustment.creditorMemberId == share.memberId,
+        )
+        .fold<int>(0, (total, adjustment) => total + adjustment.amountCents);
+    final netPaidCents =
+        directPaymentsCents + paidByMemberCents - refundedToMemberCents;
+    final currentOwedCents = share.isCurrent && share.memberId != payerMemberId
+        ? share.amountCents
+        : 0;
+    final pendingAdjustments = relatedAdjustments.where(
+      (adjustment) => adjustment.status == 'PENDING',
+    );
+    final pendingPaymentCents = pendingAdjustments
+        .where((adjustment) => adjustment.debtorMemberId == share.memberId)
+        .fold<int>(0, (total, adjustment) => total + adjustment.amountCents);
+    final pendingRefundCents = pendingAdjustments
+        .where((adjustment) => adjustment.creditorMemberId == share.memberId)
+        .fold<int>(0, (total, adjustment) => total + adjustment.amountCents);
+    final paidAdjustmentCents = relatedAdjustments
+        .where((adjustment) => adjustment.status == 'PAID')
+        .fold<int>(0, (total, adjustment) => total + adjustment.amountCents);
+
+    return _SharePaymentSummary(
+      paidCents: netPaidCents,
+      outstandingCents: currentOwedCents - netPaidCents,
+      pendingPaymentCents: pendingPaymentCents,
+      pendingRefundCents: pendingRefundCents,
+      paidAdjustmentCents: paidAdjustmentCents,
+      hasAdjustment: relatedAdjustments.any(
+        (adjustment) =>
+            adjustment.status == 'PENDING' || adjustment.status == 'PAID',
       ),
-      child: Row(
+    );
+  }
+
+  AccountMovementModel? get _relatedAdjustment {
+    final adjustmentId = movement.kind == 'ADJUSTMENT'
+        ? movement.id
+        : movement.adjustmentId;
+    if (adjustmentId == null) return null;
+
+    for (final candidate in allMovements) {
+      if (candidate.kind == 'ADJUSTMENT' && candidate.id == adjustmentId) {
+        return candidate;
+      }
+    }
+    return null;
+  }
+
+  AccountMovementModel? get _relatedAdjustmentPayment {
+    if (movement.kind != 'ADJUSTMENT') return null;
+    for (final candidate in allMovements) {
+      if (candidate.kind == 'PAYMENT' &&
+          candidate.adjustmentId == movement.id) {
+        return candidate;
+      }
+    }
+    return null;
+  }
+
+  Widget _participantRow(AccountShareModel share) {
+    final summary = _sharePaymentSummary(share);
+    final status = summary.pendingPaymentCents > 0
+        ? const _MovementPaymentStatus('Ajuste pendiente', AppColors.primary)
+        : summary.pendingRefundCents > 0
+        ? const _MovementPaymentStatus('Ajuste a favor', AppColors.primary)
+        : _statusForShare(share);
+
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 8),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Expanded(
-            child: Text(
-              _memberName(share.memberId),
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: const TextStyle(color: AppColors.text, fontSize: 13),
-            ),
-          ),
-          const SizedBox(width: 8),
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.end,
+          Row(
             children: [
-              Text(
-                MoneyFormatter.formatCentsShort(share.amountCents),
-                style: const TextStyle(
-                  color: AppColors.text,
-                  fontSize: 13,
-                  fontWeight: FontWeight.w600,
+              Expanded(
+                child: Text(
+                  _memberName(share.memberId),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                    color: AppColors.text,
+                    fontSize: 13,
+                    fontWeight: FontWeight.w600,
+                  ),
                 ),
               ),
-              if (status != null) ...[
-                const SizedBox(height: 4),
-                AccountPaymentStatusBadge(
-                  label: status.label,
-                  color: status.color,
-                ),
-              ],
+              const SizedBox(width: 8),
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.end,
+                children: [
+                  Text(
+                    MoneyFormatter.formatCentsShort(share.amountCents),
+                    style: const TextStyle(
+                      color: AppColors.text,
+                      fontSize: 13,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                  if (status != null) ...[
+                    const SizedBox(height: 4),
+                    AccountPaymentStatusBadge(
+                      label: status.label,
+                      color: status.color,
+                    ),
+                  ],
+                ],
+              ),
             ],
           ),
+          if (summary.hasAdjustment) ...[
+            const SizedBox(height: 8),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+              decoration: BoxDecoration(
+                color: AppColors.cardColor,
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: Column(
+                children: [
+                  _summaryAmountRow(
+                    share.isCurrent ? 'Parte actual' : 'Parte registrada',
+                    share.amountCents,
+                  ),
+                  _summaryAmountRow(
+                    'Pagado',
+                    summary.paidCents,
+                    color: AppColors.success,
+                  ),
+                  if (summary.pendingPaymentCents > 0)
+                    _summaryAmountRow(
+                      'Ajuste pendiente · falta pagar',
+                      summary.pendingPaymentCents,
+                      color: AppColors.primary,
+                    )
+                  else if (summary.pendingRefundCents > 0)
+                    _summaryAmountRow(
+                      'Ajuste pendiente · falta recibir',
+                      summary.pendingRefundCents,
+                      color: AppColors.primary,
+                    )
+                  else if (summary.paidAdjustmentCents > 0)
+                    _summaryAmountRow(
+                      'Ajuste pagado',
+                      summary.paidAdjustmentCents,
+                      color: AppColors.success,
+                    ),
+                  if (summary.pendingPaymentCents == 0 &&
+                      summary.pendingRefundCents == 0)
+                    _summaryAmountRow(
+                      summary.outstandingCents < 0
+                          ? 'Falta recibir'
+                          : 'Falta pagar',
+                      summary.outstandingCents.abs(),
+                      color: summary.outstandingCents == 0
+                          ? AppColors.success
+                          : AppColors.primary,
+                    ),
+                ],
+              ),
+            ),
+          ],
         ],
       ),
     );
@@ -967,6 +1366,7 @@ class _MovementDetailsSheet extends StatelessWidget {
     final status = switch (adjustment.status) {
       'PENDING' => const _MovementPaymentStatus('Pendiente', AppColors.primary),
       'PAID' => const _MovementPaymentStatus('Pagado', AppColors.success),
+      'CANCELED' => const _MovementPaymentStatus('Anulado', AppColors.error),
       _ => null,
     };
 
@@ -1017,104 +1417,283 @@ class _MovementDetailsSheet extends StatelessWidget {
       return Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          _sectionTitle('Gasto'),
-          _infoRow('Pagador', _memberName(movement.payerMemberId)),
-          _sectionTitle('Participantes'),
-          for (final share in movement.shares) _participantRow(share),
-          if (_expenseAdjustments.isNotEmpty) ...[
-            _sectionTitle('Ajustes económicos'),
-            for (final adjustment in _expenseAdjustments)
-              _adjustmentRow(adjustment),
-          ],
+          _detailsSection(
+            title: 'Datos del gasto',
+            icon: Icons.receipt_long_outlined,
+            children: [
+              _infoRow('Pagador', _memberName(movement.payerMemberId)),
+            ],
+          ),
+          _detailsSection(
+            title: 'Participantes y pagos',
+            icon: Icons.groups_outlined,
+            children: [
+              for (var index = 0; index < movement.shares.length; index++) ...[
+                if (index > 0)
+                  const Divider(height: 1, color: AppColors.border),
+                _participantRow(movement.shares[index]),
+              ],
+            ],
+          ),
+          if (_expenseAdjustments.isNotEmpty)
+            _detailsSection(
+              title: 'Historial de ajustes',
+              icon: Icons.compare_arrows_rounded,
+              children: [
+                for (final adjustment in _expenseAdjustments)
+                  _adjustmentRow(adjustment),
+              ],
+            ),
         ],
       );
     }
 
     if (movement.kind == 'ADJUSTMENT') {
-      final status = movement.status == 'PENDING'
-          ? 'Pendiente'
-          : movement.status == 'PAID'
-          ? 'Pagado'
-          : null;
-      return Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
+      final relatedPayment = _relatedAdjustmentPayment;
+      final statusLabel = switch (movement.status) {
+        'PENDING' => 'Pendiente',
+        'PAID' => 'Pagado',
+        'CANCELED' => 'Anulado',
+        _ => 'Sin estado',
+      };
+      final paidCents = movement.status == 'PAID'
+          ? relatedPayment?.amountCents ?? movement.amountCents
+          : 0;
+      final outstandingCents = movement.status == 'PENDING'
+          ? movement.amountCents
+          : 0;
+
+      return _detailsSection(
+        title: 'Detalle del ajuste',
+        icon: Icons.compare_arrows_rounded,
         children: [
-          _sectionTitle('Ajuste económico'),
-          _infoRow('Debe', _memberName(movement.debtorMemberId)),
+          if (movement.expenseTitle != null)
+            _infoRow('Gasto asociado', movement.expenseTitle!),
+          _infoRow('Paga', _memberName(movement.debtorMemberId)),
           _infoRow('Recibe', _memberName(movement.creditorMemberId)),
-          if (status != null) _infoRow('Estado', status),
+          _infoRow(
+            'Importe del ajuste',
+            MoneyFormatter.formatCentsShort(movement.amountCents),
+          ),
+          _infoRow('Pagado', MoneyFormatter.formatCentsShort(paidCents)),
+          _infoRow(
+            'Falta pagar',
+            MoneyFormatter.formatCentsShort(outstandingCents),
+          ),
+          _infoRow('Estado', statusLabel),
         ],
       );
     }
 
-    final status = item.isAnnulled
+    final relatedAdjustment = _relatedAdjustment;
+    final outstandingAdjustmentCents =
+        item.isAnnulled && relatedAdjustment?.status == 'PENDING'
+        ? relatedAdjustment!.amountCents
+        : 0;
+    final statusLabel = item.isAnnulled
         ? 'Anulado'
         : movement.confirmedAt == null
-        ? null
+        ? 'Pendiente'
         : 'Confirmado';
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        _sectionTitle('Pago'),
-        _infoRow('Desde', _memberName(movement.fromMemberId)),
-        _infoRow('Hacia', _memberName(movement.toMemberId)),
-        if (status != null) _infoRow('Estado', status),
+        _detailsSection(
+          title: 'Datos del pago',
+          icon: Icons.payments_outlined,
+          children: [
+            _infoRow('Desde', _memberName(movement.fromMemberId)),
+            _infoRow('Hacia', _memberName(movement.toMemberId)),
+            _infoRow('Estado', statusLabel),
+          ],
+        ),
+        if (movement.adjustmentId != null)
+          _detailsSection(
+            title: 'Ajuste relacionado',
+            icon: Icons.compare_arrows_rounded,
+            children: [
+              _infoRow(
+                'Importe del ajuste',
+                MoneyFormatter.formatCentsShort(
+                  relatedAdjustment?.amountCents ?? movement.amountCents,
+                ),
+              ),
+              _infoRow(
+                'Pagado',
+                MoneyFormatter.formatCentsShort(
+                  item.isAnnulled ? 0 : movement.amountCents,
+                ),
+              ),
+              _infoRow(
+                'Falta pagar',
+                MoneyFormatter.formatCentsShort(outstandingAdjustmentCents),
+              ),
+            ],
+          ),
       ],
     );
   }
 
   @override
   Widget build(BuildContext context) {
+    final accentColor = _movementAccentColor;
+    final statusLabel = _movementStatusLabel;
+
     return SafeArea(
       child: FractionallySizedBox(
         heightFactor: 0.9,
-        child: SingleChildScrollView(
-          padding: const EdgeInsets.fromLTRB(20, 18, 20, 24),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              Center(
-                child: Container(
-                  width: 36,
-                  height: 4,
-                  decoration: BoxDecoration(
-                    color: AppColors.border,
-                    borderRadius: BorderRadius.circular(4),
-                  ),
+        child: Column(
+          children: [
+            const SizedBox(height: 12),
+            Center(
+              child: Container(
+                width: 36,
+                height: 4,
+                decoration: BoxDecoration(
+                  color: AppColors.border,
+                  borderRadius: BorderRadius.circular(4),
                 ),
               ),
-              const SizedBox(height: 16),
-              Text(
-                accountMovementTitle(movement),
-                style: const TextStyle(
-                  color: AppColors.text,
-                  fontSize: 18,
-                  fontWeight: FontWeight.w700,
+            ),
+            Expanded(
+              child: SingleChildScrollView(
+                padding: const EdgeInsets.fromLTRB(20, 12, 20, 24),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    Row(
+                      children: [
+                        Container(
+                          width: 44,
+                          height: 44,
+                          decoration: BoxDecoration(
+                            color: accentColor.withValues(alpha: 0.15),
+                            shape: BoxShape.circle,
+                          ),
+                          child: Icon(
+                            _movementIcon,
+                            color: accentColor,
+                            size: 23,
+                          ),
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                _movementTypeLabel.toUpperCase(),
+                                style: TextStyle(
+                                  color: accentColor,
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.w700,
+                                  letterSpacing: 0.7,
+                                ),
+                              ),
+                              const SizedBox(height: 3),
+                              Text(
+                                accountMovementTitle(movement),
+                                maxLines: 2,
+                                overflow: TextOverflow.ellipsis,
+                                style: const TextStyle(
+                                  color: AppColors.text,
+                                  fontSize: 18,
+                                  fontWeight: FontWeight.w700,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                        IconButton(
+                          tooltip: 'Cerrar detalle',
+                          onPressed: () => Navigator.of(context).pop(),
+                          icon: const Icon(
+                            Icons.close_rounded,
+                            color: AppColors.mutedText,
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 16),
+                    Container(
+                      padding: const EdgeInsets.all(16),
+                      decoration: BoxDecoration(
+                        color: AppColors.fieldColor,
+                        borderRadius: BorderRadius.circular(16),
+                        border: Border.all(color: AppColors.border),
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          Row(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    const Text(
+                                      'Importe',
+                                      style: TextStyle(
+                                        color: AppColors.mutedText,
+                                        fontSize: 12,
+                                      ),
+                                    ),
+                                    const SizedBox(height: 4),
+                                    Text(
+                                      MoneyFormatter.formatCentsShort(
+                                        movement.amountCents,
+                                      ),
+                                      style: TextStyle(
+                                        color: accentColor,
+                                        fontSize: 26,
+                                        fontWeight: FontWeight.bold,
+                                        decoration: item.isAnnulled
+                                            ? TextDecoration.lineThrough
+                                            : null,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                              if (statusLabel != null)
+                                AccountPaymentStatusBadge(
+                                  label: statusLabel,
+                                  color: accentColor,
+                                ),
+                            ],
+                          ),
+                          const SizedBox(height: 12),
+                          const Divider(height: 1, color: AppColors.border),
+                          const SizedBox(height: 10),
+                          Row(
+                            children: [
+                              const Icon(
+                                Icons.calendar_today_outlined,
+                                color: AppColors.mutedText,
+                                size: 16,
+                              ),
+                              const SizedBox(width: 8),
+                              Text(
+                                '${EventDateFormatter.dayMonthYear(_movementDate)} · '
+                                '${EventDateFormatter.time(_movementDate)}',
+                                style: const TextStyle(
+                                  color: AppColors.mutedText,
+                                  fontSize: 12,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ],
+                      ),
+                    ),
+                    _movementDetails(),
+                  ],
                 ),
               ),
-              const SizedBox(height: 6),
-              Text(
-                MoneyFormatter.formatCentsShort(movement.amountCents),
-                style: TextStyle(
-                  color: item.isAnnulled ? AppColors.error : AppColors.primary,
-                  fontSize: 24,
-                  fontWeight: FontWeight.bold,
-                  decoration: item.isAnnulled
-                      ? TextDecoration.lineThrough
-                      : null,
-                ),
-              ),
-              const SizedBox(height: 4),
-              Text(
-                EventDateFormatter.dayMonthYear(_movementDate),
-                style: const TextStyle(
-                  color: AppColors.mutedText,
-                  fontSize: 12,
-                ),
-              ),
-              _movementDetails(),
-            ],
-          ),
+            ),
+          ],
         ),
       ),
     );

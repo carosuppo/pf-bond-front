@@ -8,6 +8,7 @@ import '../formatters/money_formatter.dart';
 import '../models/balance_status.dart';
 import '../models/my_expense_account_model.response.dart';
 import '../providers/expense_account_provider.dart';
+import '../widgets/account_separated_list.dart';
 import '../widgets/account_balance_label.dart';
 
 class ExpenseAccountsScreen extends StatelessWidget {
@@ -411,39 +412,20 @@ class _AccountSection extends StatelessWidget {
               ),
             ),
           ),
-          Container(
-            decoration: BoxDecoration(
-              color: AppColors.cardColor,
-              borderRadius: BorderRadius.circular(18),
-              border: Border.all(color: AppColors.border),
-            ),
-            clipBehavior: Clip.antiAlias,
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                for (
-                  var index = 0;
-                  index < visibleAccounts.length;
-                  index++
-                ) ...[
-                  if (index > 0)
-                    const Padding(
-                      padding: EdgeInsets.symmetric(horizontal: 12),
-                      child: Divider(height: 1, color: AppColors.divider),
-                    ),
-                  _AccountCard(
-                    name: visibleAccounts[index].name,
-                    subtitle: visibleAccounts[index].eventName == null
-                        ? visibleAccounts[index].groupName
-                        : '${visibleAccounts[index].groupName} · '
-                              '${visibleAccounts[index].eventName}',
-                    status: visibleAccounts[index].status,
-                    balanceCents: visibleAccounts[index].balanceCents,
-                    onTap: () => onTap(visibleAccounts[index].id),
-                  ),
-                ],
-              ],
-            ),
+          AccountSeparatedList(
+            itemCount: visibleAccounts.length,
+            itemBuilder: (context, index) {
+              final account = visibleAccounts[index];
+              return _AccountCard(
+                name: account.name,
+                subtitle: account.eventName == null
+                    ? account.groupName
+                    : '${account.groupName} · ${account.eventName}',
+                status: account.status,
+                balanceCents: account.balanceCents,
+                onTap: () => onTap(account.id),
+              );
+            },
           ),
           if (showTotalBalance || accounts.length > 3)
             Row(

@@ -25,16 +25,20 @@ class AccountMemberDebtTile extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final color = _isOwed ? AppColors.success : AppColors.error;
-    final movements = trace.movements.toList()
-      ..sort((first, second) {
-        final firstDate = first.movement.settledAt ?? first.movement.createdAt;
-        final secondDate =
-            second.movement.settledAt ?? second.movement.createdAt;
-        final dateOrder = secondDate.compareTo(firstDate);
-        return dateOrder != 0
-            ? dateOrder
-            : second.movement.id.compareTo(first.movement.id);
-      });
+    final movements =
+        trace.movements
+            .where((movement) => movement.balanceChangeCents != 0)
+            .toList()
+          ..sort((first, second) {
+            final firstDate =
+                first.movement.settledAt ?? first.movement.createdAt;
+            final secondDate =
+                second.movement.settledAt ?? second.movement.createdAt;
+            final dateOrder = secondDate.compareTo(firstDate);
+            return dateOrder != 0
+                ? dateOrder
+                : second.movement.id.compareTo(first.movement.id);
+          });
 
     return Card(
       margin: const EdgeInsets.only(bottom: 8),

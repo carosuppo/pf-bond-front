@@ -6,6 +6,7 @@ import '../../../core/theme/app_colors.dart';
 import '../../../core/widgets/app_screen_header.dart';
 import '../../../core/widgets/buttons/app_primary_button.dart';
 import '../../auth/providers/auth_provider.dart';
+import '../../event/formatters/event_date_formatter.dart';
 import '../../group/models/get_group_model.response.dart';
 import '../../group/models/get_member_model.response.dart';
 import '../balance/member_debt_trace.dart';
@@ -16,8 +17,10 @@ import '../widgets/account_balance_card.dart';
 import '../widgets/account_group_details_loader.dart';
 import '../widgets/account_header_card.dart';
 import '../widgets/account_member_debt_tile.dart';
-import '../widgets/account_movement_card.dart';
 import '../widgets/account_new_movement_sheet.dart';
+import '../widgets/account_separated_list.dart';
+import '../widgets/movement_date_header.dart';
+import '../widgets/movement_list_item.dart';
 
 class ExpenseAccountDetailScreen extends StatelessWidget {
   const ExpenseAccountDetailScreen({super.key, required this.accountId});
@@ -234,11 +237,14 @@ class _SummaryBody extends StatelessWidget {
   final VoidCallback onNewMovementTap;
   final VoidCallback onMovementsTap;
 
+  DateTime _movementDate(AccountMovementModel movement) =>
+      movement.confirmedAt ?? movement.settledAt ?? movement.createdAt;
+
   List<AccountMovementModel> _recentMovements() {
     final movements = detail.movements.toList()
       ..sort((first, second) {
-        final firstDate = first.settledAt ?? first.createdAt;
-        final secondDate = second.settledAt ?? second.createdAt;
+        final firstDate = _movementDate(first);
+        final secondDate = _movementDate(second);
         final dateOrder = secondDate.compareTo(firstDate);
         return dateOrder != 0 ? dateOrder : second.id.compareTo(first.id);
       });
@@ -246,22 +252,154 @@ class _SummaryBody extends StatelessWidget {
     return movements.take(3).toList(growable: false);
   }
 
-  String _creatorSubtitle(
+  List<_RecentMovementGroup> _groupRecentMovements(
+    List<AccountMovementModel> movements,
+  ) {
+    final groups = <_RecentMovementGroup>[];
+    for (final movement in movements) {
+      final date = _movementDate(movement);
+      if (groups.isEmpty ||
+          !EventDateFormatter.isSameLocalDay(groups.last.date, date)) {
+        groups.add(_RecentMovementGroup(date));
+      }
+      groups.last.movements.add(movement);
+    }
+    return groups;
+  }
+
+  String _movementTypeLabel(AccountMovementModel movement) {
+    if (movement.kind == 'ADJUSTMENT') return 'Ajuste económico';
+    if (movement.kind == 'PAYMENT') {
+      return movement.adjustmentId == null ? 'Pago' : 'Pago de ajuste';
+    }
+    return 'Gasto';
+  }
+
+  String _movementTitle(AccountMovementModel movement) {
+    final title = movement.title?.trim();
+    if (title != null && title.isNotEmpty) return title;
+    final expenseTitle = movement.expenseTitle?.trim();
+    if (expenseTitle != null && expenseTitle.isNotEmpty) return expenseTitle;
+    return _movementTypeLabel(movement);
+  }
+
+  GetMemberResponseModel? _movementAuthor(
     AccountMovementModel movement,
     ExpenseAccountProvider provider,
-  ) => accountMovementCreatorSubtitle(
-    movement: movement,
-    accountId: detail.id,
-    allMovements: detail.movements,
-    groupMembers: groupDetails?.members ?? const [],
-    currentUserId: currentUserId,
-    createdExpense: provider.createdExpense,
-    updatedExpense: provider.updatedExpense,
-  );
+  ) {
+    final members = groupDetails?.members ?? const <GetMemberResponseModel>[];
+    var creatorUserId = movement.kind == 'ADJUSTMENT'
+        ? movement.createdByUserId
+        : accountMovementCreatorUserId(
+            movement: movement,
+            accountId: detail.id,
+            createdExpense: provider.createdExpense,
+            updatedExpense: provider.updatedExpense,
+          );
+
+    if (creatorUserId == null &&
+        movement.kind == 'PAYMENT' &&
+        movement.fromMemberId != null) {
+      for (final member in members) {
+        if (member.id == movement.fromMemberId) {
+          creatorUserId = member.idUser;
+          break;
+        }
+      }
+    }
+
+    var viewerUserId = currentUserId;
+    if (viewerUserId == null) {
+      for (final member in members) {
+        if (member.id == detail.myMemberId) {
+          viewerUserId = member.idUser;
+          break;
+        }
+      }
+    }
+
+    if (creatorUserId == null || creatorUserId == viewerUserId) return null;
+    for (final member in members) {
+      if (member.idUser == creatorUserId) return member;
+    }
+    return null;
+  }
+
+  bool _hasDirectSharePayment(AccountMovementModel expense, int memberId) =>
+      detail.movements.any(
+        (movement) =>
+            movement.kind == 'PAYMENT' &&
+            movement.expenseId == expense.id &&
+            movement.expenseShareId != null &&
+            movement.adjustmentId == null &&
+            movement.fromMemberId == memberId &&
+            movement.toMemberId == expense.payerMemberId,
+      );
+
+  bool _isPending(AccountMovementModel movement) {
+    if (movement.status == 'CANCELED' || movement.status == 'ANNULLED') {
+      return false;
+    }
+    if (movement.kind == 'ADJUSTMENT') return movement.status == 'PENDING';
+    if (movement.kind != 'EXPENSE') return false;
+
+    final relatedAdjustments = detail.movements
+        .where(
+          (candidate) =>
+              candidate.kind == 'ADJUSTMENT' &&
+              candidate.expenseId == movement.id,
+        )
+        .toList(growable: false);
+    if (relatedAdjustments.any(
+      (adjustment) => adjustment.status == 'PENDING',
+    )) {
+      return true;
+    }
+
+    if (movement.payerMemberId == detail.myMemberId) {
+      if (relatedAdjustments.isNotEmpty) return false;
+      return movement.shares
+          .where(
+            (share) =>
+                share.isCurrent &&
+                share.amountCents > 0 &&
+                share.memberId != movement.payerMemberId,
+          )
+          .any((share) => !_hasDirectSharePayment(movement, share.memberId));
+    }
+
+    for (final share in movement.shares) {
+      if (share.memberId != detail.myMemberId) continue;
+      if (!share.isCurrent ||
+          share.amountCents <= 0 ||
+          _hasDirectSharePayment(movement, share.memberId)) {
+        return false;
+      }
+
+      final memberAdjustments = relatedAdjustments.where(
+        (adjustment) =>
+            adjustment.debtorMemberId == share.memberId ||
+            adjustment.creditorMemberId == share.memberId,
+      );
+      if (memberAdjustments.any(
+        (adjustment) =>
+            adjustment.debtorMemberId == share.memberId &&
+            adjustment.creditorMemberId == movement.payerMemberId &&
+            adjustment.status == 'PENDING',
+      )) {
+        return true;
+      }
+      if (memberAdjustments.isNotEmpty) return false;
+      return true;
+    }
+    return false;
+  }
 
   @override
   Widget build(BuildContext context) {
     final provider = context.watch<ExpenseAccountProvider>();
+    final recentMovements = _recentMovements();
+    final recentMovementGroups = _groupRecentMovements(recentMovements);
     final traces = calculateMemberDebtTraces(
       myMemberId: detail.myMemberId,
       movements: detail.movements,
@@ -365,7 +503,6 @@ class _SummaryBody extends StatelessWidget {
               ),
             ],
           ),
-          const SizedBox(height: 4),
           if (detail.movements.isEmpty)
             const Padding(
               padding: EdgeInsets.symmetric(vertical: 12),
@@ -375,23 +512,49 @@ class _SummaryBody extends StatelessWidget {
               ),
             )
           else
-            for (final movement in _recentMovements())
-              AccountMovementCard(
-                icon: movement.kind == 'EXPENSE'
-                    ? Icons.receipt_long_outlined
-                    : Icons.payments_outlined,
-                accentColor: movement.kind == 'PAYMENT'
-                    ? AppColors.success
-                    : AppColors.primary,
-                title: accountMovementTitle(movement),
-                subtitle: _creatorSubtitle(movement, provider),
-                amountCents: movement.amountCents,
-                createdAt: movement.settledAt ?? movement.createdAt,
+            for (final group in recentMovementGroups) ...[
+              MovementDateHeader(date: group.date),
+              AccountSeparatedList(
+                itemCount: group.movements.length,
+                itemBuilder: (context, index) {
+                  final movement = group.movements[index];
+                  final author = _movementAuthor(movement, provider);
+                  final isAdjustment =
+                      movement.kind == 'ADJUSTMENT' ||
+                      (movement.kind == 'PAYMENT' &&
+                          movement.adjustmentId != null);
+                  return MovementListItem(
+                    icon: movement.kind == 'EXPENSE'
+                        ? Icons.receipt_long_outlined
+                        : movement.kind == 'ADJUSTMENT'
+                        ? Icons.compare_arrows_rounded
+                        : Icons.payments_outlined,
+                    title: _movementTitle(movement),
+                    typeLabel: _movementTypeLabel(movement),
+                    amountCents: movement.amountCents,
+                    authorName: author?.name,
+                    authorPhotoUrl: author?.profilePhoto,
+                    isPayment: movement.kind == 'PAYMENT',
+                    isAdjustment: isAdjustment,
+                    isAnnulled:
+                        movement.status == 'CANCELED' ||
+                        movement.status == 'ANNULLED',
+                    isPending: _isPending(movement),
+                  );
+                },
               ),
+            ],
         ],
       ),
     );
   }
+}
+
+class _RecentMovementGroup {
+  _RecentMovementGroup(this.date);
+
+  final DateTime date;
+  final List<AccountMovementModel> movements = [];
 }
 
 class _DebtSection extends StatelessWidget {
