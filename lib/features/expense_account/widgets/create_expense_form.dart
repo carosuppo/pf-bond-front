@@ -6,10 +6,12 @@ import 'package:provider/provider.dart';
 
 import '../../../core/theme/app_colors.dart';
 import '../../../core/widgets/app_screen_header.dart';
+import '../../../core/widgets/app_message_dialog.dart';
 import '../../../core/widgets/buttons/app_primary_button.dart';
 import '../../../core/widgets/buttons/app_secondary_button.dart';
 import '../../../core/widgets/discard_changes_dialog.dart';
 import '../../../core/widgets/global_text_field.dart';
+import '../../../core/widgets/user_avatar.dart';
 import '../../auth/providers/auth_provider.dart';
 import '../../group/models/get_group_model.response.dart';
 import '../../group/providers/group_provider.dart';
@@ -125,9 +127,24 @@ class _CreateExpenseFormState extends State<CreateExpenseForm> {
     return controller;
   }
 
+  TextEditingController _customAmountControllerFor(int memberId) {
+    return _customAmountControllers.putIfAbsent(
+      memberId,
+      () => _createCustomAmountController(''),
+    );
+  }
+
   void _initializeExpenseIfNeeded() {
     final expense = widget.expense;
-    if (_initializedExpense || expense == null) return;
+    if (_initializedExpense) return;
+
+    if (expense == null) {
+      _selectedParticipantIds.addAll(
+        _accountMembers().map((member) => member.id),
+      );
+      _initializedExpense = true;
+      return;
+    }
 
     final currentShares = expense.shares
         .where((share) => share.isCurrent)
@@ -285,14 +302,17 @@ class _CreateExpenseFormState extends State<CreateExpenseForm> {
     setState(() {
       if (selected) {
         _selectedParticipantIds.add(memberId);
-        _customAmountControllers.putIfAbsent(
-          memberId,
-          () => _createCustomAmountController(''),
-        );
+        _customAmountControllerFor(memberId);
       } else {
         _selectedParticipantIds.remove(memberId);
         _customAmountControllers.remove(memberId)?.dispose();
       }
+    });
+  }
+
+  void _selectAllParticipants(List<_MemberInfo> members) {
+    setState(() {
+      _selectedParticipantIds.addAll(members.map((member) => member.id));
     });
   }
 
@@ -301,14 +321,16 @@ class _CreateExpenseFormState extends State<CreateExpenseForm> {
       return;
     }
 
-    final equalShares = _previewShares;
     if (splitType == ExpenseSplitType.custom) {
-      for (final share in equalShares) {
-        final controller = _customAmountControllers.putIfAbsent(
-          share.memberId,
-          () => _createCustomAmountController(''),
-        );
-        controller.text = MoneyFormatter.formatCents(share.amountCents);
+      final equalAmounts = {
+        for (final share in _previewShares) share.memberId: share.amountCents,
+      };
+      for (final memberId in _selectedParticipantIds) {
+        final controller = _customAmountControllerFor(memberId);
+        final equalAmount = equalAmounts[memberId];
+        if (equalAmount != null) {
+          controller.text = MoneyFormatter.formatCents(equalAmount);
+        }
       }
     }
     setState(() {
@@ -387,6 +409,7 @@ class _CreateExpenseFormState extends State<CreateExpenseForm> {
   }
 
   Future<void> _saveExpense() async {
+    FocusScope.of(context).unfocus();
     final amount = _amountCents;
 
     if (amount == null) {
@@ -733,50 +756,17 @@ class _CreateExpenseFormState extends State<CreateExpenseForm> {
   }) async {
     final difference = total - assigned;
 
-    await showDialog<void>(
-      context: context,
-      builder: (dialogContext) {
-        return Dialog(
-          backgroundColor: AppColors.cardColor,
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(24),
-          ),
-          child: Padding(
-            padding: const EdgeInsets.all(24),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                const Text(
-                  'Revisá el reparto',
-                  textAlign: TextAlign.center,
-                  style: TextStyle(
-                    color: AppColors.text,
-                    fontSize: 18,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-                const SizedBox(height: 12),
-                Text(
-                  'La suma de los importes (${MoneyFormatter.formatCentsShort(assigned)}) '
-                  'no coincide con el total del gasto (${MoneyFormatter.formatCentsShort(total)}). '
-                  'Diferencia: ${MoneyFormatter.formatCentsShort(difference)}.',
-                  textAlign: TextAlign.center,
-                  style: const TextStyle(
-                    color: AppColors.mutedText,
-                    fontSize: 14,
-                  ),
-                ),
-                const SizedBox(height: 20),
-                AppPrimaryButton(
-                  text: 'Entendido',
-                  onPressed: () => Navigator.of(dialogContext).pop(),
-                ),
-              ],
-            ),
-          ),
-        );
-      },
+    await showAppMessageDialog(
+      context,
+      title: 'Revisá el reparto',
+      message:
+          'La suma de los importes (${MoneyFormatter.formatCentsShort(assigned)}) '
+          'no coincide con el total del gasto '
+          '(${MoneyFormatter.formatCentsShort(total)}). '
+          'Diferencia: ${MoneyFormatter.formatCentsShort(difference)}.',
+      cancelText: null,
+      confirmText: 'Entendido',
+      icon: Icons.info_outline_rounded,
     );
   }
 
@@ -916,7 +906,6 @@ class _CreateExpenseFormState extends State<CreateExpenseForm> {
     }
     final isLoading = provider.isLoading || provider.isUpdatingExpense;
 
-    final theme = Theme.of(context);
     final screenWidth = MediaQuery.of(context).size.width;
 
     final maxContentWidth = screenWidth > 600 ? 480.0 : double.infinity;
@@ -924,7 +913,9 @@ class _CreateExpenseFormState extends State<CreateExpenseForm> {
 
     final members = _accountMembers();
     final payer = _payerMemberId == null ? null : _memberInfo(_payerMemberId!);
-    final previewShares = _previewShares;
+    final selectedParticipantCount = members
+        .where((member) => _selectedParticipantIds.contains(member.id))
+        .length;
 
     return PopScope(
       canPop: false,
@@ -1007,119 +998,256 @@ class _CreateExpenseFormState extends State<CreateExpenseForm> {
                     );
                   }
 
-                  return SingleChildScrollView(
-                    padding: EdgeInsets.symmetric(
-                      horizontal: horizontalPadding,
-                    ),
-                    child: ConstrainedBox(
-                      constraints: BoxConstraints(maxWidth: maxContentWidth),
-                      child: Center(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.stretch,
-                          children: [
-                            GlobalTextField(
-                              controller: _titleController,
-                              label: 'Título (opcional)',
-                              maxLength: 100,
-                              enabled: !isLoading,
-                            ),
-                            const SizedBox(height: 16),
-                            GlobalTextField(
-                              controller: _amountController,
-                              label: 'Importe *',
-                              keyboardType:
-                                  const TextInputType.numberWithOptions(
-                                    decimal: true,
+                  return Column(
+                    children: [
+                      Expanded(
+                        child: SingleChildScrollView(
+                          keyboardDismissBehavior:
+                              ScrollViewKeyboardDismissBehavior.onDrag,
+                          padding: EdgeInsets.fromLTRB(
+                            horizontalPadding,
+                            8,
+                            horizontalPadding,
+                            20,
+                          ),
+                          child: Center(
+                            child: ConstrainedBox(
+                              constraints: BoxConstraints(
+                                maxWidth: maxContentWidth,
+                              ),
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.stretch,
+                                children: [
+                                  GlobalTextField(
+                                    controller: _amountController,
+                                    label: 'Importe *',
+                                    enabled: !isLoading,
+                                    keyboardType:
+                                        const TextInputType.numberWithOptions(
+                                          decimal: true,
+                                        ),
+                                    inputFormatters: [
+                                      FilteringTextInputFormatter.allow(
+                                        RegExp(r'[0-9.,]'),
+                                      ),
+                                    ],
+                                    onSubmitted: (_) =>
+                                        FocusScope.of(context).unfocus(),
+                                    style: const TextStyle(
+                                      color: AppColors.text,
+                                      fontSize: 24,
+                                      fontWeight: FontWeight.w600,
+                                    ),
+                                    fillColor: AppColors.fieldColor,
                                   ),
-                              inputFormatters: [
-                                FilteringTextInputFormatter.allow(
-                                  RegExp(r'[0-9.,]'),
-                                ),
-                              ],
-                              enabled: !isLoading,
-                            ),
-                            const SizedBox(height: 20),
-                            _PayerCard(
-                              payerName: payer?.name,
-                              locked: widget.hasConfirmedPayments,
-                              enabled:
-                                  !isLoading &&
-                                  members.isNotEmpty &&
-                                  !widget.hasConfirmedPayments,
-                              onTap: () => _openPayerSheet(members),
-                            ),
-                            if (widget.hasConfirmedPayments) ...[
-                              const SizedBox(height: 8),
-                              const Text(
-                                'El pagador no se puede cambiar porque este gasto tiene pagos registrados.',
-                                style: TextStyle(
-                                  color: AppColors.mutedText,
-                                  fontSize: 12,
-                                ),
+                                  const SizedBox(height: 16),
+                                  GlobalTextField(
+                                    controller: _titleController,
+                                    label: 'Descripción (opcional)',
+                                    enabled: !isLoading,
+                                    maxLength: 100,
+                                    textCapitalization:
+                                        TextCapitalization.sentences,
+                                    onSubmitted: (_) =>
+                                        FocusScope.of(context).unfocus(),
+                                    style: const TextStyle(
+                                      color: AppColors.text,
+                                      fontSize: 15,
+                                    ),
+                                    fillColor: AppColors.fieldColor,
+                                  ),
+                                  const SizedBox(height: 20),
+                                  _PayerCard(
+                                    payerName: payer?.name,
+                                    photoUrl: payer?.photoUrl,
+                                    locked: widget.hasConfirmedPayments,
+                                    enabled:
+                                        !isLoading &&
+                                        members.isNotEmpty &&
+                                        !widget.hasConfirmedPayments,
+                                    onTap: () => _openPayerSheet(members),
+                                  ),
+                                  if (widget.hasConfirmedPayments) ...[
+                                    const SizedBox(height: 8),
+                                    const Text(
+                                      'El pagador no se puede cambiar porque este gasto tiene pagos registrados.',
+                                      style: TextStyle(
+                                        color: AppColors.mutedText,
+                                        fontSize: 12,
+                                      ),
+                                    ),
+                                  ],
+                                  const SizedBox(height: 20),
+                                  const _FieldHeader(label: 'Tipo de reparto'),
+                                  const SizedBox(height: 8),
+                                  _TypeSegmented(
+                                    splitType: _splitType,
+                                    enabled: !isLoading,
+                                    onChanged: _switchSplitType,
+                                  ),
+                                  const SizedBox(height: 20),
+                                  Row(
+                                    children: [
+                                      const _FieldHeader(
+                                        label: 'Participantes',
+                                      ),
+                                      const Spacer(),
+                                      if (selectedParticipantCount <
+                                          members.length)
+                                        TextButton(
+                                          onPressed: isLoading
+                                              ? null
+                                              : () => _selectAllParticipants(
+                                                  members,
+                                                ),
+                                          style: TextButton.styleFrom(
+                                            padding: const EdgeInsets.symmetric(
+                                              horizontal: 8,
+                                            ),
+                                            minimumSize: const Size(44, 44),
+                                            foregroundColor: AppColors.primary,
+                                          ),
+                                          child: const Text('Incluir todos'),
+                                        ),
+                                    ],
+                                  ),
+                                  const SizedBox(height: 4),
+                                  Text(
+                                    'Elegí entre quiénes se divide el gasto. El pagador puede participar o no.',
+                                    style: Theme.of(context).textTheme.bodySmall
+                                        ?.copyWith(color: AppColors.mutedText),
+                                  ),
+                                  const SizedBox(height: 12),
+                                  _ParticipantsSection(
+                                    members: members,
+                                    selectedIds: _selectedParticipantIds,
+                                    splitType: _splitType,
+                                    previewShares: _previewShares,
+                                    customControllerFor:
+                                        _customAmountControllerFor,
+                                    enabled: !isLoading,
+                                    onToggle: _toggleParticipant,
+                                  ),
+                                  if (_splitType == ExpenseSplitType.custom &&
+                                      _selectedParticipantIds.isNotEmpty) ...[
+                                    _AssignedTotal(
+                                      assignedCents: _assignedCents,
+                                      totalCents: _amountCents,
+                                    ),
+                                  ],
+                                  const SizedBox(height: 24),
+                                  AppPrimaryButton(
+                                    text: widget.expense == null
+                                        ? 'Registrar gasto'
+                                        : 'Guardar cambios',
+                                    loading: isLoading,
+                                    onPressed: isLoading ? null : _saveExpense,
+                                  ),
+                                  const SizedBox(height: 12),
+                                  AppSecondaryButton(
+                                    text: 'Cancelar',
+                                    onPressed: isLoading
+                                        ? null
+                                        : () => Navigator.of(context).pop(),
+                                  ),
+                                  const SizedBox(height: 16),
+                                ],
                               ),
-                            ],
-                            const SizedBox(height: 20),
-                            const _FieldHeader(label: 'Tipo de reparto'),
-                            const SizedBox(height: 8),
-                            _TypeSegmented(
-                              splitType: _splitType,
-                              enabled: !isLoading,
-                              onChanged: _switchSplitType,
                             ),
-                            const SizedBox(height: 20),
-                            const _FieldHeader(label: 'Participantes'),
-                            const SizedBox(height: 4),
-                            Text(
-                              'Elegí entre quiénes se divide el gasto. El pagador puede participar o no.',
-                              style: theme.textTheme.bodySmall?.copyWith(
-                                color: AppColors.mutedText,
-                              ),
-                            ),
-                            const SizedBox(height: 12),
-                            _ParticipantsSection(
-                              members: members,
-                              selectedIds: _selectedParticipantIds,
-                              splitType: _splitType,
-                              previewShares: previewShares,
-                              customControllers: _customAmountControllers,
-                              enabled: !isLoading,
-                              onToggle: _toggleParticipant,
-                            ),
-                            if (_splitType == ExpenseSplitType.custom &&
-                                _selectedParticipantIds.isNotEmpty) ...[
-                              const SizedBox(height: 12),
-                              _AssignedTotal(
-                                assignedCents: _assignedCents,
-                                totalCents: _amountCents,
-                              ),
-                            ],
-                            const SizedBox(height: 24),
-                            AppPrimaryButton(
-                              text: widget.expense == null
-                                  ? 'Registrar gasto'
-                                  : 'Guardar cambios',
-                              loading: isLoading,
-                              onPressed: isLoading ? null : _saveExpense,
-                            ),
-                            const SizedBox(height: 12),
-                            AppSecondaryButton(
-                              text: 'Cancelar',
-                              onPressed: isLoading
-                                  ? null
-                                  : () {
-                                      Navigator.of(context).pop();
-                                    },
-                            ),
-                            const SizedBox(height: 16),
-                          ],
+                          ),
                         ),
                       ),
-                    ),
+                    ],
                   );
                 },
               ),
             ),
           ],
+        ),
+      ),
+    );
+  }
+}
+
+class _PayerCard extends StatelessWidget {
+  const _PayerCard({
+    required this.payerName,
+    required this.photoUrl,
+    required this.locked,
+    required this.enabled,
+    required this.onTap,
+  });
+
+  final String? payerName;
+  final String? photoUrl;
+  final bool locked;
+  final bool enabled;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final normalizedPhoto = photoUrl?.trim();
+    final name = payerName ?? 'Elegí quién pagó';
+
+    return Material(
+      color: AppColors.fieldColor,
+      borderRadius: BorderRadius.circular(14),
+      child: InkWell(
+        onTap: enabled ? onTap : null,
+        borderRadius: BorderRadius.circular(14),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+          child: Row(
+            children: [
+              if (normalizedPhoto != null && normalizedPhoto.isNotEmpty)
+                UserAvatar(name: name, photoUrl: normalizedPhoto, radius: 22)
+              else
+                Container(
+                  width: 44,
+                  height: 44,
+                  decoration: BoxDecoration(
+                    color: AppColors.primary.withValues(alpha: 0.15),
+                    shape: BoxShape.circle,
+                  ),
+                  child: const Icon(
+                    Icons.payments_outlined,
+                    color: AppColors.primary,
+                    size: 22,
+                  ),
+                ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text(
+                      'Pagó',
+                      style: TextStyle(
+                        color: AppColors.mutedText,
+                        fontSize: 12,
+                      ),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      name,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        color: AppColors.text,
+                        fontSize: 16,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(width: 8),
+              if (locked)
+                const Icon(Icons.lock_outline, color: AppColors.mutedText)
+              else
+                const Icon(Icons.chevron_right, color: AppColors.mutedText),
+            ],
+          ),
         ),
       ),
     );
@@ -1143,80 +1271,6 @@ class _FieldHeader extends StatelessWidget {
   }
 }
 
-class _PayerCard extends StatelessWidget {
-  const _PayerCard({
-    required this.payerName,
-    required this.locked,
-    required this.enabled,
-    required this.onTap,
-  });
-
-  final String? payerName;
-  final bool locked;
-  final bool enabled;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    return Material(
-      color: AppColors.fieldColor,
-      borderRadius: BorderRadius.circular(14),
-      child: InkWell(
-        onTap: enabled ? onTap : null,
-        borderRadius: BorderRadius.circular(14),
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-          child: Row(
-            children: [
-              Container(
-                width: 44,
-                height: 44,
-                decoration: BoxDecoration(
-                  color: AppColors.primary.withValues(alpha: 0.15),
-                  shape: BoxShape.circle,
-                ),
-                child: const Icon(
-                  Icons.payments_outlined,
-                  color: AppColors.primary,
-                  size: 22,
-                ),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const Text(
-                      'Pagó',
-                      style: TextStyle(
-                        color: AppColors.mutedText,
-                        fontSize: 12,
-                      ),
-                    ),
-                    const SizedBox(height: 2),
-                    Text(
-                      payerName ?? 'Elegí quién pagó',
-                      style: const TextStyle(
-                        color: AppColors.text,
-                        fontSize: 16,
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              Icon(
-                locked ? Icons.lock_outline : Icons.chevron_right,
-                color: AppColors.mutedText,
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-}
-
 class _TypeSegmented extends StatelessWidget {
   const _TypeSegmented({
     required this.splitType,
@@ -1228,15 +1282,10 @@ class _TypeSegmented extends StatelessWidget {
   final bool enabled;
   final ValueChanged<ExpenseSplitType> onChanged;
 
-  Widget _option(
-    BuildContext context, {
-    required ExpenseSplitType value,
-    required bool selected,
-    required VoidCallback? onTap,
-  }) {
+  Widget _option({required ExpenseSplitType value, required bool selected}) {
     return Expanded(
       child: InkWell(
-        onTap: onTap,
+        onTap: enabled ? () => onChanged(value) : null,
         borderRadius: BorderRadius.circular(10),
         child: AnimatedContainer(
           duration: const Duration(milliseconds: 150),
@@ -1270,16 +1319,12 @@ class _TypeSegmented extends StatelessWidget {
       child: Row(
         children: [
           _option(
-            context,
             value: ExpenseSplitType.equal,
             selected: splitType == ExpenseSplitType.equal,
-            onTap: enabled ? () => onChanged(ExpenseSplitType.equal) : null,
           ),
           _option(
-            context,
             value: ExpenseSplitType.custom,
             selected: splitType == ExpenseSplitType.custom,
-            onTap: enabled ? () => onChanged(ExpenseSplitType.custom) : null,
           ),
         ],
       ),
@@ -1293,7 +1338,7 @@ class _ParticipantsSection extends StatefulWidget {
     required this.selectedIds,
     required this.splitType,
     required this.previewShares,
-    required this.customControllers,
+    required this.customControllerFor,
     required this.enabled,
     required this.onToggle,
   });
@@ -1302,7 +1347,7 @@ class _ParticipantsSection extends StatefulWidget {
   final Set<int> selectedIds;
   final ExpenseSplitType splitType;
   final List<({int memberId, int amountCents})> previewShares;
-  final Map<int, TextEditingController> customControllers;
+  final TextEditingController Function(int memberId) customControllerFor;
   final bool enabled;
   final void Function(int memberId, bool selected) onToggle;
 
@@ -1340,7 +1385,7 @@ class _ParticipantsSectionState extends State<_ParticipantsSection> {
           color: AppColors.fieldColor,
           borderRadius: BorderRadius.circular(14),
         ),
-        child: const Text(
+        child: Text(
           'No hay miembros para repartir el gasto.',
           style: TextStyle(color: AppColors.mutedText),
         ),
@@ -1406,7 +1451,7 @@ class _ParticipantsSectionState extends State<_ParticipantsSection> {
                 onChanged: (selected) => widget.onToggle(member.id, selected),
                 trailing: isCustom && widget.selectedIds.contains(member.id)
                     ? _CustomAmountField(
-                        controller: widget.customControllers[member.id]!,
+                        controller: widget.customControllerFor(member.id),
                         enabled: widget.enabled,
                       )
                     : (!isCustom && widget.selectedIds.contains(member.id)

@@ -8,10 +8,10 @@ import '../../features/auth/screens/register_screen.dart';
 import '../../features/event/screens/create_event_screen.dart';
 import '../../features/expense_account/screens/create_expense_account_screen.dart';
 import '../../features/expense_account/screens/create_expense_screen.dart';
-import '../../features/expense_account/screens/expense_account_balance_screen.dart';
 import '../../features/expense_account/screens/expense_account_detail_screen.dart';
 import '../../features/expense_account/screens/expense_account_movements_screen.dart';
 import '../../features/expense_account/screens/expense_account_payments_screen.dart';
+import '../../features/expense_account/screens/expense_account_settings_screen.dart';
 import '../../features/expense_account/screens/edit_expense_account_screen.dart';
 import '../../features/expense_account/models/expense_account_detail_model.response.dart';
 import '../../features/group/models/get_group_model.response.dart';
@@ -167,12 +167,12 @@ class AppRouter {
           settings: settings,
         );
 
-      case AppRoutes.expenseAccountBalance:
-        final balanceArgs = settings.arguments as Map<String, dynamic>;
+      case AppRoutes.expenseAccountSettings:
+        final settingsArgs = settings.arguments as Map<String, dynamic>;
 
         return MaterialPageRoute(
-          builder: (_) => ExpenseAccountBalanceScreen(
-            accountId: balanceArgs['accountId'] as int,
+          builder: (_) => ExpenseAccountSettingsScreen(
+            accountId: settingsArgs['accountId'] as int,
           ),
           settings: settings,
         );

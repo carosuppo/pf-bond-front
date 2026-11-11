@@ -9,6 +9,7 @@ class MyExpenseAccountResponseModel {
   final String? eventName;
   final int balanceCents;
   final BalanceStatus status;
+  final DateTime? lastMovementAt;
 
   const MyExpenseAccountResponseModel({
     required this.id,
@@ -19,6 +20,7 @@ class MyExpenseAccountResponseModel {
     this.eventName,
     required this.balanceCents,
     required this.status,
+    required this.lastMovementAt,
   });
 
   factory MyExpenseAccountResponseModel.fromJson(Map<String, dynamic> json) {
@@ -31,6 +33,9 @@ class MyExpenseAccountResponseModel {
       eventName: json['eventName'] as String?,
       balanceCents: json['balanceCents'] as int,
       status: balanceStatusFromString(json['status'] as String),
+      lastMovementAt: json['lastMovementAt'] == null
+          ? null
+          : DateTime.parse(json['lastMovementAt'] as String),
     );
   }
 }

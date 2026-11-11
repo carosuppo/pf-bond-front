@@ -5,6 +5,7 @@ import 'package:url_launcher/url_launcher.dart';
 import '../../../core/config/api_config.dart';
 import '../../../core/routes/app_routes.dart';
 import '../../../core/theme/app_colors.dart';
+import '../../../core/widgets/app_message_dialog.dart';
 import '../../../core/widgets/user_avatar.dart';
 import '../../auth/models/user_model.dart';
 import '../../auth/providers/auth_provider.dart';
@@ -70,28 +71,16 @@ class _SettingsScreenState extends State<SettingsScreen> {
     final auth = context.read<AuthProvider>();
     if (auth.isDeletingAccount) return;
 
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (dialogContext) => AlertDialog(
-        title: const Text('Eliminar cuenta'),
-        content: const Text(
+    final confirmed = await showAppMessageDialog(
+      context,
+      title: 'Eliminar cuenta',
+      message:
           'Tu cuenta y tus datos personales asociados se eliminarán '
           'permanentemente. Esta acción es irreversible.',
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(dialogContext).pop(false),
-            child: const Text('Cancelar'),
-          ),
-          TextButton(
-            onPressed: () => Navigator.of(dialogContext).pop(true),
-            child: const Text(
-              'Eliminar cuenta',
-              style: TextStyle(color: AppColors.error),
-            ),
-          ),
-        ],
-      ),
+      confirmText: 'Eliminar cuenta',
+      icon: Icons.delete_forever_outlined,
+      accentColor: AppColors.error,
+      confirmButtonColor: AppColors.error,
     );
     if (confirmed != true || !mounted) return;
 
@@ -131,25 +120,14 @@ class _SettingsScreenState extends State<SettingsScreen> {
   }
 
   Future<void> _logout(BuildContext context) async {
-    final shouldLogout = await showDialog<bool>(
-      context: context,
-      builder: (dialogContext) => AlertDialog(
-        title: const Text('Cerrar sesión'),
-        content: const Text('¿Estás seguro de que querés cerrar sesión?'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(dialogContext).pop(false),
-            child: const Text('Cancelar'),
-          ),
-          TextButton(
-            onPressed: () => Navigator.of(dialogContext).pop(true),
-            child: const Text(
-              'Cerrar sesión',
-              style: TextStyle(color: AppColors.error),
-            ),
-          ),
-        ],
-      ),
+    final shouldLogout = await showAppMessageDialog(
+      context,
+      title: 'Cerrar sesión',
+      message: '¿Estás seguro de que querés cerrar sesión?',
+      confirmText: 'Cerrar sesión',
+      icon: Icons.logout_rounded,
+      accentColor: AppColors.error,
+      confirmButtonColor: AppColors.error,
     );
 
     if (shouldLogout != true || !context.mounted) {

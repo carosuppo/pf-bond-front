@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:bond_front/core/theme/app_colors.dart';
+import 'package:bond_front/core/widgets/app_message_dialog.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_map/flutter_map.dart';
@@ -573,21 +574,14 @@ class _MapScreenState extends ConsumerState<MapScreen>
     if (_navigation.active) return;
     final messenger = ScaffoldMessenger.of(context);
 
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (dialogContext) => AlertDialog(
-        title: const Text('¿Eliminar este punto de interés?'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(dialogContext, false),
-            child: const Text('Cancelar'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.pop(dialogContext, true),
-            child: const Text('Eliminar'),
-          ),
-        ],
-      ),
+    final confirmed = await showAppMessageDialog(
+      context,
+      title: '¿Eliminar este punto de interés?',
+      message: 'Se eliminará «${point.name}» del grupo.',
+      confirmText: 'Eliminar',
+      icon: Icons.delete_outline_rounded,
+      accentColor: AppColors.error,
+      confirmButtonColor: AppColors.error,
     );
 
     if (confirmed != true || !mounted || _navigation.active) {

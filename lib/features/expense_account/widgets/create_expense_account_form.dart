@@ -3,10 +3,11 @@ import 'package:provider/provider.dart';
 
 import '../../../core/routes/app_routes.dart';
 import '../../../core/theme/app_colors.dart';
+import '../../../core/widgets/app_screen_header.dart';
 import '../../../core/widgets/buttons/app_primary_button.dart';
 import '../../../core/widgets/buttons/app_secondary_button.dart';
 import '../../../core/widgets/discard_changes_dialog.dart';
-import '../../../core/widgets/global_text_field.dart';
+import '../../../core/widgets/user_avatar.dart';
 import '../../auth/providers/auth_provider.dart';
 import '../../event/formatters/event_date_formatter.dart';
 import '../../event/models/event_model.response.dart';
@@ -15,7 +16,6 @@ import '../../group/models/get_groups_model.response.dart';
 import '../../group/models/get_member_model.response.dart';
 import '../../group/providers/group_provider.dart';
 import '../providers/expense_account_provider.dart';
-import 'member_check_tile.dart';
 
 class CreateExpenseAccountForm extends StatefulWidget {
   final int? groupId;
@@ -36,6 +36,9 @@ class _CreateExpenseAccountFormState extends State<CreateExpenseAccountForm> {
   bool _isEventMode = false;
   int? _selectedEventId;
   final Set<int> _selectedMemberIds = {};
+  final Set<int> _initialSelectedMemberIds = {};
+  int? _initialGroupId;
+  bool _initialSelectionCaptured = false;
 
   int? _eventsGroupId;
 
@@ -60,7 +63,31 @@ class _CreateExpenseAccountFormState extends State<CreateExpenseAccountForm> {
       return;
     }
 
+    setState(_captureInitialSelection);
     _syncEvents();
+  }
+
+  void _captureInitialSelection() {
+    if (_initialSelectionCaptured || _isEventMode) {
+      return;
+    }
+
+    final groupId = _effectiveGroupId(context);
+    _initialGroupId = groupId;
+    _initialSelectionCaptured = true;
+    if (groupId == null) {
+      return;
+    }
+
+    final details = context.read<GroupProvider>().groupDetails;
+    if (details?.id != groupId) {
+      return;
+    }
+
+    _selectedMemberIds.addAll(
+      _visibleMembers(context).map((member) => member.id),
+    );
+    _initialSelectedMemberIds.addAll(_selectedMemberIds);
   }
 
   void _onNameChanged() {
@@ -97,7 +124,7 @@ class _CreateExpenseAccountFormState extends State<CreateExpenseAccountForm> {
   }
 
   void _syncEvents() {
-    if (!mounted) {
+    if (!mounted || !_isEventMode) {
       return;
     }
 
@@ -180,7 +207,7 @@ class _CreateExpenseAccountFormState extends State<CreateExpenseAccountForm> {
       return false;
     }
 
-    if (_isEventMode && _selectedEventId == null) {
+    if (_isEventMode && _selectedEvent(context) == null) {
       return false;
     }
 
@@ -318,6 +345,14 @@ class _CreateExpenseAccountFormState extends State<CreateExpenseAccountForm> {
       return;
     }
 
+    if (!_isEventMode) {
+      setState(() {
+        _selectedMemberIds.addAll(
+          _visibleMembers(context).map((member) => member.id),
+        );
+      });
+    }
+
     _syncEvents();
   }
 
@@ -405,7 +440,13 @@ class _CreateExpenseAccountFormState extends State<CreateExpenseAccountForm> {
                             Navigator.of(sheetContext).pop();
                             setState(() {
                               _selectedEventId = event.id;
-                              _selectedMemberIds.clear();
+                              _selectedMemberIds
+                                ..clear()
+                                ..addAll(
+                                  _visibleMembers(
+                                    context,
+                                  ).map((member) => member.id),
+                                );
                             });
                           },
                         );
@@ -425,14 +466,21 @@ class _CreateExpenseAccountFormState extends State<CreateExpenseAccountForm> {
       return;
     }
 
+    FocusScope.of(context).unfocus();
     setState(() {
       _isEventMode = eventMode;
       _selectedEventId = null;
       _selectedMemberIds.clear();
+      if (!eventMode) {
+        _selectedMemberIds.addAll(
+          _visibleMembers(context).map((member) => member.id),
+        );
+      }
     });
   }
 
   Future<void> _saveExpenseAccount() async {
+    FocusScope.of(context).unfocus();
     final name = _nameController.text.trim();
     final groupId = _effectiveGroupId(context);
 
@@ -452,7 +500,7 @@ class _CreateExpenseAccountFormState extends State<CreateExpenseAccountForm> {
       return;
     }
 
-    if (_isEventMode && _selectedEventId == null) {
+    if (_isEventMode && _selectedEvent(context) == null) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Seleccioná un evento para la cuenta.')),
       );
@@ -497,11 +545,13 @@ class _CreateExpenseAccountFormState extends State<CreateExpenseAccountForm> {
   }
 
   bool get _hasChanges {
+    final groupId = _effectiveGroupId(context);
     return _nameController.text.trim().isNotEmpty ||
-        _manualGroupId != null ||
+        groupId != _initialGroupId ||
         _isEventMode ||
         _selectedEventId != null ||
-        _selectedMemberIds.isNotEmpty;
+        _selectedMemberIds.length != _initialSelectedMemberIds.length ||
+        !_selectedMemberIds.containsAll(_initialSelectedMemberIds);
   }
 
   Future<void> _handleBack() async {
@@ -523,19 +573,6 @@ class _CreateExpenseAccountFormState extends State<CreateExpenseAccountForm> {
     Navigator.of(context).pop();
   }
 
-  Widget _buildAppBar(BuildContext context) {
-    return SizedBox(
-      height: kToolbarHeight,
-      child: Align(
-        alignment: Alignment.centerLeft,
-        child: IconButton(
-          icon: const Icon(Icons.arrow_back),
-          onPressed: _handleBack,
-        ),
-      ),
-    );
-  }
-
   @override
   Widget build(BuildContext context) {
     _syncEvents();
@@ -547,7 +584,6 @@ class _CreateExpenseAccountFormState extends State<CreateExpenseAccountForm> {
     final groupId = _effectiveGroupId(context);
     final details = groupProvider.groupDetails;
     final detailsReady = groupId != null && details?.id == groupId;
-    final memberCount = detailsReady ? details!.members.length : 0;
 
     final selectedEvent = _selectedEvent(context);
     final visibleMembers = _visibleMembers(context);
@@ -555,9 +591,9 @@ class _CreateExpenseAccountFormState extends State<CreateExpenseAccountForm> {
     final isLoading =
         expenseAccountProvider.isLoading || groupProvider.isLoading;
     final isLoadingEvents = eventProvider.isEventsLoading;
-    final canSave = !isLoading && _canSave(context);
+    final canSave =
+        !isLoading && (!_isEventMode || !isLoadingEvents) && _canSave(context);
 
-    final theme = Theme.of(context);
     final screenWidth = MediaQuery.of(context).size.width;
 
     final maxContentWidth = screenWidth > 600 ? 480.0 : double.infinity;
@@ -574,147 +610,170 @@ class _CreateExpenseAccountFormState extends State<CreateExpenseAccountForm> {
       child: SafeArea(
         child: Column(
           children: [
-            _buildAppBar(context),
+            AppScreenHeader(title: 'Crear cuenta', onBack: _handleBack),
             Expanded(
-              child: LayoutBuilder(
-                builder: (context, constraints) {
-                  return SingleChildScrollView(
-                    padding: EdgeInsets.symmetric(
-                      horizontal: horizontalPadding,
-                    ),
-                    child: ConstrainedBox(
-                      constraints: BoxConstraints(maxWidth: maxContentWidth),
-                      child: Center(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.stretch,
-                          children: [
-                            Text(
-                              'Crear cuenta',
-                              textAlign: TextAlign.center,
-                              style: theme.textTheme.headlineMedium?.copyWith(
-                                color: AppColors.text,
-                                fontWeight: FontWeight.bold,
-                              ),
-                            ),
-
-                            const SizedBox(height: 20),
-
-                            _GroupCard(
-                              groupName: groupId == null
-                                  ? null
-                                  : _groupDisplayName(groupProvider, groupId),
-                              memberCount: memberCount,
-                              detailsReady: detailsReady,
-                              enabled: !isLoading,
-                              onTap: _openGroupSheet,
-                            ),
-
-                            const SizedBox(height: 20),
-
-                            const _FieldHeader(label: 'Nombre de la cuenta *'),
-
-                            const SizedBox(height: 8),
-
-                            GlobalTextField(
-                              controller: _nameController,
-                              label: 'Ej: Gastos del viaje',
-                              maxLength: _nameMaxLength,
-                              enabled: !isLoading,
-                            ),
-
-                            const SizedBox(height: 20),
-
-                            const _FieldHeader(label: 'Tipo de cuenta'),
-
-                            const SizedBox(height: 8),
-
-                            _TypeSegmented(
-                              isEventMode: _isEventMode,
-                              enabled: !isLoading,
-                              onChanged: _switchMode,
-                            ),
-
-                            const SizedBox(height: 12),
-
-                            _InfoLine(
-                              text: _isEventMode
-                                  ? 'Solo podés elegir miembros que ya pertenecen a este evento.'
-                                  : 'No se vincula a ningún evento. Podés elegir miembros de todo el grupo.',
-                            ),
-
-                            if (_isEventMode) ...[
-                              const SizedBox(height: 12),
-                              _EventCard(
-                                event: selectedEvent,
-                                isLoadingEvents: isLoadingEvents,
-                                enabled: !isLoading && groupId != null,
-                                onTap: _openEventSheet,
-                              ),
-                            ],
-
-                            const SizedBox(height: 20),
-
-                            const _FieldHeader(label: 'Miembros'),
-
-                            const SizedBox(height: 8),
-
-                            _MembersSection(
-                              groupId: groupId,
-                              detailsReady: detailsReady,
-                              detailsLoading: groupProvider.isLoading,
-                              isEventMode: _isEventMode,
-                              eventSelected: selectedEvent != null,
-                              members: visibleMembers,
-                              selectedIds: _selectedMemberIds,
-                              enabled: !isLoading,
-                              onToggle: (memberId, selected) {
-                                setState(() {
-                                  if (selected) {
-                                    _selectedMemberIds.add(memberId);
-                                  } else {
-                                    _selectedMemberIds.remove(memberId);
-                                  }
-                                });
-                              },
-                              onSelectAll: (selectAll, members) {
-                                setState(() {
-                                  if (selectAll) {
-                                    _selectedMemberIds.addAll(
-                                      members.map((m) => m.id),
-                                    );
-                                  } else {
-                                    _selectedMemberIds.clear();
-                                  }
-                                });
-                              },
-                            ),
-
-                            const SizedBox(height: 24),
-
-                            AppPrimaryButton(
-                              text: 'Crear cuenta',
-                              loading: expenseAccountProvider.isLoading,
-                              onPressed: canSave ? _saveExpenseAccount : null,
-                            ),
-
-                            const SizedBox(height: 12),
-
-                            AppSecondaryButton(
-                              text: 'Cancelar',
-                              onPressed: isLoading
-                                  ? null
-                                  : () {
-                                      Navigator.of(context).pop();
-                                    },
-                            ),
-
-                            const SizedBox(height: 16),
-                          ],
+              child: SingleChildScrollView(
+                keyboardDismissBehavior:
+                    ScrollViewKeyboardDismissBehavior.onDrag,
+                padding: EdgeInsets.fromLTRB(
+                  horizontalPadding,
+                  4,
+                  horizontalPadding,
+                  20,
+                ),
+                child: Center(
+                  child: ConstrainedBox(
+                    constraints: BoxConstraints(maxWidth: maxContentWidth),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        _GroupSelector(
+                          groupName: groupId == null
+                              ? null
+                              : _groupDisplayName(groupProvider, groupId),
+                          enabled: !isLoading,
+                          onTap: _openGroupSheet,
                         ),
-                      ),
+                        const Divider(height: 20, color: AppColors.border),
+                        const Text(
+                          'Nombre de la cuenta',
+                          style: TextStyle(
+                            color: AppColors.mutedText,
+                            fontSize: 13,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                        TextField(
+                          controller: _nameController,
+                          enabled: !isLoading,
+                          maxLength: _nameMaxLength,
+                          textCapitalization: TextCapitalization.sentences,
+                          textInputAction: TextInputAction.done,
+                          onSubmitted: (_) => FocusScope.of(context).unfocus(),
+                          style: const TextStyle(
+                            color: AppColors.text,
+                            fontSize: 22,
+                            fontWeight: FontWeight.w500,
+                          ),
+                          cursorColor: AppColors.primary,
+                          decoration: const InputDecoration(
+                            hintText: 'Ej. Gastos del viaje',
+                            hintStyle: TextStyle(
+                              color: AppColors.placeholder,
+                              fontSize: 20,
+                            ),
+                            counterText: '',
+                            isCollapsed: true,
+                            border: InputBorder.none,
+                            enabledBorder: InputBorder.none,
+                            focusedBorder: InputBorder.none,
+                            contentPadding: EdgeInsets.symmetric(vertical: 12),
+                          ),
+                        ),
+                        const Divider(height: 20, color: AppColors.border),
+                        InkWell(
+                          onTap: !isLoading && groupId != null
+                              ? () => _switchMode(!_isEventMode)
+                              : null,
+                          child: SizedBox(
+                            height: 48,
+                            child: Row(
+                              children: [
+                                const Icon(
+                                  Icons.event_available_outlined,
+                                  color: AppColors.mutedText,
+                                  size: 19,
+                                ),
+                                const SizedBox(width: 10),
+                                const Expanded(
+                                  child: Text(
+                                    'Vincular a un evento',
+                                    style: TextStyle(
+                                      color: AppColors.text,
+                                      fontSize: 14,
+                                    ),
+                                  ),
+                                ),
+                                Switch(
+                                  value: _isEventMode,
+                                  onChanged: !isLoading && groupId != null
+                                      ? _switchMode
+                                      : null,
+                                  activeThumbColor: AppColors.onPrimary,
+                                  activeTrackColor: AppColors.primary,
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                        if (_isEventMode) ...[
+                          _EventPicker(
+                            event: selectedEvent,
+                            isLoadingEvents: isLoadingEvents,
+                            hasEvents: eventProvider.events.isNotEmpty,
+                            enabled:
+                                !isLoading &&
+                                !isLoadingEvents &&
+                                groupId != null &&
+                                eventProvider.events.isNotEmpty,
+                            onTap: _openEventSheet,
+                          ),
+                        ],
+                        const Divider(height: 20, color: AppColors.border),
+                        _MembersSection(
+                          groupId: groupId,
+                          detailsReady: detailsReady,
+                          detailsLoading: groupProvider.isLoading,
+                          isEventMode: _isEventMode,
+                          eventSelected: selectedEvent != null,
+                          eventsLoading: isLoadingEvents,
+                          eventsAvailable: eventProvider.events.isNotEmpty,
+                          members: visibleMembers,
+                          selectedIds: _selectedMemberIds,
+                          enabled: !isLoading,
+                          onToggle: (memberId, selected) {
+                            setState(() {
+                              if (selected) {
+                                _selectedMemberIds.add(memberId);
+                              } else {
+                                _selectedMemberIds.remove(memberId);
+                              }
+                            });
+                          },
+                          onSelectAll: (selectAll, members) {
+                            setState(() {
+                              if (selectAll) {
+                                _selectedMemberIds.addAll(
+                                  members.map((member) => member.id),
+                                );
+                              } else {
+                                _selectedMemberIds.clear();
+                              }
+                            });
+                          },
+                        ),
+                      ],
                     ),
-                  );
-                },
+                  ),
+                ),
+              ),
+            ),
+            Padding(
+              padding: EdgeInsets.fromLTRB(
+                horizontalPadding,
+                8,
+                horizontalPadding,
+                12,
+              ),
+              child: Center(
+                child: ConstrainedBox(
+                  constraints: BoxConstraints(maxWidth: maxContentWidth),
+                  child: AppPrimaryButton(
+                    text: 'Crear cuenta',
+                    loading: expenseAccountProvider.isLoading,
+                    onPressed: canSave ? _saveExpenseAccount : null,
+                  ),
+                ),
               ),
             ),
           ],
@@ -724,96 +783,60 @@ class _CreateExpenseAccountFormState extends State<CreateExpenseAccountForm> {
   }
 }
 
-class _FieldHeader extends StatelessWidget {
-  const _FieldHeader({required this.label});
-
-  final String label;
-
-  @override
-  Widget build(BuildContext context) {
-    return Row(
-      children: [
-        Text(
-          label,
-          style: Theme.of(context).textTheme.titleSmall?.copyWith(
-            color: AppColors.text,
-            fontWeight: FontWeight.w600,
-          ),
-        ),
-      ],
-    );
-  }
-}
-
-class _GroupCard extends StatelessWidget {
-  const _GroupCard({
+class _GroupSelector extends StatelessWidget {
+  const _GroupSelector({
     required this.groupName,
-    required this.memberCount,
-    required this.detailsReady,
     required this.enabled,
     required this.onTap,
   });
 
   final String? groupName;
-  final int memberCount;
-  final bool detailsReady;
   final bool enabled;
   final VoidCallback onTap;
 
   @override
   Widget build(BuildContext context) {
     return Material(
-      color: AppColors.fieldColor,
-      borderRadius: BorderRadius.circular(14),
+      color: Colors.transparent,
       child: InkWell(
         onTap: enabled ? onTap : null,
-        borderRadius: BorderRadius.circular(14),
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+        borderRadius: BorderRadius.circular(12),
+        child: SizedBox(
+          height: 52,
           child: Row(
             children: [
-              Container(
-                width: 48,
-                height: 48,
-                decoration: BoxDecoration(
-                  color: AppColors.primary.withValues(alpha: 0.15),
-                  shape: BoxShape.circle,
-                ),
-                child: const Icon(
-                  Icons.groups_outlined,
-                  color: AppColors.primary,
-                  size: 26,
-                ),
+              const Icon(
+                Icons.groups_outlined,
+                color: AppColors.primary,
+                size: 21,
               ),
               const SizedBox(width: 12),
               Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      groupName ?? 'Seleccioná un grupo',
-                      style: const TextStyle(
-                        color: AppColors.text,
-                        fontSize: 16,
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-                    const SizedBox(height: 2),
-                    Text(
-                      groupName == null
-                          ? 'Todavía no elegiste grupo'
-                          : detailsReady
-                          ? '$memberCount miembros · Grupo activo'
-                          : 'Grupo activo',
-                      style: const TextStyle(
-                        color: AppColors.mutedText,
-                        fontSize: 13,
-                      ),
-                    ),
-                  ],
+                child: Text(
+                  groupName ?? 'Seleccionar un grupo',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                    color: AppColors.text,
+                    fontSize: 15,
+                    fontWeight: FontWeight.w600,
+                  ),
                 ),
               ),
-              const Icon(Icons.chevron_right, color: AppColors.mutedText),
+              Text(
+                groupName == null ? 'Elegir' : 'Cambiar',
+                style: const TextStyle(
+                  color: AppColors.primary,
+                  fontSize: 13,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+              const SizedBox(width: 4),
+              const Icon(
+                Icons.chevron_right_rounded,
+                color: AppColors.mutedText,
+                size: 20,
+              ),
             ],
           ),
         ),
@@ -822,109 +845,18 @@ class _GroupCard extends StatelessWidget {
   }
 }
 
-class _TypeSegmented extends StatelessWidget {
-  const _TypeSegmented({
-    required this.isEventMode,
-    required this.enabled,
-    required this.onChanged,
-  });
-
-  final bool isEventMode;
-  final bool enabled;
-  final ValueChanged<bool> onChanged;
-
-  Widget _option(
-    BuildContext context, {
-    required String label,
-    required bool selected,
-    required VoidCallback? onTap,
-  }) {
-    return Expanded(
-      child: InkWell(
-        onTap: onTap,
-        borderRadius: BorderRadius.circular(10),
-        child: AnimatedContainer(
-          duration: const Duration(milliseconds: 150),
-          padding: const EdgeInsets.symmetric(vertical: 12),
-          decoration: BoxDecoration(
-            color: selected ? AppColors.primary : Colors.transparent,
-            borderRadius: BorderRadius.circular(10),
-          ),
-          child: Text(
-            label,
-            textAlign: TextAlign.center,
-            style: TextStyle(
-              color: selected ? Colors.black : AppColors.mutedText,
-              fontSize: 14,
-              fontWeight: selected ? FontWeight.bold : FontWeight.normal,
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.all(4),
-      decoration: BoxDecoration(
-        color: AppColors.fieldColor,
-        borderRadius: BorderRadius.circular(14),
-      ),
-      child: Row(
-        children: [
-          _option(
-            context,
-            label: 'Cuenta general',
-            selected: !isEventMode,
-            onTap: enabled ? () => onChanged(false) : null,
-          ),
-          _option(
-            context,
-            label: 'De un evento',
-            selected: isEventMode,
-            onTap: enabled ? () => onChanged(true) : null,
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _InfoLine extends StatelessWidget {
-  const _InfoLine({required this.text});
-
-  final String text;
-
-  @override
-  Widget build(BuildContext context) {
-    return Row(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        const Icon(Icons.info_outline, color: AppColors.mutedText, size: 18),
-        const SizedBox(width: 8),
-        Expanded(
-          child: Text(
-            text,
-            style: const TextStyle(color: AppColors.mutedText, fontSize: 13),
-          ),
-        ),
-      ],
-    );
-  }
-}
-
-class _EventCard extends StatelessWidget {
-  const _EventCard({
+class _EventPicker extends StatelessWidget {
+  const _EventPicker({
     required this.event,
     required this.isLoadingEvents,
+    required this.hasEvents,
     required this.enabled,
     required this.onTap,
   });
 
   final EventResponseModel? event;
   final bool isLoadingEvents;
+  final bool hasEvents;
   final bool enabled;
   final VoidCallback onTap;
 
@@ -933,66 +865,75 @@ class _EventCard extends StatelessWidget {
     final current = event;
 
     return Material(
-      color: AppColors.fieldColor,
-      borderRadius: BorderRadius.circular(14),
+      color: Colors.transparent,
       child: InkWell(
         onTap: enabled ? onTap : null,
-        borderRadius: BorderRadius.circular(14),
+        borderRadius: BorderRadius.circular(10),
         child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+          padding: const EdgeInsets.fromLTRB(28, 4, 4, 8),
           child: Row(
             children: [
-              Container(
-                width: 48,
-                height: 48,
-                decoration: BoxDecoration(
-                  color: AppColors.primary.withValues(alpha: 0.15),
-                  shape: BoxShape.circle,
+              if (isLoadingEvents)
+                const SizedBox(
+                  width: 20,
+                  height: 20,
+                  child: CircularProgressIndicator(
+                    strokeWidth: 2,
+                    color: AppColors.primary,
+                  ),
+                )
+              else
+                Icon(
+                  current == null
+                      ? Icons.calendar_month_outlined
+                      : Icons.event_available_outlined,
+                  color: current == null
+                      ? AppColors.mutedText
+                      : AppColors.primary,
+                  size: 20,
                 ),
-                child: isLoadingEvents
-                    ? const Padding(
-                        padding: EdgeInsets.all(12),
-                        child: CircularProgressIndicator(
-                          strokeWidth: 2,
-                          color: AppColors.primary,
-                        ),
-                      )
-                    : const Icon(
-                        Icons.calendar_month_outlined,
-                        color: AppColors.primary,
-                        size: 24,
-                      ),
-              ),
-              const SizedBox(width: 12),
+              const SizedBox(width: 10),
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      current?.name ?? 'Seleccioná un evento',
-                      style: const TextStyle(
-                        color: AppColors.text,
-                        fontSize: 16,
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-                    const SizedBox(height: 2),
-                    Text(
                       isLoadingEvents
-                          ? 'Cargando eventos...'
-                          : current == null
-                          ? 'Ver eventos del grupo'
-                          : '${EventDateFormatter.dayMonth(current.startAt)} · '
-                                '${EventDateFormatter.time(current.startAt)}',
-                      style: const TextStyle(
-                        color: AppColors.mutedText,
-                        fontSize: 13,
+                          ? 'Cargando eventos…'
+                          : current?.name ??
+                                (hasEvents
+                                    ? 'Seleccionar evento'
+                                    : 'No hay eventos en este grupo'),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        color: current != null || hasEvents
+                            ? AppColors.text
+                            : AppColors.mutedText,
+                        fontSize: 14,
+                        fontWeight: current == null
+                            ? FontWeight.normal
+                            : FontWeight.w600,
                       ),
                     ),
+                    if (current != null)
+                      Text(
+                        '${EventDateFormatter.dayMonth(current.startAt)} · '
+                        '${EventDateFormatter.time(current.startAt)}',
+                        style: const TextStyle(
+                          color: AppColors.mutedText,
+                          fontSize: 12,
+                        ),
+                      ),
                   ],
                 ),
               ),
-              const Icon(Icons.chevron_right, color: AppColors.mutedText),
+              if (hasEvents)
+                const Icon(
+                  Icons.chevron_right_rounded,
+                  color: AppColors.mutedText,
+                  size: 20,
+                ),
             ],
           ),
         ),
@@ -1008,6 +949,8 @@ class _MembersSection extends StatefulWidget {
     required this.detailsLoading,
     required this.isEventMode,
     required this.eventSelected,
+    required this.eventsLoading,
+    required this.eventsAvailable,
     required this.members,
     required this.selectedIds,
     required this.enabled,
@@ -1020,6 +963,8 @@ class _MembersSection extends StatefulWidget {
   final bool detailsLoading;
   final bool isEventMode;
   final bool eventSelected;
+  final bool eventsLoading;
+  final bool eventsAvailable;
   final List<GetMemberResponseModel> members;
   final Set<int> selectedIds;
   final bool enabled;
@@ -1041,35 +986,28 @@ class _MembersSectionState extends State<_MembersSection> {
     super.dispose();
   }
 
-  Widget _emptyBox(String primary, [String? secondary]) {
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 32),
-      decoration: BoxDecoration(
-        color: AppColors.fieldColor,
-        borderRadius: BorderRadius.circular(14),
-      ),
-      child: Column(
+  Widget _message(String text, {bool loading = false}) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 8),
+      child: Row(
         children: [
-          const Icon(
-            Icons.groups_outlined,
-            color: AppColors.mutedText,
-            size: 40,
-          ),
-          const SizedBox(height: 12),
-          Text(
-            primary,
-            textAlign: TextAlign.center,
-            style: const TextStyle(color: AppColors.text, fontSize: 14),
-          ),
-          if (secondary != null) ...[
-            const SizedBox(height: 4),
-            Text(
-              secondary,
-              textAlign: TextAlign.center,
+          if (loading) ...[
+            const SizedBox(
+              width: 16,
+              height: 16,
+              child: CircularProgressIndicator(
+                strokeWidth: 2,
+                color: AppColors.primary,
+              ),
+            ),
+            const SizedBox(width: 10),
+          ],
+          Expanded(
+            child: Text(
+              text,
               style: const TextStyle(color: AppColors.mutedText, fontSize: 13),
             ),
-          ],
+          ),
         ],
       ),
     );
@@ -1078,24 +1016,29 @@ class _MembersSectionState extends State<_MembersSection> {
   @override
   Widget build(BuildContext context) {
     if (widget.groupId == null) {
-      return _emptyBox('Seleccioná un grupo para ver sus miembros.');
+      return _message('Elegí un grupo para ver sus miembros.');
     }
 
     if (!widget.detailsReady) {
-      return _emptyBox(
-        widget.detailsLoading ? 'Cargando miembros...' : 'Miembros del grupo',
+      return _message(
+        widget.detailsLoading
+            ? 'Cargando miembros…'
+            : 'No se pudieron cargar los miembros.',
+        loading: widget.detailsLoading,
       );
     }
 
     if (widget.isEventMode && !widget.eventSelected) {
-      return _emptyBox('Primero seleccioná un evento para ver sus miembros.');
+      if (widget.eventsLoading) {
+        return const SizedBox.shrink();
+      }
+      return widget.eventsAvailable
+          ? _message('Seleccioná un evento para ver sus miembros.')
+          : const SizedBox.shrink();
     }
 
     if (widget.members.isEmpty) {
-      return _emptyBox(
-        'No hay miembros disponibles para asociar.',
-        'Quedarás asociado automáticamente a la cuenta.',
-      );
+      return _message('Se requiere al menos un miembro disponible.');
     }
 
     final filteredMembers = _query.isEmpty
@@ -1104,135 +1047,185 @@ class _MembersSectionState extends State<_MembersSection> {
               .where((m) => m.name.toLowerCase().contains(_query.toLowerCase()))
               .toList();
 
-    final theme = Theme.of(context);
+    final selectedCount = widget.members
+        .where((member) => widget.selectedIds.contains(member.id))
+        .length;
+    final allSelected = selectedCount == widget.members.length;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        TextField(
-          controller: _searchController,
-          enabled: widget.enabled,
-          onChanged: (value) => setState(() => _query = value),
-          style: const TextStyle(color: AppColors.text, fontSize: 14),
-          decoration: InputDecoration(
-            isDense: true,
-            hintText: 'Buscar miembros...',
-            hintStyle: const TextStyle(color: AppColors.mutedText),
-            prefixIcon: const Icon(
-              Icons.search,
-              color: AppColors.mutedText,
-              size: 20,
-            ),
-            suffix: Text(
-              '${widget.selectedIds.length}/${widget.members.length}',
-              style: const TextStyle(color: AppColors.mutedText, fontSize: 12),
-            ),
-            filled: true,
-            fillColor: AppColors.fieldColor,
-            contentPadding: const EdgeInsets.symmetric(vertical: 10),
-            border: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(10),
-              borderSide: BorderSide.none,
-            ),
-          ),
-        ),
-        const SizedBox(height: 8),
         Row(
           children: [
-            const Spacer(),
-            _SelectAllToggle(
-              selectedCount: widget.selectedIds.length,
-              totalCount: widget.members.length,
-              enabled: widget.enabled,
-              onTap: (selectAll) =>
-                  widget.onSelectAll(selectAll, widget.members),
-            ),
-          ],
-        ),
-        const SizedBox(height: 8),
-        Material(
-          clipBehavior: Clip.antiAlias,
-          borderRadius: BorderRadius.circular(14),
-          color: AppColors.fieldColor,
-          child: filteredMembers.isEmpty
-              ? const Padding(
-                  padding: EdgeInsets.symmetric(vertical: 20),
-                  child: Text(
-                    'Sin resultados para tu búsqueda.',
-                    textAlign: TextAlign.center,
-                    style: TextStyle(color: AppColors.mutedText, fontSize: 13),
-                  ),
-                )
-              : Column(
-                  children: [
-                    for (final member in filteredMembers)
-                      MemberCheckTile(
-                        name: member.name,
-                        photoUrl: member.profilePhoto,
-                        selected: widget.selectedIds.contains(member.id),
-                        enabled: widget.enabled,
-                        onChanged: (selected) =>
-                            widget.onToggle(member.id, selected),
-                      ),
-                  ],
-                ),
-        ),
-        const SizedBox(height: 8),
-        const Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Icon(Icons.info_outline, color: AppColors.mutedText, size: 16),
-            SizedBox(width: 6),
-            Expanded(
+            const Expanded(
               child: Text(
-                'Quedarás asociado automáticamente a la cuenta.',
-                style: TextStyle(color: AppColors.mutedText, fontSize: 12),
+                'Miembros',
+                style: TextStyle(
+                  color: AppColors.text,
+                  fontSize: 16,
+                  fontWeight: FontWeight.w600,
+                ),
               ),
             ),
+            Text(
+              '$selectedCount/${widget.members.length}',
+              style: const TextStyle(color: AppColors.mutedText, fontSize: 12),
+            ),
+            if (!allSelected) ...[
+              const SizedBox(width: 6),
+              TextButton(
+                onPressed: widget.enabled
+                    ? () => widget.onSelectAll(true, widget.members)
+                    : null,
+                style: TextButton.styleFrom(
+                  foregroundColor: AppColors.primary,
+                  padding: const EdgeInsets.symmetric(horizontal: 6),
+                  minimumSize: const Size(44, 44),
+                ),
+                child: const Text('Incluir todos'),
+              ),
+            ],
           ],
         ),
-        const SizedBox(height: 4),
-        Text(
-          'Elegí a quiénes invitar a esta cuenta',
-          style: theme.textTheme.bodySmall?.copyWith(
-            color: AppColors.mutedText,
+        if (widget.members.length > 5) ...[
+          const SizedBox(height: 4),
+          TextField(
+            controller: _searchController,
+            enabled: widget.enabled,
+            onChanged: (value) => setState(() => _query = value),
+            style: const TextStyle(color: AppColors.text, fontSize: 14),
+            decoration: InputDecoration(
+              isDense: true,
+              hintText: 'Buscar miembro',
+              hintStyle: const TextStyle(color: AppColors.mutedText),
+              prefixIcon: const Icon(
+                Icons.search_rounded,
+                color: AppColors.mutedText,
+                size: 20,
+              ),
+              filled: true,
+              fillColor: AppColors.fieldColor,
+              contentPadding: const EdgeInsets.symmetric(vertical: 10),
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(12),
+                borderSide: BorderSide.none,
+              ),
+              focusedBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(12),
+                borderSide: const BorderSide(color: AppColors.primary),
+              ),
+            ),
           ),
-        ),
+        ],
+        const SizedBox(height: 8),
+        if (filteredMembers.isEmpty)
+          _message('No hay coincidencias.')
+        else
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: [
+              for (final member in filteredMembers)
+                _AccountMemberChip(
+                  member: member,
+                  selected: widget.selectedIds.contains(member.id),
+                  enabled: widget.enabled,
+                  onTap: (selected) => widget.onToggle(member.id, selected),
+                ),
+            ],
+          ),
       ],
     );
   }
 }
 
-class _SelectAllToggle extends StatelessWidget {
-  const _SelectAllToggle({
-    required this.selectedCount,
-    required this.totalCount,
+class _AccountMemberChip extends StatelessWidget {
+  const _AccountMemberChip({
+    required this.member,
+    required this.selected,
     required this.enabled,
     required this.onTap,
   });
 
-  final int selectedCount;
-  final int totalCount;
+  final GetMemberResponseModel member;
+  final bool selected;
   final bool enabled;
   final ValueChanged<bool> onTap;
 
+  String get _initials {
+    final parts = member.name.trim().split(RegExp(r'\s+'));
+    if (parts.isEmpty || parts.first.isEmpty) return '?';
+    return (parts.first[0] + (parts.length > 1 ? parts.last[0] : ''))
+        .toUpperCase();
+  }
+
   @override
   Widget build(BuildContext context) {
-    final allSelected = totalCount > 0 && selectedCount == totalCount;
+    final photo = member.profilePhoto?.trim();
 
-    return InkWell(
-      onTap: enabled ? () => onTap(!allSelected) : null,
-      borderRadius: BorderRadius.circular(8),
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
-        child: Text(
-          allSelected
-              ? 'Deseleccionar todos ($selectedCount/$totalCount)'
-              : 'Seleccionar todos ($selectedCount/$totalCount)',
-          style: TextStyle(
-            color: AppColors.primary,
-            fontSize: 13,
-            fontWeight: FontWeight.w600,
+    return ConstrainedBox(
+      constraints: const BoxConstraints(minHeight: 44, maxWidth: 240),
+      child: Material(
+        color: selected
+            ? AppColors.primary.withValues(alpha: 0.12)
+            : Colors.transparent,
+        shape: StadiumBorder(
+          side: BorderSide(
+            color: selected
+                ? AppColors.primary
+                : AppColors.border.withValues(alpha: 0.8),
+            width: selected ? 1 : 0.7,
+          ),
+        ),
+        clipBehavior: Clip.antiAlias,
+        child: InkWell(
+          onTap: enabled ? () => onTap(!selected) : null,
+          customBorder: const StadiumBorder(),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 6),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                if (photo != null && photo.isNotEmpty)
+                  UserAvatar(name: member.name, photoUrl: photo, radius: 13)
+                else
+                  CircleAvatar(
+                    radius: 13,
+                    backgroundColor: selected
+                        ? AppColors.primary
+                        : AppColors.surface,
+                    child: Text(
+                      _initials,
+                      style: TextStyle(
+                        color: selected ? Colors.black : AppColors.mutedText,
+                        fontSize: 9,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ),
+                const SizedBox(width: 7),
+                Flexible(
+                  child: Text(
+                    member.name,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      color: AppColors.text,
+                      fontSize: 13,
+                      fontWeight: selected
+                          ? FontWeight.w600
+                          : FontWeight.normal,
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 5),
+                Icon(
+                  selected ? Icons.check_rounded : Icons.add_rounded,
+                  color: selected ? AppColors.primary : AppColors.mutedText,
+                  size: 16,
+                ),
+              ],
+            ),
           ),
         ),
       ),

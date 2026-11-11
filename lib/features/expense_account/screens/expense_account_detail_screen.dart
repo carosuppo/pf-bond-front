@@ -4,19 +4,23 @@ import 'package:provider/provider.dart';
 import '../../../core/routes/app_routes.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/widgets/app_screen_header.dart';
-import '../../../core/widgets/avatar_stack.dart';
 import '../../../core/widgets/buttons/app_primary_button.dart';
-import '../../../core/widgets/buttons/app_secondary_button.dart';
-import '../../../core/widgets/user_avatar.dart';
 import '../../auth/providers/auth_provider.dart';
+import '../../event/formatters/event_date_formatter.dart';
 import '../../group/models/get_group_model.response.dart';
 import '../../group/models/get_member_model.response.dart';
-import '../formatters/money_formatter.dart';
-import '../models/balance_status.dart';
+import '../balance/member_debt_trace.dart';
+import '../formatters/account_movement_formatter.dart';
 import '../models/expense_account_detail_model.response.dart';
 import '../providers/expense_account_provider.dart';
+import '../widgets/account_balance_card.dart';
 import '../widgets/account_group_details_loader.dart';
 import '../widgets/account_header_card.dart';
+import '../widgets/account_member_debt_tile.dart';
+import '../widgets/account_new_movement_sheet.dart';
+import '../widgets/account_separated_list.dart';
+import '../widgets/movement_date_header.dart';
+import '../widgets/movement_list_item.dart';
 
 class ExpenseAccountDetailScreen extends StatelessWidget {
   const ExpenseAccountDetailScreen({super.key, required this.accountId});
@@ -43,6 +47,7 @@ class _SummaryContent extends StatefulWidget {
 
 class _SummaryContentState extends State<_SummaryContent> {
   late final ExpenseAccountProvider _provider;
+  int _groupDetailsLoadAttempt = 0;
 
   @override
   void initState() {
@@ -60,13 +65,6 @@ class _SummaryContentState extends State<_SummaryContent> {
   void dispose() {
     _provider.clearDetail();
     super.dispose();
-  }
-
-  Future<void> _goToBalance() async {
-    await Navigator.of(context).pushNamed(
-      AppRoutes.expenseAccountBalance,
-      arguments: {'accountId': widget.accountId},
-    );
   }
 
   Future<void> _goToMovements() async {
@@ -93,70 +91,32 @@ class _SummaryContentState extends State<_SummaryContent> {
     );
   }
 
-  Future<void> _goToEditAccount() async {
-    final memberId = _provider.accountDetail?.myMemberId;
-    final saved = await Navigator.of(context).pushNamed(
-      AppRoutes.editExpenseAccount,
-      arguments: {'accountId': widget.accountId},
-    );
-    if (!mounted || saved != true || memberId == null) return;
+  Future<void> _showNewMovementOptions() async {
+    final selection = await showAccountNewMovementSheet(context);
 
-    final updated = _provider.updatedExpenseAccount;
-    if (updated != null && !updated.memberIds.contains(memberId)) {
-      Navigator.of(context).pop(true);
+    if (!mounted || selection == null) return;
+    switch (selection) {
+      case NewAccountMovementType.expense:
+        await _goToCreateExpense();
+        break;
+      case NewAccountMovementType.payment:
+        await _goToPayments();
+        break;
     }
   }
 
-  Future<void> _confirmDeleteAccount(
-    ExpenseAccountDetailResponseModel detail,
-  ) async {
-    if (_provider.isDeletingExpenseAccount) return;
-
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (dialogContext) => AlertDialog(
-        title: const Text('Eliminar cuenta'),
-        content: Text(
-          'La cuenta «${detail.name}» dejará de estar disponible para todos '
-          'sus miembros. Sus gastos, pagos e historial dejarán de estar '
-          'accesibles desde la aplicación. Esta acción no se puede deshacer '
-          'desde la app.',
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(dialogContext).pop(false),
-            child: const Text('Cancelar'),
-          ),
-          TextButton(
-            onPressed: () => Navigator.of(dialogContext).pop(true),
-            child: const Text(
-              'Eliminar cuenta',
-              style: TextStyle(color: AppColors.error),
-            ),
-          ),
-        ],
-      ),
+  Future<void> _goToAccountSettings() async {
+    final leftAccount = await Navigator.of(context).pushNamed(
+      AppRoutes.expenseAccountSettings,
+      arguments: {'accountId': widget.accountId},
     );
-    if (confirmed != true || !mounted) return;
+    if (!mounted || leftAccount != true) return;
 
-    final messenger = ScaffoldMessenger.of(context);
-    final deleted = await _provider.deleteExpenseAccount(
-      accountId: widget.accountId,
-    );
-    if (!mounted) return;
+    Navigator.of(context).pop(true);
+  }
 
-    if (deleted) {
-      Navigator.of(context).pop(true);
-      messenger.showSnackBar(
-        const SnackBar(content: Text('Cuenta eliminada correctamente.')),
-      );
-      return;
-    }
-
-    final errorMessage =
-        _provider.deleteExpenseAccountErrorMessage ??
-        'No se pudo eliminar la cuenta. Volvé a intentarlo.';
-    messenger.showSnackBar(SnackBar(content: Text(errorMessage)));
+  void _retryGroupDetails() {
+    setState(() => _groupDetailsLoadAttempt++);
   }
 
   @override
@@ -165,65 +125,63 @@ class _SummaryContentState extends State<_SummaryContent> {
     final currentUserId = context.watch<AuthProvider>().authResponse?.user.id;
     final detail = provider.accountDetail;
 
-    return Column(
-      children: [
-        AppScreenHeader(
-          title: provider.accountDetail?.name ?? 'Cuenta',
-          onBack: () => Navigator.of(context).pop(),
-        ),
-        Expanded(
-          child: Builder(
-            builder: (context) {
-              if (provider.isDetailLoading || detail == null) {
-                if (provider.detailErrorMessage != null) {
-                  return _SummaryError(
-                    message: provider.detailErrorMessage!,
-                    onRetry: () =>
-                        provider.loadAccountDetail(accountId: widget.accountId),
-                  );
-                }
+    return Builder(
+      builder: (context) {
+        if (provider.isDetailLoading ||
+            detail == null ||
+            detail.id != widget.accountId) {
+          if (!provider.isDetailLoading &&
+              provider.detailErrorMessage != null) {
+            return _SummaryError(
+              message: provider.detailErrorMessage!,
+              onRetry: () =>
+                  provider.loadAccountDetail(accountId: widget.accountId),
+            );
+          }
 
-                return const Center(
-                  child: CircularProgressIndicator(color: AppColors.primary),
-                );
-              }
+          return const Center(
+            child: CircularProgressIndicator(color: AppColors.primary),
+          );
+        }
 
-              return AccountGroupDetailsLoader(
-                groupId: detail.groupId,
-                builder: (context, groupDetails, isGroupDetailsLoading, _) {
-                  final isGroupAdmin =
-                      currentUserId != null &&
-                      groupDetails?.members.any(
-                            (member) =>
-                                member.idUser == currentUserId &&
-                                member.role == RoleEnum.admin,
-                          ) ==
-                          true;
-                  final isCreator =
-                      currentUserId != null &&
-                      detail.createdByUserId == currentUserId;
+        return AccountGroupDetailsLoader(
+          key: ValueKey(_groupDetailsLoadAttempt),
+          groupId: detail.groupId,
+          builder: (context, groupDetails, isLoading, error) {
+            if (isLoading) {
+              return const Center(
+                child: CircularProgressIndicator(color: AppColors.primary),
+              );
+            }
 
-                  return _SummaryBody(
+            if (error != null || groupDetails == null) {
+              return _SummaryError(
+                message: 'No se pudieron cargar los datos del grupo.',
+                onRetry: _retryGroupDetails,
+              );
+            }
+
+            return Column(
+              children: [
+                AppScreenHeader(
+                  title: 'Cuenta',
+                  onBack: () => Navigator.of(context).pop(),
+                ),
+                Expanded(
+                  child: _SummaryBody(
                     detail: detail,
                     groupDetails: groupDetails,
-                    isGroupDetailsLoading: isGroupDetailsLoading,
-                    canDeleteAccount: isGroupAdmin || isCreator,
-                    isDeletingAccount: provider.isDeletingExpenseAccount,
-                    deleteErrorMessage:
-                        provider.deleteExpenseAccountErrorMessage,
-                    onDeleteAccountTap: () => _confirmDeleteAccount(detail),
-                    onBalanceTap: _goToBalance,
+                    currentUserId: currentUserId,
+                    onSettingsTap: _goToAccountSettings,
+                    onNewMovementTap: _showNewMovementOptions,
                     onMovementsTap: _goToMovements,
-                    onCreateExpenseTap: _goToCreateExpense,
-                    onPaymentsTap: _goToPayments,
-                    onEditAccountTap: _goToEditAccount,
-                  );
-                },
-              );
-            },
-          ),
-        ),
-      ],
+                  ),
+                ),
+              ],
+            );
+          },
+        );
+      },
     );
   }
 }
@@ -266,33 +224,197 @@ class _SummaryBody extends StatelessWidget {
   const _SummaryBody({
     required this.detail,
     required this.groupDetails,
-    required this.isGroupDetailsLoading,
-    required this.canDeleteAccount,
-    required this.isDeletingAccount,
-    required this.deleteErrorMessage,
-    required this.onDeleteAccountTap,
-    required this.onBalanceTap,
+    required this.currentUserId,
+    required this.onSettingsTap,
+    required this.onNewMovementTap,
     required this.onMovementsTap,
-    required this.onCreateExpenseTap,
-    required this.onPaymentsTap,
-    required this.onEditAccountTap,
   });
 
   final ExpenseAccountDetailResponseModel detail;
   final GetGroupResponseModel? groupDetails;
-  final bool isGroupDetailsLoading;
-  final bool canDeleteAccount;
-  final bool isDeletingAccount;
-  final String? deleteErrorMessage;
-  final VoidCallback onDeleteAccountTap;
-  final VoidCallback onBalanceTap;
+  final int? currentUserId;
+  final VoidCallback onSettingsTap;
+  final VoidCallback onNewMovementTap;
   final VoidCallback onMovementsTap;
-  final VoidCallback onCreateExpenseTap;
-  final VoidCallback onPaymentsTap;
-  final VoidCallback onEditAccountTap;
+
+  DateTime _movementDate(AccountMovementModel movement) =>
+      movement.confirmedAt ?? movement.settledAt ?? movement.createdAt;
+
+  List<AccountMovementModel> _recentMovements() {
+    final movements = detail.movements.toList()
+      ..sort((first, second) {
+        final firstDate = _movementDate(first);
+        final secondDate = _movementDate(second);
+        final dateOrder = secondDate.compareTo(firstDate);
+        return dateOrder != 0 ? dateOrder : second.id.compareTo(first.id);
+      });
+
+    return movements.take(3).toList(growable: false);
+  }
+
+  List<_RecentMovementGroup> _groupRecentMovements(
+    List<AccountMovementModel> movements,
+  ) {
+    final groups = <_RecentMovementGroup>[];
+    for (final movement in movements) {
+      final date = _movementDate(movement);
+      if (groups.isEmpty ||
+          !EventDateFormatter.isSameLocalDay(groups.last.date, date)) {
+        groups.add(_RecentMovementGroup(date));
+      }
+      groups.last.movements.add(movement);
+    }
+    return groups;
+  }
+
+  String _movementTypeLabel(AccountMovementModel movement) {
+    if (movement.kind == 'ADJUSTMENT') return 'Ajuste económico';
+    if (movement.kind == 'PAYMENT') {
+      return movement.adjustmentId == null ? 'Pago' : 'Pago de ajuste';
+    }
+    return 'Gasto';
+  }
+
+  String _movementTitle(AccountMovementModel movement) {
+    final title = movement.title?.trim();
+    if (title != null && title.isNotEmpty) return title;
+    final expenseTitle = movement.expenseTitle?.trim();
+    if (expenseTitle != null && expenseTitle.isNotEmpty) return expenseTitle;
+    return _movementTypeLabel(movement);
+  }
+
+  GetMemberResponseModel? _movementAuthor(
+    AccountMovementModel movement,
+    ExpenseAccountProvider provider,
+  ) {
+    final members = groupDetails?.members ?? const <GetMemberResponseModel>[];
+    var creatorUserId = movement.kind == 'ADJUSTMENT'
+        ? movement.createdByUserId
+        : accountMovementCreatorUserId(
+            movement: movement,
+            accountId: detail.id,
+            createdExpense: provider.createdExpense,
+            updatedExpense: provider.updatedExpense,
+          );
+
+    if (creatorUserId == null &&
+        movement.kind == 'PAYMENT' &&
+        movement.fromMemberId != null) {
+      for (final member in members) {
+        if (member.id == movement.fromMemberId) {
+          creatorUserId = member.idUser;
+          break;
+        }
+      }
+    }
+
+    var viewerUserId = currentUserId;
+    if (viewerUserId == null) {
+      for (final member in members) {
+        if (member.id == detail.myMemberId) {
+          viewerUserId = member.idUser;
+          break;
+        }
+      }
+    }
+
+    if (creatorUserId == null || creatorUserId == viewerUserId) return null;
+    for (final member in members) {
+      if (member.idUser == creatorUserId) return member;
+    }
+    return null;
+  }
+
+  bool _hasDirectSharePayment(AccountMovementModel expense, int memberId) =>
+      detail.movements.any(
+        (movement) =>
+            movement.kind == 'PAYMENT' &&
+            movement.expenseId == expense.id &&
+            movement.expenseShareId != null &&
+            movement.adjustmentId == null &&
+            movement.fromMemberId == memberId &&
+            movement.toMemberId == expense.payerMemberId,
+      );
+
+  bool _isPending(AccountMovementModel movement) {
+    if (movement.status == 'CANCELED' || movement.status == 'ANNULLED') {
+      return false;
+    }
+    if (movement.kind == 'ADJUSTMENT') return movement.status == 'PENDING';
+    if (movement.kind != 'EXPENSE') return false;
+
+    final relatedAdjustments = detail.movements
+        .where(
+          (candidate) =>
+              candidate.kind == 'ADJUSTMENT' &&
+              candidate.expenseId == movement.id,
+        )
+        .toList(growable: false);
+    if (relatedAdjustments.any(
+      (adjustment) => adjustment.status == 'PENDING',
+    )) {
+      return true;
+    }
+
+    if (movement.payerMemberId == detail.myMemberId) {
+      if (relatedAdjustments.isNotEmpty) return false;
+      return movement.shares
+          .where(
+            (share) =>
+                share.isCurrent &&
+                share.amountCents > 0 &&
+                share.memberId != movement.payerMemberId,
+          )
+          .any((share) => !_hasDirectSharePayment(movement, share.memberId));
+    }
+
+    for (final share in movement.shares) {
+      if (share.memberId != detail.myMemberId) continue;
+      if (!share.isCurrent ||
+          share.amountCents <= 0 ||
+          _hasDirectSharePayment(movement, share.memberId)) {
+        return false;
+      }
+
+      final memberAdjustments = relatedAdjustments.where(
+        (adjustment) =>
+            adjustment.debtorMemberId == share.memberId ||
+            adjustment.creditorMemberId == share.memberId,
+      );
+      if (memberAdjustments.any(
+        (adjustment) =>
+            adjustment.debtorMemberId == share.memberId &&
+            adjustment.creditorMemberId == movement.payerMemberId &&
+            adjustment.status == 'PENDING',
+      )) {
+        return true;
+      }
+      if (memberAdjustments.isNotEmpty) return false;
+      return true;
+    }
+    return false;
+  }
 
   @override
   Widget build(BuildContext context) {
+    final provider = context.watch<ExpenseAccountProvider>();
+    final recentMovements = _recentMovements();
+    final recentMovementGroups = _groupRecentMovements(recentMovements);
+    final traces = calculateMemberDebtTraces(
+      myMemberId: detail.myMemberId,
+      movements: detail.movements,
+    );
+    final debtsToMe = traces
+        .where((trace) => trace.netBalanceCents > 0)
+        .toList(growable: false);
+    final myDebts = traces
+        .where((trace) => trace.netBalanceCents < 0)
+        .toList(growable: false);
+    final Map<int, GetMemberResponseModel> membersById = {
+      if (groupDetails != null)
+        for (final member in groupDetails!.members) member.id: member,
+    };
+
     return SingleChildScrollView(
       padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
       child: Column(
@@ -302,313 +424,201 @@ class _SummaryBody extends StatelessWidget {
             name: detail.name,
             groupName: detail.groupName,
             eventName: detail.eventName,
+            trailing: IconButton(
+              onPressed: onSettingsTap,
+              tooltip: 'Configuración de cuenta',
+              icon: const Icon(Icons.settings_outlined, color: AppColors.text),
+            ),
           ),
-          const SizedBox(height: 12),
-          _BalanceCard(
-            detail: detail,
-            groupDetails: groupDetails,
-            isGroupDetailsLoading: isGroupDetailsLoading,
-            onBalanceTap: onBalanceTap,
+          const SizedBox(height: 14),
+          AccountBalanceCard(
+            label: 'Saldo neto',
+            status: detail.myStatus,
+            balanceCents: detail.myBalanceCents,
           ),
           const SizedBox(height: 20),
-          AppPrimaryButton(text: 'Ver movimientos', onPressed: onMovementsTap),
-          const SizedBox(height: 12),
-          AppSecondaryButton(
-            text: 'Registrar gasto',
-            onPressed: onCreateExpenseTap,
-          ),
-          const SizedBox(height: 12),
-          AppSecondaryButton(
-            text: 'Registrar pagos',
-            onPressed: onPaymentsTap,
-            leading: const Icon(Icons.payments_outlined),
-          ),
-          const SizedBox(height: 12),
-          AppSecondaryButton(
-            text: 'Editar cuenta',
-            onPressed: onEditAccountTap,
-            leading: const Icon(Icons.edit_outlined),
-          ),
-          if (canDeleteAccount) ...[
-            const SizedBox(height: 24),
-            const Divider(color: AppColors.border),
-            const SizedBox(height: 12),
-            SizedBox(
-              height: 48,
-              child: OutlinedButton.icon(
-                onPressed: isDeletingAccount ? null : onDeleteAccountTap,
-                icon: isDeletingAccount
-                    ? const SizedBox(
-                        width: 18,
-                        height: 18,
-                        child: CircularProgressIndicator(
-                          color: AppColors.error,
-                          strokeWidth: 2,
-                        ),
-                      )
-                    : const Icon(Icons.delete_outline),
-                label: Text(
-                  isDeletingAccount ? 'Eliminando…' : 'Eliminar cuenta',
-                ),
-                style: OutlinedButton.styleFrom(
-                  foregroundColor: AppColors.error,
-                  backgroundColor: AppColors.error.withValues(alpha: 0.08),
-                  side: const BorderSide(color: AppColors.error),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(14),
-                  ),
-                ),
-              ),
+          const Text(
+            'Mis deudas',
+            style: TextStyle(
+              color: AppColors.text,
+              fontSize: 17,
+              fontWeight: FontWeight.bold,
             ),
-            if (deleteErrorMessage != null) ...[
-              const SizedBox(height: 8),
-              Text(
-                deleteErrorMessage!,
-                textAlign: TextAlign.center,
-                style: const TextStyle(color: AppColors.error, fontSize: 13),
+          ),
+          const SizedBox(height: 8),
+          if (traces.isEmpty)
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+              decoration: BoxDecoration(
+                color: AppColors.cardColor,
+                borderRadius: BorderRadius.circular(14),
+                border: Border.all(color: AppColors.border),
               ),
-            ],
+              child: const Text(
+                'No tenés deudas pendientes.',
+                style: TextStyle(color: AppColors.mutedText, fontSize: 13),
+              ),
+            )
+          else ...[
+            _DebtSection(
+              title: 'Me deben',
+              color: AppColors.success,
+              emptyMessage: 'Nadie te debe en esta cuenta.',
+              traces: debtsToMe,
+              membersById: membersById,
+              myMemberId: detail.myMemberId,
+            ),
+            const SizedBox(height: 8),
+            _DebtSection(
+              title: 'Debo',
+              color: AppColors.error,
+              emptyMessage: 'No debés en esta cuenta.',
+              traces: myDebts,
+              membersById: membersById,
+              myMemberId: detail.myMemberId,
+            ),
           ],
-        ],
-      ),
-    );
-  }
-}
-
-class _BalanceCard extends StatelessWidget {
-  const _BalanceCard({
-    required this.detail,
-    required this.groupDetails,
-    required this.isGroupDetailsLoading,
-    required this.onBalanceTap,
-  });
-
-  final ExpenseAccountDetailResponseModel detail;
-  final GetGroupResponseModel? groupDetails;
-  final bool isGroupDetailsLoading;
-  final VoidCallback onBalanceTap;
-
-  List<int> get _highlightedMemberIds {
-    final debts = [
-      ...detail.debtsToMe.map((debt) => debt.memberId),
-      ...detail.myDebts.map((debt) => debt.memberId),
-    ];
-
-    if (debts.isNotEmpty) {
-      return debts.toSet().toList(growable: false);
-    }
-
-    return detail.members.map((member) => member.memberId).toList();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 18),
-      decoration: BoxDecoration(
-        color: AppColors.cardColor,
-        borderRadius: BorderRadius.circular(18),
-        border: Border.all(color: AppColors.border),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
+          const SizedBox(height: 18),
+          AppPrimaryButton(
+            text: 'Nuevo movimiento',
+            onPressed: onNewMovementTap,
+            leading: const Icon(Icons.add_rounded),
+          ),
+          const SizedBox(height: 20),
           Row(
             children: [
-              Expanded(
+              const Expanded(
                 child: Text(
-                  detail.myStatus == BalanceStatus.aFavor
-                      ? 'Te deben'
-                      : detail.myStatus == BalanceStatus.enContra
-                      ? 'Debés'
-                      : 'Saldado',
-                  style: const TextStyle(
+                  'Actividad reciente',
+                  style: TextStyle(
                     color: AppColors.text,
-                    fontSize: 15,
+                    fontSize: 16,
                     fontWeight: FontWeight.w600,
                   ),
                 ),
               ),
+              TextButton(
+                onPressed: onMovementsTap,
+                child: const Text('Ver todos'),
+              ),
             ],
           ),
-          const SizedBox(height: 8),
-          Text(
-            MoneyFormatter.formatCentsShort(detail.myBalanceCents),
-            style: TextStyle(
-              color: detail.myStatus.color,
-              fontSize: 30,
-              fontWeight: FontWeight.bold,
-            ),
-          ),
-          const SizedBox(height: 14),
-          _MembersPreview(
-            memberIds: detail.members
-                .map((member) => member.memberId)
-                .toList(growable: false),
-            previewIds: _highlightedMemberIds,
-            groupId: detail.groupId,
-            groupDetails: groupDetails,
-            isGroupDetailsLoading: isGroupDetailsLoading,
-          ),
-          const SizedBox(height: 12),
-          _TextActionButton(text: 'Ver mi balance', onTap: onBalanceTap),
+          if (detail.movements.isEmpty)
+            const Padding(
+              padding: EdgeInsets.symmetric(vertical: 12),
+              child: Text(
+                'Todavía no hay movimientos.',
+                style: TextStyle(color: AppColors.mutedText, fontSize: 13),
+              ),
+            )
+          else
+            for (final group in recentMovementGroups) ...[
+              MovementDateHeader(date: group.date),
+              AccountSeparatedList(
+                itemCount: group.movements.length,
+                itemBuilder: (context, index) {
+                  final movement = group.movements[index];
+                  final author = _movementAuthor(movement, provider);
+                  final isAdjustment =
+                      movement.kind == 'ADJUSTMENT' ||
+                      (movement.kind == 'PAYMENT' &&
+                          movement.adjustmentId != null);
+                  return MovementListItem(
+                    icon: movement.kind == 'EXPENSE'
+                        ? Icons.receipt_long_outlined
+                        : movement.kind == 'ADJUSTMENT'
+                        ? Icons.compare_arrows_rounded
+                        : Icons.payments_outlined,
+                    title: _movementTitle(movement),
+                    typeLabel: _movementTypeLabel(movement),
+                    amountCents: movement.amountCents,
+                    authorName: author?.name,
+                    authorPhotoUrl: author?.profilePhoto,
+                    isPayment: movement.kind == 'PAYMENT',
+                    isAdjustment: isAdjustment,
+                    isAnnulled:
+                        movement.status == 'CANCELED' ||
+                        movement.status == 'ANNULLED',
+                    isPending: _isPending(movement),
+                  );
+                },
+              ),
+            ],
         ],
       ),
     );
   }
 }
 
-class _TextActionButton extends StatelessWidget {
-  const _TextActionButton({required this.text, required this.onTap});
+class _RecentMovementGroup {
+  _RecentMovementGroup(this.date);
 
-  final String text;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    return Material(
-      color: Colors.transparent,
-      child: InkWell(
-        onTap: onTap,
-        borderRadius: BorderRadius.circular(12),
-        child: Padding(
-          padding: const EdgeInsets.symmetric(vertical: 4),
-          child: Row(
-            children: [
-              const Spacer(),
-              Text(
-                text,
-                style: const TextStyle(
-                  color: AppColors.mutedText,
-                  fontSize: 14,
-                ),
-              ),
-              const SizedBox(width: 4),
-              const Icon(Icons.chevron_right, color: AppColors.mutedText),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
+  final DateTime date;
+  final List<AccountMovementModel> movements = [];
 }
 
-class _MembersPreview extends StatefulWidget {
-  const _MembersPreview({
-    required this.memberIds,
-    required this.previewIds,
-    required this.groupId,
-    required this.groupDetails,
-    required this.isGroupDetailsLoading,
+class _DebtSection extends StatelessWidget {
+  const _DebtSection({
+    required this.title,
+    required this.color,
+    required this.emptyMessage,
+    required this.traces,
+    required this.membersById,
+    required this.myMemberId,
   });
 
-  final List<int> memberIds;
-  final List<int> previewIds;
-  final int groupId;
-  final GetGroupResponseModel? groupDetails;
-  final bool isGroupDetailsLoading;
-
-  @override
-  State<_MembersPreview> createState() => _MembersPreviewState();
-}
-
-class _MembersPreviewState extends State<_MembersPreview> {
-  bool _expanded = false;
-
-  List<AvatarStackItem> _items(
-    GetGroupResponseModel details, {
-    bool all = false,
-  }) {
-    final byId = {
-      if (details.id == widget.groupId)
-        for (final member in details.members) member.id: member,
-    };
-    final ids = all ? widget.memberIds : widget.previewIds.take(5);
-
-    return [
-      for (final memberId in ids)
-        AvatarStackItem(
-          name: byId[memberId]?.name ?? 'Miembro',
-          photoUrl: byId[memberId]?.profilePhoto,
-        ),
-    ];
-  }
-
-  Widget _buildPreview(GetGroupResponseModel details) {
-    return Column(
-      children: [
-        Material(
-          color: Colors.transparent,
-          child: InkWell(
-            onTap: () => setState(() => _expanded = !_expanded),
-            borderRadius: BorderRadius.circular(12),
-            child: Padding(
-              padding: const EdgeInsets.symmetric(vertical: 4),
-              child: Row(
-                children: [
-                  AvatarStack(items: _items(details)),
-                  const Spacer(),
-                  Icon(
-                    _expanded
-                        ? Icons.keyboard_arrow_up
-                        : Icons.keyboard_arrow_down,
-                    color: AppColors.mutedText,
-                  ),
-                ],
-              ),
-            ),
-          ),
-        ),
-        if (_expanded) ...[
-          const SizedBox(height: 8),
-          for (final item in _items(details, all: true))
-            Padding(
-              padding: const EdgeInsets.symmetric(vertical: 6),
-              child: Row(
-                children: [
-                  UserAvatar(
-                    name: item.name,
-                    photoUrl: item.photoUrl,
-                    radius: 18,
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: Text(
-                      item.name,
-                      style: const TextStyle(
-                        color: AppColors.text,
-                        fontSize: 15,
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-        ],
-      ],
-    );
-  }
+  final String title;
+  final Color color;
+  final String emptyMessage;
+  final List<MemberDebtTrace> traces;
+  final Map<int, GetMemberResponseModel> membersById;
+  final int myMemberId;
 
   @override
   Widget build(BuildContext context) {
-    if (widget.isGroupDetailsLoading) {
-      return const SizedBox(
-        height: 48,
-        child: Center(
-          child: CircularProgressIndicator(
-            color: AppColors.primary,
-            strokeWidth: 2,
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Padding(
+          padding: const EdgeInsets.only(bottom: 6),
+          child: Row(
+            children: [
+              Container(
+                width: 8,
+                height: 8,
+                decoration: BoxDecoration(color: color, shape: BoxShape.circle),
+              ),
+              const SizedBox(width: 8),
+              Text(
+                title,
+                style: TextStyle(
+                  color: color,
+                  fontSize: 14,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+            ],
           ),
         ),
-      );
-    }
-    final details = widget.groupDetails;
-    if (details == null) {
-      return const Text(
-        'No se pudo cargar el grupo de esta cuenta.',
-        style: TextStyle(color: AppColors.mutedText, fontSize: 13),
-      );
-    }
-    return _buildPreview(details);
+        if (traces.isEmpty)
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 6, 16, 10),
+            child: Text(
+              emptyMessage,
+              style: const TextStyle(color: AppColors.mutedText, fontSize: 12),
+            ),
+          )
+        else
+          for (final trace in traces)
+            AccountMemberDebtTile(
+              key: ValueKey(trace.memberId),
+              trace: trace,
+              memberName:
+                  membersById[trace.memberId]?.name ??
+                  'Miembro ${trace.memberId}',
+              myMemberId: myMemberId,
+            ),
+      ],
+    );
   }
 }
