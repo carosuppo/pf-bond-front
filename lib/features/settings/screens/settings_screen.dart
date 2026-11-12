@@ -259,19 +259,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
           children: [
             Padding(
               padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
-              child: Row(
-                children: [
-                  Expanded(
-                    child: const Text(
-                      'Configuración',
-                      style: TextStyle(
-                        color: AppColors.text,
-                        fontSize: 22,
-                        fontWeight: FontWeight.w700,
-                      ),
-                    ),
-                  ),
-                ],
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [const SizedBox(height: 12)],
               ),
             ),
             _ProfileSummary(

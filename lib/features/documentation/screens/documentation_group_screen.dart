@@ -51,19 +51,19 @@ class _DocumentationGroupScreenState extends State<DocumentationGroupScreen> {
           if (!didPop && handlesBack) widget.onExit();
         },
         child: Scaffold(
-          appBar: AppBar(
-            title: const Text('Documentación'),
-            automaticallyImplyLeading: false,
-          ),
-          body: Column(
-            children: <Widget>[
-              Padding(padding: const EdgeInsets.all(16), child: selector),
-              const Expanded(
-                child: Center(
-                  child: Text('Seleccioná un grupo para ver sus documentos.'),
+          body: SafeArea(
+            bottom: false,
+            child: Stack(
+              children: <Widget>[
+                const Positioned.fill(
+                  top: 64,
+                  child: Center(
+                    child: Text('Seleccioná un grupo para ver sus documentos.'),
+                  ),
                 ),
-              ),
-            ],
+                Positioned(top: 12, left: 0, right: 0, child: selector),
+              ],
+            ),
           ),
         ),
       );

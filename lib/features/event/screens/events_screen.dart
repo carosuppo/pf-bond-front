@@ -33,7 +33,7 @@ class EventsScreen extends StatelessWidget {
       floatingActionButton: FloatingActionButton(
         backgroundColor: AppColors.primary,
         foregroundColor: AppColors.onPrimary,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        shape: const CircleBorder(),
         elevation: 6,
         highlightElevation: 12,
         onPressed: () => _goToCreateEvent(context),

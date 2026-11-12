@@ -3,13 +3,13 @@ import 'package:provider/provider.dart';
 
 import '../../../core/routes/app_routes.dart';
 import '../../../core/theme/app_colors.dart';
-import '../../../core/widgets/app_screen_header.dart';
+import '../../../core/widgets/app_filter_dropdown.dart';
 import '../formatters/money_formatter.dart';
 import '../models/balance_status.dart';
 import '../models/my_expense_account_model.response.dart';
 import '../providers/expense_account_provider.dart';
-import '../widgets/account_separated_list.dart';
 import '../widgets/account_balance_label.dart';
+import '../widgets/account_separated_list.dart';
 
 class ExpenseAccountsScreen extends StatelessWidget {
   const ExpenseAccountsScreen({super.key});
@@ -51,16 +51,13 @@ class ExpenseAccountsScreen extends StatelessWidget {
         bottom: false,
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            const AppScreenHeader(title: 'Cuentas'),
-            Expanded(child: _AccountsContent(onTap: _goToDetail)),
-          ],
+          children: [Expanded(child: _AccountsContent(onTap: _goToDetail))],
         ),
       ),
       floatingActionButton: FloatingActionButton(
         backgroundColor: AppColors.primary,
         foregroundColor: AppColors.onPrimary,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        shape: const CircleBorder(),
         elevation: 6,
         highlightElevation: 12,
         onPressed: () => _goToCreateExpenseAccount(context),
@@ -161,16 +158,10 @@ class _AccountsContentState extends State<_AccountsContent> {
     final selectedGroupId = groups.containsKey(_selectedGroupId)
         ? _selectedGroupId
         : null;
-    final groupFilters = <_AccountFilterOption<_GroupFilterValue>>[
-      const _AccountFilterOption(
-        value: _GroupFilterValue(groupId: null),
-        label: 'Todos los grupos',
-      ),
+    final groupFilters = <AppFilterOption<int?>>[
+      const AppFilterOption<int?>(value: null, label: 'Todos los grupos'),
       for (final group in groupOptions)
-        _AccountFilterOption(
-          value: _GroupFilterValue(groupId: group.key),
-          label: group.value,
-        ),
+        AppFilterOption<int?>(value: group.key, label: group.value),
     ];
     final filteredAccounts = provider.accounts
         .where((account) {
@@ -198,159 +189,65 @@ class _AccountsContentState extends State<_AccountsContent> {
       }
     }
 
-    return Column(
-      children: [
-        Padding(
-          padding: const EdgeInsets.fromLTRB(16, 8, 16, 12),
-          child: Container(
-            padding: const EdgeInsets.all(12),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                Row(
-                  children: [
-                    Text(
-                      'Filtrar por:',
-                      style: Theme.of(context).textTheme.labelMedium?.copyWith(
-                        color: AppColors.mutedText,
-                        fontWeight: FontWeight.w700,
-                        letterSpacing: 0.8,
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 12),
-                Row(
-                  children: [
-                    Expanded(
-                      child: _AccountFilterDropdown<_GroupFilterValue>(
-                        label: 'Grupo',
-                        selectedLabel: selectedGroupId == null
-                            ? 'Todos los grupos'
-                            : groups[selectedGroupId]!,
-                        options: groupFilters,
-                        onSelected: (value) =>
-                            setState(() => _selectedGroupId = value.groupId),
-                      ),
-                    ),
-                  ],
-                ),
-              ],
-            ),
-          ),
-        ),
-        Expanded(
-          child: RefreshIndicator(
-            color: AppColors.primary,
-            onRefresh: _reload,
-            child: filteredAccounts.isEmpty
-                ? ListView(
-                    padding: const EdgeInsets.fromLTRB(16, 8, 16, 88),
-                    physics: const AlwaysScrollableScrollPhysics(),
+    return RefreshIndicator(
+      color: AppColors.primary,
+      onRefresh: _reload,
+      child: ListView(
+        padding: const EdgeInsets.fromLTRB(16, 8, 16, 88),
+        physics: const AlwaysScrollableScrollPhysics(),
+        children: [
+          Padding(
+            padding: const EdgeInsets.only(bottom: 4),
+            child: Container(
+              padding: const EdgeInsets.fromLTRB(12, 12, 12, 4),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  const SizedBox(height: 12),
+                  Row(
                     children: [
-                      _NoMatchingAccounts(
-                        onClear: () => setState(() {
-                          _selectedGroupId = null;
-                          _selectedBalanceStatus = null;
-                        }),
+                      Expanded(
+                        child: AppFilterDropdown<int?>(
+                          label: 'Filtrar por grupo',
+                          selectedValue: selectedGroupId,
+                          options: groupFilters,
+                          onSelected: (value) =>
+                              setState(() => _selectedGroupId = value),
+                        ),
                       ),
-                    ],
-                  )
-                : ListView(
-                    padding: const EdgeInsets.fromLTRB(16, 8, 16, 88),
-                    children: [
-                      for (final status in balanceStatusOrder)
-                        if (accountsByBalanceStatus[status]
-                            case final accounts?)
-                          _AccountSection(
-                            status: status,
-                            accounts: accounts,
-                            isExpanded: _expandedBalanceGroups.contains(status),
-                            onToggle: () {
-                              setState(() {
-                                if (!_expandedBalanceGroups.add(status)) {
-                                  _expandedBalanceGroups.remove(status);
-                                }
-                              });
-                            },
-                            onTap: (accountId) =>
-                                widget.onTap(context, accountId),
-                          ),
                     ],
                   ),
+                ],
+              ),
+            ),
           ),
-        ),
-      ],
-    );
-  }
-}
-
-class _AccountFilterDropdown<T> extends StatelessWidget {
-  const _AccountFilterDropdown({
-    required this.label,
-    required this.selectedLabel,
-    required this.options,
-    required this.onSelected,
-  });
-
-  final String label;
-  final String selectedLabel;
-  final List<_AccountFilterOption<T>> options;
-  final ValueChanged<T> onSelected;
-
-  @override
-  Widget build(BuildContext context) {
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        return PopupMenuButton<T>(
-          position: PopupMenuPosition.under,
-          offset: const Offset(0, 4),
-          constraints: BoxConstraints.tightFor(width: constraints.maxWidth),
-          color: AppColors.cardColor,
-          surfaceTintColor: AppColors.cardColor,
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(14),
-            side: const BorderSide(color: AppColors.border),
-          ),
-          onSelected: onSelected,
-          itemBuilder: (context) => [
-            for (final option in options)
-              PopupMenuItem<T>(
-                value: option.value,
-                child: Text(
-                  option.label,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(color: AppColors.text, fontSize: 14),
+          if (filteredAccounts.isEmpty)
+            _NoMatchingAccounts(
+              onClear: () => setState(() {
+                _selectedGroupId = null;
+                _selectedBalanceStatus = null;
+              }),
+            )
+          else
+            for (final status in balanceStatusOrder)
+              if (accountsByBalanceStatus[status] case final accounts?)
+                _AccountSection(
+                  status: status,
+                  accounts: accounts,
+                  isExpanded: _expandedBalanceGroups.contains(status),
+                  onToggle: () {
+                    setState(() {
+                      if (!_expandedBalanceGroups.add(status)) {
+                        _expandedBalanceGroups.remove(status);
+                      }
+                    });
+                  },
+                  onTap: (accountId) => widget.onTap(context, accountId),
                 ),
-              ),
-          ],
-          child: InputDecorator(
-            decoration: _filterDecoration(label).copyWith(
-              suffixIcon: const Icon(
-                Icons.keyboard_arrow_down_rounded,
-                color: AppColors.mutedText,
-              ),
-            ),
-            isEmpty: false,
-            child: Text(
-              selectedLabel,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: const TextStyle(color: AppColors.text, fontSize: 14),
-            ),
-          ),
-        );
-      },
+        ],
+      ),
     );
   }
-}
-
-class _AccountFilterOption<T> {
-  const _AccountFilterOption({required this.value, required this.label});
-
-  final T value;
-  final String label;
 }
 
 int _compareAccountsByLastMovement(
@@ -407,7 +304,7 @@ class _AccountSection extends StatelessWidget {
               _titleForStatus(status),
               style: const TextStyle(
                 color: AppColors.text,
-                fontSize: 15,
+                fontSize: 20,
                 fontWeight: FontWeight.w700,
               ),
             ),
@@ -439,7 +336,7 @@ class _AccountSection extends StatelessWidget {
                     child: Text(
                       'Total: ${MoneyFormatter.formatCentsShort(totalBalanceCents)}',
                       style: Theme.of(context).textTheme.labelLarge?.copyWith(
-                        color: AppColors.primary,
+                        color: AppColors.mutedText,
                       ),
                     ),
                   ),
@@ -473,31 +370,6 @@ class _AccountSection extends StatelessWidget {
         return 'Cuentas saldadas';
     }
   }
-}
-
-class _GroupFilterValue {
-  const _GroupFilterValue({required this.groupId});
-
-  final int? groupId;
-}
-
-InputDecoration _filterDecoration(String label) {
-  return InputDecoration(
-    labelText: label,
-    labelStyle: const TextStyle(color: AppColors.hint, fontSize: 12),
-    floatingLabelStyle: const TextStyle(color: AppColors.hint, fontSize: 12),
-    filled: true,
-    fillColor: AppColors.cardColor,
-    contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
-    enabledBorder: OutlineInputBorder(
-      borderRadius: BorderRadius.circular(14),
-      borderSide: const BorderSide(color: AppColors.border),
-    ),
-    focusedBorder: OutlineInputBorder(
-      borderRadius: BorderRadius.circular(14),
-      borderSide: const BorderSide(color: AppColors.primary, width: 1.5),
-    ),
-  );
 }
 
 class _NoMatchingAccounts extends StatelessWidget {
