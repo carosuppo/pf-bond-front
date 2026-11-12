@@ -7,6 +7,7 @@ import '../../../core/theme/app_colors.dart';
 import '../../../core/widgets/app_message_dialog.dart';
 import '../../../core/widgets/buttons/app_primary_button.dart';
 import '../../../core/widgets/user_avatar.dart';
+import '../../../core/widgets/zoomable_image_dialog.dart';
 import '../../auth/providers/auth_provider.dart';
 import '../../profile/widgets/profile_photo_editor.dart';
 import '../formatters/invitation_code_formatter.dart';
@@ -88,6 +89,12 @@ class _GroupInfoBottomSheetState extends State<GroupInfoBottomSheet> {
     );
   }
 
+  Future<void> _viewGroupImage(String? imageUrl) async {
+    final image = imageUrl?.trim();
+    if (image == null || image.isEmpty) return;
+    await showZoomableImageDialog(context, imageUrl: image);
+  }
+
   @override
   Widget build(BuildContext context) {
     final authProvider = context.watch<AuthProvider>();
@@ -120,6 +127,7 @@ class _GroupInfoBottomSheetState extends State<GroupInfoBottomSheet> {
               imageUrl: displayedGroup.image,
               canEdit: isCurrentUserAdmin,
               onEdit: () => _openImageEditor(displayedGroup),
+              onView: () => _viewGroupImage(displayedGroup.image),
             ),
             const SizedBox(height: 16),
             Center(
@@ -497,12 +505,14 @@ class _GroupImage extends StatelessWidget {
   final String? imageUrl;
   final bool canEdit;
   final VoidCallback onEdit;
+  final VoidCallback onView;
 
   const _GroupImage({
     required this.name,
     required this.imageUrl,
     required this.canEdit,
     required this.onEdit,
+    required this.onView,
   });
 
   @override
@@ -543,7 +553,7 @@ class _GroupImage extends StatelessWidget {
       child: Stack(
         clipBehavior: Clip.none,
         children: [
-          avatar,
+          GestureDetector(onTap: onView, child: avatar),
           if (canEdit)
             Positioned(
               right: -2,

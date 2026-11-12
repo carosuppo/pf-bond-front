@@ -6,6 +6,7 @@ import '../../../core/config/api_config.dart';
 import '../../../core/routes/app_routes.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/widgets/app_message_dialog.dart';
+import '../../../core/widgets/reset_on_release_interactive_viewer.dart';
 import '../../../core/widgets/user_avatar.dart';
 import '../../auth/models/user_model.dart';
 import '../../auth/providers/auth_provider.dart';
@@ -368,18 +369,27 @@ class _ProfilePhotoViewer extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final photo = user.profilePhoto?.trim();
+    final hasPhoto = photo != null && photo.isNotEmpty;
+
     return Dialog.fullscreen(
       backgroundColor: Colors.black,
       child: SafeArea(
         child: Stack(
           children: [
-            Center(
-              child: UserAvatar(
-                name: user.name,
-                photoUrl: user.profilePhoto,
-                radius: 140,
+            if (!hasPhoto)
+              Center(child: UserAvatar(name: user.name, radius: 140))
+            else
+              Positioned.fill(
+                child: ResetOnReleaseInteractiveViewer(
+                  child: Image.network(
+                    photo,
+                    fit: BoxFit.contain,
+                    errorBuilder: (context, error, stackTrace) =>
+                        UserAvatar(name: user.name, radius: 140),
+                  ),
+                ),
               ),
-            ),
             Positioned(
               top: 4,
               right: 4,

@@ -1,3 +1,5 @@
+import 'package:flutter/material.dart';
+import 'package:image_cropper/image_cropper.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:permission_handler/permission_handler.dart';
 
@@ -14,9 +16,13 @@ class ProfilePhotoPickerException implements Exception {
 
 class ProfilePhotoPickerService {
   final ImagePicker _imagePicker;
+  final ImageCropper _imageCropper;
 
-  ProfilePhotoPickerService({ImagePicker? imagePicker})
-    : _imagePicker = imagePicker ?? ImagePicker();
+  ProfilePhotoPickerService({
+    ImagePicker? imagePicker,
+    ImageCropper? imageCropper,
+  }) : _imagePicker = imagePicker ?? ImagePicker(),
+       _imageCropper = imageCropper ?? ImageCropper();
 
   Future<XFile?> pickFromGallery() async {
     return _pickImage(ImageSource.gallery);
@@ -46,7 +52,26 @@ class ProfilePhotoPickerService {
       return null;
     }
 
-    final size = await image.length();
+    final croppedImage = await _imageCropper.cropImage(
+      sourcePath: image.path,
+      aspectRatio: const CropAspectRatio(ratioX: 1, ratioY: 1),
+      uiSettings: [
+        AndroidUiSettings(
+          toolbarTitle: 'Ajustar encuadre',
+          toolbarColor: const Color(0xFF0C1014),
+          toolbarWidgetColor: const Color(0xFFFFFFFF),
+          lockAspectRatio: true,
+          hideBottomControls: false,
+        ),
+      ],
+    );
+
+    if (croppedImage == null) {
+      return null;
+    }
+
+    final result = XFile(croppedImage.path);
+    final size = await result.length();
 
     if (size > maxProfilePhotoSize) {
       throw const ProfilePhotoPickerException(
@@ -54,9 +79,9 @@ class ProfilePhotoPickerService {
       );
     }
 
-    final extension = image.name.toLowerCase().split('.').last;
+    final extension = result.name.toLowerCase().split('.').last;
     const Set<String> allowedExtensions = {'jpg', 'jpeg', 'png', 'webp'};
-    final mimeType = image.mimeType?.toLowerCase();
+    final mimeType = result.mimeType?.toLowerCase();
 
     final hasAllowedExtension = allowedExtensions.contains(extension);
     final hasAllowedMimeType = switch (mimeType) {
@@ -70,6 +95,6 @@ class ProfilePhotoPickerService {
       );
     }
 
-    return image;
+    return result;
   }
 }
