@@ -34,6 +34,22 @@ class _EventReminderButtonState extends State<EventReminderButton> {
   }
 
   @override
+  void didUpdateWidget(covariant EventReminderButton oldWidget) {
+    super.didUpdateWidget(oldWidget);
+
+    final eventChanged =
+        oldWidget.groupId != widget.groupId ||
+        oldWidget.event.id != widget.event.id;
+    final startChanged = !oldWidget.event.startAt.isAtSameMomentAs(
+      widget.event.startAt,
+    );
+
+    if (eventChanged || startChanged) {
+      _provider.load(groupId: widget.groupId, eventId: widget.event.id);
+    }
+  }
+
+  @override
   void dispose() {
     _provider.dispose();
     super.dispose();
