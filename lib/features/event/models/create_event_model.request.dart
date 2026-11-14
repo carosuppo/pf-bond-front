@@ -45,6 +45,21 @@ class EventRecurrenceRequest {
   final EventRecurrenceFrequency frequency;
   final DateTime? until;
   const EventRecurrenceRequest({required this.frequency, this.until});
+
+  factory EventRecurrenceRequest.fromJson(Map<String, dynamic> json) {
+    final String frequencyValue = json['frequency'] as String;
+    final frequency = EventRecurrenceFrequency.values.firstWhere(
+      (value) => value.value == frequencyValue,
+    );
+
+    return EventRecurrenceRequest(
+      frequency: frequency,
+      until: json['until'] == null
+          ? null
+          : DateTime.parse(json['until'] as String),
+    );
+  }
+
   String? validateFor(DateTime startAt) =>
       until != null && !until!.isAfter(startAt)
       ? 'La fecha final de la recurrencia debe ser posterior al inicio.'

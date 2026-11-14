@@ -209,8 +209,12 @@ class _EventReminderSheetState extends State<EventReminderSheet> {
   }
 
   void _cancelAdding() {
+    if (_draftPreset == null && !_customOpen) {
+      Navigator.of(context).pop();
+      return;
+    }
+
     setState(() {
-      _adding = _saved.isEmpty;
       _draftPreset = null;
       _customOpen = false;
       _formError = null;
@@ -259,24 +263,13 @@ class _EventReminderSheetState extends State<EventReminderSheet> {
               ),
             ),
             const SizedBox(height: 16),
-            Row(
-              children: [
-                const Expanded(
-                  child: Text(
-                    'Recordatorios',
-                    style: TextStyle(
-                      color: AppColors.text,
-                      fontSize: 18,
-                      fontWeight: FontWeight.w700,
-                    ),
-                  ),
-                ),
-                TextButton(
-                  onPressed: () => Navigator.of(context).pop(),
-                  style: TextButton.styleFrom(foregroundColor: AppColors.text),
-                  child: const Text('Cerrar'),
-                ),
-              ],
+            const Text(
+              'Recordatorios',
+              style: TextStyle(
+                color: AppColors.text,
+                fontSize: 18,
+                fontWeight: FontWeight.w700,
+              ),
             ),
             Text(
               '${widget.eventName} · '

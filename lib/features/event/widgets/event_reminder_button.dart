@@ -23,6 +23,35 @@ class EventReminderButton extends StatefulWidget {
   State<EventReminderButton> createState() => _EventReminderButtonState();
 }
 
+Future<void> showEventReminderSheet(
+  BuildContext context, {
+  required EventResponseModel event,
+  required int groupId,
+}) async {
+  final reminderService = context.read<EventReminderService>();
+
+  await showModalBottomSheet<bool>(
+    context: context,
+    isScrollControlled: true,
+    backgroundColor: AppColors.cardColor,
+    shape: const RoundedRectangleBorder(
+      borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+    ),
+    builder: (_) => ChangeNotifierProvider(
+      create: (_) =>
+          EventReminderProvider(reminderService)
+            ..load(groupId: groupId, eventId: event.id),
+      child: EventReminderSheet(
+        groupId: groupId,
+        eventId: event.id,
+        isRecurring: event.recurrenceId != null,
+        eventName: event.name,
+        eventStartAt: event.startAt,
+      ),
+    ),
+  );
+}
+
 class _EventReminderButtonState extends State<EventReminderButton> {
   late final EventReminderProvider _provider;
 

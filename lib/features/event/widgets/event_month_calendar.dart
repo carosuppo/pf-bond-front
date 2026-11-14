@@ -276,6 +276,131 @@ class EventMonthCalendar extends StatelessWidget {
   }
 }
 
+Future<DateTime?> showEventMonthCalendarPicker({
+  required BuildContext context,
+  required DateTime initialDate,
+  required DateTime firstDate,
+  required DateTime lastDate,
+  required String title,
+}) {
+  return showDialog<DateTime>(
+    context: context,
+    builder: (_) => _EventMonthCalendarPickerDialog(
+      initialDate: initialDate,
+      firstDate: firstDate,
+      lastDate: lastDate,
+      title: title,
+    ),
+  );
+}
+
+class _EventMonthCalendarPickerDialog extends StatefulWidget {
+  const _EventMonthCalendarPickerDialog({
+    required this.initialDate,
+    required this.firstDate,
+    required this.lastDate,
+    required this.title,
+  });
+
+  final DateTime initialDate;
+  final DateTime firstDate;
+  final DateTime lastDate;
+  final String title;
+
+  @override
+  State<_EventMonthCalendarPickerDialog> createState() =>
+      _EventMonthCalendarPickerDialogState();
+}
+
+class _EventMonthCalendarPickerDialogState
+    extends State<_EventMonthCalendarPickerDialog> {
+  late DateTime _selectedDay;
+  late DateTime _displayedMonth;
+
+  DateTime _dateOnly(DateTime date) =>
+      DateTime(date.year, date.month, date.day);
+
+  @override
+  void initState() {
+    super.initState();
+
+    final firstDate = _dateOnly(widget.firstDate);
+    final lastDate = _dateOnly(widget.lastDate);
+    final initialDate = _dateOnly(widget.initialDate);
+
+    _selectedDay = initialDate.isBefore(firstDate)
+        ? firstDate
+        : initialDate.isAfter(lastDate)
+        ? lastDate
+        : initialDate;
+    _displayedMonth = DateTime(_selectedDay.year, _selectedDay.month);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Dialog(
+      insetPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 24),
+      backgroundColor: AppColors.cardColor,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+      child: ConstrainedBox(
+        constraints: BoxConstraints(
+          maxWidth: 500,
+          maxHeight: MediaQuery.of(context).size.height * 0.85,
+        ),
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.all(16),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Text(
+                widget.title,
+                textAlign: TextAlign.center,
+                style: const TextStyle(
+                  color: AppColors.text,
+                  fontSize: 18,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+              const SizedBox(height: 12),
+              EventMonthCalendar(
+                displayedMonth: _displayedMonth,
+                selectedDay: _selectedDay,
+                firstDate: widget.firstDate,
+                lastDate: widget.lastDate,
+                today: DateTime.now(),
+                onMonthChanged: (month) {
+                  setState(() {
+                    _displayedMonth = DateTime(month.year, month.month);
+                  });
+                },
+                onDaySelected: (day) {
+                  setState(() => _selectedDay = _dateOnly(day));
+                },
+              ),
+              const SizedBox(height: 12),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.end,
+                children: [
+                  TextButton(
+                    onPressed: () => Navigator.of(context).pop(),
+                    child: const Text('Cancelar'),
+                  ),
+                  const SizedBox(width: 8),
+                  FilledButton(
+                    onPressed: () => Navigator.of(context).pop(_selectedDay),
+                    child: const Text('Aceptar'),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
 class EventMonthDayCell extends StatelessWidget {
   final int dayNumber;
   final bool hasEvents;
