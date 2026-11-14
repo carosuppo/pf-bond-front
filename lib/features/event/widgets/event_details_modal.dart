@@ -356,6 +356,10 @@ class EventDetailsModal extends StatelessWidget {
   }
 
   bool _canEdit(BuildContext context, EventResponseModel currentEvent) {
+    if (!_hasNotFinished(currentEvent)) {
+      return false;
+    }
+
     final currentUserId = context.watch<AuthProvider>().authResponse?.user.id;
     final members =
         context.watch<GroupProvider>().groupDetails?.members ??
@@ -389,8 +393,13 @@ class EventDetailsModal extends StatelessWidget {
       return false;
     }
 
-    final end = currentEvent.endAt ?? currentEvent.startAt;
-    return AppTimezone.fromUtc(end).isAfter(AppTimezone.now());
+    return _hasNotFinished(currentEvent);
+  }
+
+  bool _hasNotFinished(EventResponseModel currentEvent) {
+    final effectiveEnd =
+        currentEvent.endAt ?? currentEvent.startAt.add(const Duration(days: 1));
+    return AppTimezone.fromUtc(effectiveEnd).isAfter(AppTimezone.now());
   }
 }
 
