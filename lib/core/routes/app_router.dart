@@ -139,7 +139,11 @@ class AppRouter {
 
       case AppRoutes.createEvent:
         return MaterialPageRoute(
-          builder: (_) => const CreateEventScreen(),
+          builder: (_) => CreateEventScreen(
+            initialDate: settings.arguments is DateTime
+                ? settings.arguments as DateTime
+                : null,
+          ),
           settings: settings,
         );
 

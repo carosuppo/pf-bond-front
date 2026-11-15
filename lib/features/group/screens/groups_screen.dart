@@ -20,7 +20,9 @@ class _GroupsScreenState extends State<GroupsScreen> {
 
     if (!mounted) return;
 
-    await _refreshAndContinueIfHasGroups();
+    if (context.read<GroupProvider>().groups.isNotEmpty) {
+      Navigator.of(context).pushReplacementNamed(AppRoutes.map);
+    }
   }
 
   Future<void> _joinGroup() async {

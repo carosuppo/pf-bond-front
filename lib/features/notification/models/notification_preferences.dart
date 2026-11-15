@@ -6,6 +6,7 @@ const notificationTypeLabels = {
   'EVENT_CREATED': 'Nuevos eventos',
   'EVENT_UPDATED': 'Modificaciones de eventos',
   'EVENT_CANCELLED': 'Cancelaciones de eventos',
+  'MEMBER_ROLE_CHANGED': 'Cambios de rol',
 };
 
 class GroupNotificationPreferences {

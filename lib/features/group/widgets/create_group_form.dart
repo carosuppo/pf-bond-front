@@ -80,12 +80,6 @@ class _CreateGroupFormState extends State<CreateGroupForm> {
         return;
       }
 
-      await provider.getGroups();
-
-      if (!mounted) {
-        return;
-      }
-
       Navigator.pop(context);
     } else {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -178,11 +172,9 @@ class _CreateGroupFormState extends State<CreateGroupForm> {
 
                     const SizedBox(height: 16),
 
-                    Container(
-                      decoration: BoxDecoration(
-                        color: AppColors.fieldColor,
-                        borderRadius: BorderRadius.circular(14),
-                      ),
+                    Material(
+                      color: AppColors.fieldColor,
+                      borderRadius: BorderRadius.circular(14),
                       child: SwitchListTile(
                         shape: RoundedRectangleBorder(
                           borderRadius: BorderRadius.circular(14),

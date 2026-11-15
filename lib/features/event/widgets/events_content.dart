@@ -10,7 +10,9 @@ import 'event_calendar.dart';
 import 'event_details_modal.dart';
 
 class EventsContent extends StatefulWidget {
-  const EventsContent({super.key});
+  const EventsContent({super.key, this.onDaySelected});
+
+  final ValueChanged<DateTime>? onDaySelected;
 
   @override
   State<EventsContent> createState() => _EventsContentState();
@@ -237,7 +239,7 @@ class _EventsContentState extends State<EventsContent> {
                 onTap: () {},
               ),
             ),
-          const EventCalendar(),
+          EventCalendar(onDaySelected: widget.onDaySelected),
         ],
       ),
     );
