@@ -21,8 +21,14 @@ import 'event_location_editor.dart';
 class CreateEventForm extends StatefulWidget {
   final EventResponseModel? initialEvent;
   final int? groupId;
+  final DateTime? initialStartDate;
 
-  const CreateEventForm({super.key, this.initialEvent, this.groupId});
+  const CreateEventForm({
+    super.key,
+    this.initialEvent,
+    this.groupId,
+    this.initialStartDate,
+  });
 
   @override
   State<CreateEventForm> createState() => _CreateEventFormState();
@@ -74,6 +80,11 @@ class _CreateEventFormState extends State<CreateEventForm> {
         initialEvent.memberIds.where((id) => id != selfMemberId),
       );
       _initialMemberIds.addAll(_selectedMemberIds);
+    } else {
+      final DateTime now = AppTimezone.now();
+      final DateTime day = widget.initialStartDate ?? now;
+      _startAt = DateTime(day.year, day.month, day.day, now.hour, now.minute);
+      _initialStartAt = _startAt;
     }
   }
 
@@ -226,7 +237,8 @@ class _CreateEventFormState extends State<CreateEventForm> {
 
     final startChanged = !_isEditing || _startAt != _initialStartAt;
 
-    if (startChanged && !_startAt!.isAfter(DateTime.now())) {
+    if (startChanged &&
+        !AppTimezone.argentinaToUtc(_startAt!).isAfter(AppTimezone.now())) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           content: Text(
@@ -378,7 +390,7 @@ class _CreateEventFormState extends State<CreateEventForm> {
 
     return _nameController.text.trim().isNotEmpty ||
         _descriptionController.text.trim().isNotEmpty ||
-        _startAt != null ||
+        _startAt != _initialStartAt ||
         _endAt != null ||
         _selectedMemberIds.isNotEmpty ||
         _recurrence != null;

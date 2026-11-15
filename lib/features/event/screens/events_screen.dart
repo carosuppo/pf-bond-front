@@ -2,14 +2,25 @@ import 'package:flutter/material.dart';
 
 import '../../../core/routes/app_routes.dart';
 import '../../../core/theme/app_colors.dart';
+import '../../../core/timezone/app_timezone.dart';
 import '../../group/widgets/group_selector_button.dart';
 import '../widgets/events_content.dart';
 
-class EventsScreen extends StatelessWidget {
+class EventsScreen extends StatefulWidget {
   const EventsScreen({super.key});
 
+  @override
+  State<EventsScreen> createState() => _EventsScreenState();
+}
+
+class _EventsScreenState extends State<EventsScreen> {
+  DateTime? _selectedCalendarDay;
+
   void _goToCreateEvent(BuildContext context) {
-    Navigator.of(context).pushNamed(AppRoutes.createEvent);
+    Navigator.of(context).pushNamed(
+      AppRoutes.createEvent,
+      arguments: _selectedCalendarDay ?? AppTimezone.now(),
+    );
   }
 
   @override
@@ -20,7 +31,12 @@ class EventsScreen extends StatelessWidget {
         bottom: false,
         child: Stack(
           children: [
-            const Positioned.fill(top: 64, child: EventsContent()),
+            Positioned.fill(
+              top: 64,
+              child: EventsContent(
+                onDaySelected: (DateTime day) => _selectedCalendarDay = day,
+              ),
+            ),
             const Positioned(
               top: 12,
               left: 0,

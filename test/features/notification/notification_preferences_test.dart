@@ -63,6 +63,33 @@ void main() {
     expect(data.groups.single.types['POINT_OF_INTEREST_CREATED'], isFalse);
     expect(data.groups.single.types['POINT_OF_INTEREST_EXITED'], isTrue);
   });
+  test(
+    'role preference is exposed and parses explicit false or missing true',
+    () {
+      expect(notificationTypeLabels['MEMBER_ROLE_CHANGED'], 'Cambios de rol');
+      expect(
+        GroupNotificationPreferences.fromJson({
+          'groupId': 3,
+          'groupName': 'Familia',
+          'types': {'MEMBER_ROLE_CHANGED': false},
+        }).types['MEMBER_ROLE_CHANGED'],
+        isFalse,
+      );
+      expect(
+        NotificationPreferences.fromJson(
+          response(),
+        ).groups.single.types['MEMBER_ROLE_CHANGED'],
+        isTrue,
+      );
+      expect(
+        PushNotificationData.fromMap({
+          'type': 'MEMBER_ROLE_CHANGED',
+          'groupId': '3',
+        }).type,
+        'MEMBER_ROLE_CHANGED',
+      );
+    },
+  );
   test('global switch persists and preserves type preferences', () async {
     final types = Map.of(state.preferences!.groups.single.types);
     expect(await state.setGlobal(false), isTrue);

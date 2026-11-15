@@ -17,6 +17,8 @@ import '../models/join_group_model.request.dart';
 import '../models/join_group_model.response.dart';
 import '../models/update_group_model.request.dart';
 import '../services/group_service.dart';
+import '../services/group_socket_service.dart';
+import '../models/group_socket_event.dart';
 
 class GroupProvider extends ChangeNotifier {
   final GroupService _groupService;
@@ -27,7 +29,128 @@ class GroupProvider extends ChangeNotifier {
     this._groupService,
     this._preferencesService, [
     ProfilePhotoPickerService? photoPickerService,
+    this._groupSocket,
   ]) : _photoPickerService = photoPickerService ?? ProfilePhotoPickerService();
+
+  final GroupSocketService? _groupSocket;
+  StreamSubscription<GroupSocketEvent>? _socketSubscription;
+  Future<void>? _syncFuture;
+  Timer? _syncRetry;
+  int _syncFailures = 0;
+  int _detailsVersion = 0;
+  int _groupsVersion = 0;
+  bool _syncRequested = false;
+  bool _fullSyncRequested = false;
+  final Set<int> _changedGroupIds = <int>{};
+
+  void _startGroupSocket() {
+    if (_socketSubscription != null || _groupSocket == null) return;
+    _socketSubscription = _groupSocket.events.listen(_onSocketEvent);
+    unawaited(_groupSocket.connect());
+  }
+
+  void _onSocketEvent(GroupSocketEvent event) {
+    if (!_isInitialized) return;
+    _syncRetry?.cancel();
+    _syncRequested = true;
+    if (event is GroupSocketAuthenticated) {
+      _fullSyncRequested = true;
+    } else if (event is GroupsChanged) {
+      _changedGroupIds.add(event.groupId);
+    }
+    _syncFuture ??= _drainSync(_sessionVersion);
+  }
+
+  Future<void> _drainSync(int version) async {
+    try {
+      while (_syncRequested && version == _sessionVersion) {
+        _syncRequested = false;
+        final bool full = _fullSyncRequested;
+        final Set<int> changed = Set<int>.of(_changedGroupIds);
+        _fullSyncRequested = false;
+        _changedGroupIds.clear();
+        try {
+          final int groupsVersion = _groupsVersion;
+          final List<GetGroupsResponseModel> loaded = await _groupService
+              .getGroups();
+          if (version != _sessionVersion) return;
+          if (groupsVersion != _groupsVersion) {
+            // A creation completed after this request started. Fetch again
+            // instead of replacing the newly selected group with stale data.
+            _syncRequested = true;
+            _fullSyncRequested = true;
+            continue;
+          }
+          final int? previousId = activeGroup?.id;
+          groups = loaded;
+          activeGroup = null;
+          for (final GetGroupsResponseModel candidate in groups) {
+            if (candidate.id == previousId) activeGroup = candidate;
+          }
+          activeGroup ??= groups.isEmpty ? null : groups.first;
+          final int? activeId = activeGroup?.id;
+          if (previousId != activeId || activeId == null) {
+            ++_detailsVersion;
+            groupDetails = null;
+          }
+          notifyListeners();
+          if (full || activeId == null || previousId != activeId) {
+            final Future<void> write = _pendingPreferenceWrite.then((_) async {
+              if (version != _sessionVersion || activeGroup?.id != activeId) {
+                return;
+              }
+              if (activeId == null) {
+                await _preferencesService.clearActiveGroupId();
+              } else {
+                await _preferencesService.saveActiveGroupId(activeId);
+              }
+            });
+            _pendingPreferenceWrite = write.catchError((Object error) {
+              debugPrint('No se pudo persistir el grupo activo.');
+            });
+            await write;
+          }
+          if (version != _sessionVersion) return;
+          if (activeId != null &&
+              (full || previousId != activeId || changed.contains(activeId))) {
+            final int detailsVersion = ++_detailsVersion;
+            final GetGroupResponseModel details = await _groupService.getGroup(
+              groupId: activeId,
+            );
+            if (version != _sessionVersion) return;
+            if (activeGroup?.id == activeId &&
+                detailsVersion == _detailsVersion) {
+              groupDetails = details;
+            }
+          }
+          _syncFailures = 0;
+          errorMessage = null;
+          notifyListeners();
+        } catch (_) {
+          // Retry this invalidation a bounded number of times; no background polling.
+          if (version != _sessionVersion) return;
+          if (++_syncFailures <= 3 && !_syncRequested) {
+            _syncRetry = Timer(Duration(seconds: _syncFailures), () {
+              if (version == _sessionVersion) {
+                _onSocketEvent(const GroupSocketAuthenticated());
+              }
+            });
+          }
+        }
+      }
+    } finally {
+      if (version == _sessionVersion) _syncFuture = null;
+    }
+  }
+
+  @override
+  void dispose() {
+    ++_sessionVersion;
+    _syncRetry?.cancel();
+    unawaited(_socketSubscription?.cancel());
+    unawaited(_groupSocket?.dispose());
+    super.dispose();
+  }
 
   bool isLoading = false;
   bool _isInitialized = false;
@@ -47,6 +170,16 @@ class GroupProvider extends ChangeNotifier {
 
   Future<void> resetSessionState() async {
     _sessionVersion++;
+    _syncRetry?.cancel();
+    _syncFailures = 0;
+    ++_detailsVersion;
+    _syncRequested = false;
+    _fullSyncRequested = false;
+    _changedGroupIds.clear();
+    _syncFuture = null;
+    final Future<void>? cancelSubscription = _socketSubscription?.cancel();
+    _socketSubscription = null;
+    final Future<void>? disconnectSocket = _groupSocket?.disconnect();
     isLoading = false;
     _isInitialized = false;
     errorMessage = null;
@@ -60,6 +193,8 @@ class GroupProvider extends ChangeNotifier {
     isSavingGroupImage = false;
     joinErrorStatusCode = null;
     notifyListeners();
+    await cancelSubscription;
+    await disconnectSocket;
     await _pendingPreferenceWrite;
   }
 
@@ -75,6 +210,7 @@ class GroupProvider extends ChangeNotifier {
 
   Future<void> loadGroups() async {
     final sessionVersion = _sessionVersion;
+    final int groupsVersion = _groupsVersion;
     isLoading = true;
     errorMessage = null;
 
@@ -82,7 +218,10 @@ class GroupProvider extends ChangeNotifier {
 
     try {
       final loadedGroups = await _groupService.getGroups();
-      if (sessionVersion == _sessionVersion) groups = loadedGroups;
+      if (sessionVersion == _sessionVersion &&
+          groupsVersion == _groupsVersion) {
+        groups = loadedGroups;
+      }
     } catch (error) {
       if (sessionVersion == _sessionVersion) {
         errorMessage = error.toString().replaceFirst('Exception: ', '');
@@ -117,6 +256,21 @@ class GroupProvider extends ChangeNotifier {
       final createdGroup = await _groupService.createGroup(request: request);
       if (sessionVersion != _sessionVersion) return false;
       group = createdGroup;
+      final GetGroupsResponseModel summary = GetGroupsResponseModel(
+        id: createdGroup.id,
+        name: createdGroup.name,
+        image: createdGroup.image,
+      );
+      ++_groupsVersion;
+      groups = [
+        for (final GetGroupsResponseModel current in groups)
+          if (current.id != summary.id) current,
+        summary,
+      ];
+      _isInitialized = true;
+      await selectGroup(summary);
+      if (sessionVersion != _sessionVersion) return false;
+      _startGroupSocket();
 
       return true;
     } catch (error) {
@@ -554,6 +708,7 @@ class GroupProvider extends ChangeNotifier {
 
   Future<bool> getGroups() async {
     final sessionVersion = _sessionVersion;
+    final int groupsVersion = _groupsVersion;
     isLoading = true;
     errorMessage = null;
 
@@ -562,11 +717,13 @@ class GroupProvider extends ChangeNotifier {
     try {
       final loadedGroups = await _groupService.getGroups();
       if (sessionVersion != _sessionVersion) return false;
+      if (groupsVersion != _groupsVersion) return true;
       groups = loadedGroups;
 
       return true;
     } catch (error) {
       if (sessionVersion != _sessionVersion) return false;
+      if (groupsVersion != _groupsVersion) return true;
       errorMessage = error.toString().replaceFirst('Exception: ', '');
       groups = [];
       activeGroup = null;
@@ -591,11 +748,13 @@ class GroupProvider extends ChangeNotifier {
     if (!success || sessionVersion != _sessionVersion) {
       return;
     }
+    if (_isInitialized) return;
 
     await _restoreActiveGroup();
 
     if (sessionVersion != _sessionVersion) return;
     _isInitialized = true;
+    _startGroupSocket();
     notifyListeners();
   }
 
@@ -649,17 +808,29 @@ class GroupProvider extends ChangeNotifier {
     final sessionVersion = _sessionVersion;
     activeGroup = group;
     groupDetails = null;
+    ++_detailsVersion;
+    bool needsSync = false;
 
     try {
       await _saveActiveGroupId(group.id);
     } catch (error) {
       debugPrint('No se pudo guardar el grupo activo: $error');
+      needsSync = true;
     }
-    if (sessionVersion != _sessionVersion) return;
+    if (sessionVersion != _sessionVersion || activeGroup?.id != group.id) {
+      return;
+    }
 
     notifyListeners();
 
-    await getGroupDetails(groupId: group.id);
+    final bool loaded = await getGroupDetails(groupId: group.id);
+    if (sessionVersion == _sessionVersion &&
+        activeGroup?.id == group.id &&
+        (needsSync || !loaded)) {
+      // Creation remains successful even if a secondary operation fails.
+      // Reuse the bounded REST reconciliation instead of repeating the POST.
+      _onSocketEvent(const GroupSocketAuthenticated());
+    }
   }
 
   Future<bool> refreshAndSelectGroup({required int groupId}) async {
@@ -689,11 +860,13 @@ class GroupProvider extends ChangeNotifier {
     }
 
     _isInitialized = true;
+    _startGroupSocket();
     notifyListeners();
     return groupDetails?.id == groupId;
   }
 
   Future<bool> getGroupDetails({required int groupId}) async {
+    final int detailsVersion = ++_detailsVersion;
     final sessionVersion = _sessionVersion;
     isLoading = true;
     errorMessage = null;
@@ -702,12 +875,18 @@ class GroupProvider extends ChangeNotifier {
 
     try {
       final loadedDetails = await _groupService.getGroup(groupId: groupId);
-      if (sessionVersion != _sessionVersion) return false;
+      if (sessionVersion != _sessionVersion ||
+          detailsVersion != _detailsVersion) {
+        return false;
+      }
       groupDetails = loadedDetails;
 
       return true;
     } catch (error) {
-      if (sessionVersion != _sessionVersion) return false;
+      if (sessionVersion != _sessionVersion ||
+          detailsVersion != _detailsVersion) {
+        return false;
+      }
       errorMessage = error.toString().replaceFirst('Exception: ', '');
       groupDetails = null;
 

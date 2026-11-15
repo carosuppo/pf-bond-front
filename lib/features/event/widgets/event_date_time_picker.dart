@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../../core/theme/app_colors.dart';
+import '../../../core/timezone/app_timezone.dart';
 import 'event_month_calendar.dart';
 import 'event_time_picker.dart';
 
@@ -57,7 +58,18 @@ class _EventDateTimeDialogState extends State<_EventDateTimeDialog> {
 
   String? _errorMessage;
 
-  DateTime get _now => DateTime.now();
+  DateTime get _now {
+    final DateTime now = AppTimezone.now();
+    // Compare the same Bond wall-clock components used by the picker and REST.
+    return DateTime(
+      now.year,
+      now.month,
+      now.day,
+      now.hour,
+      now.minute,
+      now.second,
+    );
+  }
 
   bool get _isStart => widget.type == EventDateTimePickerType.start;
 

@@ -1,3 +1,4 @@
+import 'features/group/services/group_socket_service.dart';
 import 'dart:async';
 
 import 'package:flutter/material.dart';
@@ -177,6 +178,8 @@ class MyApp extends StatelessWidget {
           create: (context) => GroupProvider(
             context.read<GroupService>(),
             context.read<AppPreferencesService>(),
+            context.read<ProfilePhotoPickerService>(),
+            GroupSocketService(context.read<SessionStorageService>()),
           ),
         ),
         provider.ChangeNotifierProvider<GroupInboxProvider>(
