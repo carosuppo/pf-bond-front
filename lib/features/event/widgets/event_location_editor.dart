@@ -12,18 +12,21 @@ import '../../../core/widgets/global_text_field.dart';
 import '../../location/models/location_permission_status.dart';
 import '../../location/services/location_service.dart';
 import '../../location/widgets/location_map.dart';
+import '../models/event_location_model.dart';
 import '../models/event_model.response.dart';
 import '../providers/event_provider.dart';
 
 class EventLocationEditor extends StatefulWidget {
-  final EventResponseModel event;
-  final int groupId;
+  final EventResponseModel? event;
+  final int? groupId;
+  final bool selectionOnly;
 
   const EventLocationEditor({
     super.key,
-    required this.event,
-    required this.groupId,
-  });
+    this.event,
+    this.groupId,
+    this.selectionOnly = false,
+  }) : assert(selectionOnly || (event != null && groupId != null));
 
   @override
   State<EventLocationEditor> createState() => _EventLocationEditorState();
@@ -47,7 +50,7 @@ class _EventLocationEditorState extends State<EventLocationEditor> {
   void initState() {
     super.initState();
 
-    final location = widget.event.location;
+    final location = widget.event?.location;
 
     if (location != null) {
       _selectedLocation = LatLng(location.latitude, location.longitude);
@@ -202,6 +205,16 @@ class _EventLocationEditorState extends State<EventLocationEditor> {
       return;
     }
 
+    if (widget.selectionOnly) {
+      Navigator.of(context).pop(
+        EventLocationModel(
+          latitude: location.latitude,
+          longitude: location.longitude,
+        ),
+      );
+      return;
+    }
+
     final navigator = Navigator.of(context);
     final messenger = ScaffoldMessenger.of(context);
 
@@ -212,8 +225,8 @@ class _EventLocationEditorState extends State<EventLocationEditor> {
     try {
       final eventProvider = context.read<EventProvider>();
       final updatedEvent = await eventProvider.setEventLocation(
-        groupId: widget.groupId,
-        eventId: widget.event.id,
+        groupId: widget.groupId!,
+        eventId: widget.event!.id,
         latitude: location.latitude,
         longitude: location.longitude,
       );
@@ -296,8 +309,10 @@ class _EventLocationEditorState extends State<EventLocationEditor> {
                 ],
               ),
               const SizedBox(height: 20),
-              const Text(
-                '¿Estás seguro de que querés guardar esta ubicación?',
+              Text(
+                widget.selectionOnly
+                    ? '¿Querés usar esta ubicación para el evento?'
+                    : '¿Estás seguro de que querés guardar esta ubicación?',
                 style: TextStyle(
                   color: AppColors.text,
                   fontSize: 16,
@@ -351,7 +366,7 @@ class _EventLocationEditorState extends State<EventLocationEditor> {
                   const SizedBox(width: 12),
                   Expanded(
                     child: AppPrimaryButton(
-                      text: 'Guardar',
+                      text: widget.selectionOnly ? 'Usar ubicación' : 'Guardar',
                       onPressed: () => Navigator.of(dialogContext).pop(true),
                     ),
                   ),
@@ -384,7 +399,7 @@ class _EventLocationEditorState extends State<EventLocationEditor> {
         child: Column(
           children: [
             AppScreenHeader(
-              title: widget.event.location == null
+              title: widget.event?.location == null
                   ? 'Agregar ubicación'
                   : 'Modificar ubicación',
               onBack: () => Navigator.of(context).pop(),
@@ -486,7 +501,13 @@ class _EventLocationEditorState extends State<EventLocationEditor> {
             width: double.infinity,
             child: FilledButton(
               onPressed: _submitting || _resolvingAddress ? null : _submit,
-              child: Text(_submitting ? 'Guardando...' : 'Guardar ubicación'),
+              child: Text(
+                _submitting
+                    ? 'Guardando...'
+                    : widget.selectionOnly
+                    ? 'Usar ubicación'
+                    : 'Guardar ubicación',
+              ),
             ),
           ),
         ),

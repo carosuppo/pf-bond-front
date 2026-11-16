@@ -3,12 +3,15 @@ import 'package:latlong2/latlong.dart';
 import 'package:provider/provider.dart';
 
 import '../../../core/models/geocoding_result.dart';
+import '../../../core/routes/app_routes.dart';
 import '../../../core/services/geocoding_service.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/timezone/app_timezone.dart';
-import '../../../core/widgets/app_loading_indicator.dart';
 import '../../../core/widgets/user_avatar.dart';
 import '../../auth/providers/auth_provider.dart';
+import '../../expense_account/models/my_expense_account_model.response.dart';
+import '../../expense_account/providers/expense_account_provider.dart';
+import '../../expense_account/widgets/account_balance_label.dart';
 import '../../group/models/get_member_model.response.dart';
 import '../../group/providers/group_provider.dart';
 import '../../location/widgets/location_map.dart';
@@ -123,36 +126,59 @@ class EventDetailsModal extends StatelessWidget {
                       Row(
                         mainAxisAlignment: MainAxisAlignment.end,
                         children: [
-                          if (canEdit)
-                            IconButton(
-                              onPressed: () async {
-                                final navigator = Navigator.of(context);
-                                final messenger = ScaffoldMessenger.of(context);
-                                final saved = await navigator.push<bool>(
-                                  MaterialPageRoute<bool>(
-                                    builder: (_) => EditEventScreen(
+                          if (canEdit || canCancel)
+                            PopupMenuButton<_EventModalAction>(
+                              tooltip: 'Más opciones',
+                              icon: const Icon(
+                                Icons.more_vert,
+                                color: AppColors.mutedText,
+                              ),
+                              onSelected: (action) async {
+                                switch (action) {
+                                  case _EventModalAction.edit:
+                                    await _editEvent(context, currentEvent);
+                                  case _EventModalAction.reminder:
+                                    await showEventReminderSheet(
+                                      context,
                                       event: currentEvent,
                                       groupId: groupId,
+                                    );
+                                  case _EventModalAction.cancel:
+                                    await _cancelEvent(
+                                      context,
+                                      currentEvent,
+                                      isCancelling: isCancelling,
+                                    );
+                                }
+                              },
+                              itemBuilder: (_) => [
+                                if (canEdit)
+                                  const PopupMenuItem(
+                                    value: _EventModalAction.edit,
+                                    child: _EventActionMenuItem(
+                                      icon: Icons.edit_rounded,
+                                      label: 'Modificar evento',
                                     ),
                                   ),
-                                );
-
-                                if (!messenger.mounted || saved != true) {
-                                  return;
-                                }
-
-                                messenger.showSnackBar(
-                                  const SnackBar(
-                                    content: Text('Evento actualizado.'),
+                                if (canCancel)
+                                  const PopupMenuItem(
+                                    value: _EventModalAction.reminder,
+                                    child: _EventActionMenuItem(
+                                      icon: Icons.notifications_none_rounded,
+                                      label: 'Crear recordatorio',
+                                    ),
                                   ),
-                                );
-                              },
-                              tooltip: 'Editar',
-                              icon: const Icon(
-                                Icons.edit_rounded,
-                                color: AppColors.mutedText,
-                                size: 24,
-                              ),
+                                if (canCancel)
+                                  PopupMenuItem(
+                                    value: _EventModalAction.cancel,
+                                    enabled: !isCancelling,
+                                    child: const _EventActionMenuItem(
+                                      icon: Icons.event_busy_rounded,
+                                      label: 'Cancelar evento',
+                                      color: AppColors.error,
+                                    ),
+                                  ),
+                              ],
                             ),
                           IconButton(
                             onPressed: () => Navigator.of(context).pop(),
@@ -239,6 +265,11 @@ class EventDetailsModal extends StatelessWidget {
                         ),
                       ],
 
+                      _EventExpenseAccountsSection(
+                        eventId: currentEvent.id,
+                        groupId: groupId,
+                      ),
+
                       const SizedBox(height: 20),
 
                       const _SectionTitle('Ubicación'),
@@ -260,78 +291,6 @@ class EventDetailsModal extends StatelessWidget {
                             currentEvent.location!.longitude,
                           ),
                         ),
-
-                      if (canCancel) ...[
-                        const SizedBox(height: 20),
-                        const _SectionTitle('Recordatorio'),
-                        const SizedBox(height: 10),
-                        EventReminderButton(
-                          event: currentEvent,
-                          groupId: groupId,
-                        ),
-                      ],
-                      if (canCancel) ...[
-                        const SizedBox(height: 12),
-                        SizedBox(
-                          width: double.infinity,
-                          child: OutlinedButton.icon(
-                            onPressed: isCancelling
-                                ? null
-                                : () async {
-                                    final confirmed =
-                                        await showCancelEventDialog(
-                                          context,
-                                          currentEvent.name,
-                                        );
-
-                                    if (!confirmed || !context.mounted) {
-                                      return;
-                                    }
-
-                                    final navigator = Navigator.of(context);
-                                    final messenger = ScaffoldMessenger.of(
-                                      context,
-                                    );
-                                    final eventProvider = context
-                                        .read<EventProvider>();
-                                    final success = await eventProvider
-                                        .cancelEvent(
-                                          groupId: groupId,
-                                          eventId: currentEvent.id,
-                                        );
-
-                                    if (!navigator.mounted) {
-                                      return;
-                                    }
-
-                                    if (!success) {
-                                      messenger.showSnackBar(
-                                        SnackBar(
-                                          content: Text(
-                                            eventProvider.errorMessage ??
-                                                'Error al cancelar el evento.',
-                                          ),
-                                        ),
-                                      );
-                                      return;
-                                    }
-
-                                    navigator.pop(true);
-                                  },
-                            style: OutlinedButton.styleFrom(
-                              foregroundColor: AppColors.error,
-                              side: const BorderSide(color: AppColors.error),
-                            ),
-                            icon: isCancelling
-                                ? const AppLoadingIndicator(
-                                    size: 18,
-                                    color: AppColors.error,
-                                  )
-                                : const Icon(Icons.event_busy_rounded),
-                            label: const Text('Cancelar evento'),
-                          ),
-                        ),
-                      ],
                     ],
                   ),
                 ),
@@ -341,6 +300,59 @@ class EventDetailsModal extends StatelessWidget {
         ),
       ),
     );
+  }
+
+  Future<void> _editEvent(
+    BuildContext context,
+    EventResponseModel currentEvent,
+  ) async {
+    final navigator = Navigator.of(context);
+    final messenger = ScaffoldMessenger.of(context);
+    final saved = await navigator.push<bool>(
+      MaterialPageRoute<bool>(
+        builder: (_) => EditEventScreen(event: currentEvent, groupId: groupId),
+      ),
+    );
+
+    if (!messenger.mounted || saved != true) return;
+
+    messenger.showSnackBar(
+      const SnackBar(content: Text('Evento actualizado.')),
+    );
+  }
+
+  Future<void> _cancelEvent(
+    BuildContext context,
+    EventResponseModel currentEvent, {
+    required bool isCancelling,
+  }) async {
+    if (isCancelling) return;
+
+    final confirmed = await showCancelEventDialog(context, currentEvent.name);
+    if (!confirmed || !context.mounted) return;
+
+    final navigator = Navigator.of(context);
+    final messenger = ScaffoldMessenger.of(context);
+    final eventProvider = context.read<EventProvider>();
+    final success = await eventProvider.cancelEvent(
+      groupId: groupId,
+      eventId: currentEvent.id,
+    );
+
+    if (!navigator.mounted) return;
+
+    if (!success) {
+      messenger.showSnackBar(
+        SnackBar(
+          content: Text(
+            eventProvider.errorMessage ?? 'Error al cancelar el evento.',
+          ),
+        ),
+      );
+      return;
+    }
+
+    navigator.pop(true);
   }
 
   EventResponseModel _currentEvent(BuildContext context) {
@@ -356,6 +368,10 @@ class EventDetailsModal extends StatelessWidget {
   }
 
   bool _canEdit(BuildContext context, EventResponseModel currentEvent) {
+    if (!_hasNotFinished(currentEvent)) {
+      return false;
+    }
+
     final currentUserId = context.watch<AuthProvider>().authResponse?.user.id;
     final members =
         context.watch<GroupProvider>().groupDetails?.members ??
@@ -389,8 +405,38 @@ class EventDetailsModal extends StatelessWidget {
       return false;
     }
 
-    final end = currentEvent.endAt ?? currentEvent.startAt;
-    return AppTimezone.fromUtc(end).isAfter(AppTimezone.now());
+    return _hasNotFinished(currentEvent);
+  }
+
+  bool _hasNotFinished(EventResponseModel currentEvent) {
+    final effectiveEnd =
+        currentEvent.endAt ?? currentEvent.startAt.add(const Duration(days: 1));
+    return AppTimezone.fromUtc(effectiveEnd).isAfter(AppTimezone.now());
+  }
+}
+
+enum _EventModalAction { edit, reminder, cancel }
+
+class _EventActionMenuItem extends StatelessWidget {
+  final IconData icon;
+  final String label;
+  final Color color;
+
+  const _EventActionMenuItem({
+    required this.icon,
+    required this.label,
+    this.color = AppColors.text,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      children: [
+        Icon(icon, color: color, size: 20),
+        const SizedBox(width: 12),
+        Text(label, style: TextStyle(color: color)),
+      ],
+    );
   }
 }
 
@@ -531,6 +577,133 @@ class _EventLocationDetailsState extends State<_EventLocationDetails> {
           ),
         ),
       ],
+    );
+  }
+}
+
+class _EventExpenseAccountsSection extends StatefulWidget {
+  final int eventId;
+  final int groupId;
+
+  const _EventExpenseAccountsSection({
+    required this.eventId,
+    required this.groupId,
+  });
+
+  @override
+  State<_EventExpenseAccountsSection> createState() =>
+      _EventExpenseAccountsSectionState();
+}
+
+class _EventExpenseAccountsSectionState
+    extends State<_EventExpenseAccountsSection> {
+  late final ExpenseAccountProvider _expenseAccountProvider;
+  bool _accountsLoaded = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _expenseAccountProvider = context.read<ExpenseAccountProvider>();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) _loadAccounts();
+    });
+  }
+
+  Future<void> _loadAccounts() async {
+    await _expenseAccountProvider.loadAccounts(clearOnError: true);
+    if (!mounted) return;
+    setState(() => _accountsLoaded = true);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final accounts = context
+        .watch<ExpenseAccountProvider>()
+        .accounts
+        .where(
+          (account) =>
+              account.groupId == widget.groupId &&
+              account.eventId == widget.eventId,
+        )
+        .toList(growable: false);
+
+    if (!_accountsLoaded || accounts.isEmpty) {
+      return const SizedBox.shrink();
+    }
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const SizedBox(height: 20),
+        const _SectionTitle('Gastos'),
+        const SizedBox(height: 10),
+        for (var index = 0; index < accounts.length; index++) ...[
+          if (index > 0) const SizedBox(height: 8),
+          _EventExpenseAccountTile(
+            account: accounts[index],
+            showName: accounts.length > 1,
+          ),
+        ],
+      ],
+    );
+  }
+}
+
+class _EventExpenseAccountTile extends StatelessWidget {
+  final MyExpenseAccountResponseModel account;
+  final bool showName;
+
+  const _EventExpenseAccountTile({
+    required this.account,
+    required this.showName,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: AppColors.fieldColor,
+      borderRadius: BorderRadius.circular(14),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(14),
+        onTap: () => Navigator.of(context).pushNamed(
+          AppRoutes.expenseAccountDetail,
+          arguments: {'accountId': account.id},
+        ),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+          child: Row(
+            children: [
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    if (showName) ...[
+                      Text(
+                        account.name,
+                        style: const TextStyle(
+                          color: AppColors.text,
+                          fontSize: 14,
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                      const SizedBox(height: 4),
+                    ],
+                    AccountBalanceLabel(
+                      status: account.status,
+                      balanceCents: account.balanceCents,
+                      showStatus: false,
+                    ),
+                  ],
+                ),
+              ),
+              const Icon(
+                Icons.chevron_right_rounded,
+                color: AppColors.mutedText,
+              ),
+            ],
+          ),
+        ),
+      ),
     );
   }
 }

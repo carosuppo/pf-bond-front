@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 
 import '../../../core/theme/app_colors.dart';
@@ -10,13 +11,16 @@ import '../../../core/widgets/global_text_field.dart';
 import '../../auth/providers/auth_provider.dart';
 import '../../group/models/get_member_model.response.dart';
 import '../../group/providers/group_provider.dart';
+import '../models/event_location_model.dart';
 import '../models/event_model.response.dart';
 import '../models/create_event_model.request.dart';
 import 'event_recurrence_fields.dart';
 import '../models/update_event_model.request.dart';
 import '../providers/event_provider.dart';
+import '../utils/event_reminder_options.dart';
 import 'event_date_time_picker.dart';
 import 'event_location_editor.dart';
+import 'event_reminder_button.dart';
 
 class CreateEventForm extends StatefulWidget {
   final EventResponseModel? initialEvent;
@@ -37,19 +41,26 @@ class CreateEventForm extends StatefulWidget {
 class _CreateEventFormState extends State<CreateEventForm> {
   final _nameController = TextEditingController();
   final _descriptionController = TextEditingController();
+  final _customReminderController = TextEditingController();
 
   DateTime? _startAt;
   DateTime? _endAt;
   EventRecurrenceRequest? _recurrence;
+  ReminderUnit _customReminderUnit = ReminderUnit.hour;
+  String? _reminderSelectionError;
+  bool _advancedOptionsExpanded = false;
 
   EventResponseModel? _currentEvent;
+  EventLocationModel? _pendingLocation;
 
   final Set<int> _selectedMemberIds = {};
+  final Set<int> _selectedReminderLeadMinutes = {};
 
   String _initialName = '';
   String _initialDescription = '';
   DateTime? _initialStartAt;
   DateTime? _initialEndAt;
+  EventRecurrenceRequest? _initialRecurrence;
   final Set<int> _initialMemberIds = {};
 
   bool get _isEditing => widget.initialEvent != null;
@@ -69,11 +80,13 @@ class _CreateEventFormState extends State<CreateEventForm> {
       _endAt = initialEvent.endAt != null
           ? AppTimezone.fromUtc(initialEvent.endAt!)
           : null;
+      _recurrence = _toLocalRecurrence(initialEvent.recurrence);
 
       _initialName = initialEvent.name.trim();
       _initialDescription = (initialEvent.description ?? '').trim();
       _initialStartAt = _startAt;
       _initialEndAt = _endAt;
+      _initialRecurrence = _recurrence;
 
       final selfMemberId = _selfMemberId();
       _selectedMemberIds.addAll(
@@ -101,10 +114,23 @@ class _CreateEventFormState extends State<CreateEventForm> {
     return null;
   }
 
+  EventRecurrenceRequest? _toLocalRecurrence(
+    EventRecurrenceRequest? recurrence,
+  ) {
+    if (recurrence == null) return null;
+
+    final until = recurrence.until;
+    return EventRecurrenceRequest(
+      frequency: recurrence.frequency,
+      until: until == null ? null : AppTimezone.fromUtc(until),
+    );
+  }
+
   @override
   void dispose() {
     _nameController.dispose();
     _descriptionController.dispose();
+    _customReminderController.dispose();
 
     super.dispose();
   }
@@ -171,13 +197,30 @@ class _CreateEventFormState extends State<CreateEventForm> {
   }
 
   Future<void> _openLocationEditor() async {
+    FocusScope.of(context).unfocus();
+
+    if (!_isEditing) {
+      final selectedLocation = await Navigator.of(context)
+          .push<EventLocationModel>(
+            MaterialPageRoute<EventLocationModel>(
+              builder: (_) => const EventLocationEditor(selectionOnly: true),
+            ),
+          );
+
+      if (!mounted || selectedLocation == null) return;
+
+      setState(() => _pendingLocation = selectedLocation);
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Ubicación seleccionada para el evento.')),
+      );
+      return;
+    }
+
     final current = _currentEvent;
 
     if (current == null) {
       return;
     }
-
-    FocusScope.of(context).unfocus();
 
     final groupId =
         widget.groupId ?? context.read<GroupProvider>().activeGroup?.id;
@@ -211,6 +254,21 @@ class _CreateEventFormState extends State<CreateEventForm> {
     ScaffoldMessenger.of(context).showSnackBar(
       const SnackBar(content: Text('Ubicación del evento guardada.')),
     );
+  }
+
+  Future<void> _openReminderSettings() async {
+    final event = _currentEvent ?? widget.initialEvent;
+    final groupId =
+        widget.groupId ?? context.read<GroupProvider>().activeGroup?.id;
+
+    if (event == null || groupId == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('No se pudo abrir la configuración.')),
+      );
+      return;
+    }
+
+    await showEventReminderSheet(context, event: event, groupId: groupId);
   }
 
   Future<void> _saveEvent() async {
@@ -269,6 +327,24 @@ class _CreateEventFormState extends State<CreateEventForm> {
       ).showSnackBar(SnackBar(content: Text(recurrenceError)));
       return;
     }
+
+    if (_recurrence == null) {
+      for (final leadMinutes in _selectedReminderLeadMinutes) {
+        final remindAt = _startAt!.subtract(Duration(minutes: leadMinutes));
+        if (!remindAt.isAfter(DateTime.now())) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(
+                '${EventReminderOptions.formatLeadMinutes(leadMinutes)} ya pasó: '
+                'el evento empieza antes.',
+              ),
+            ),
+          );
+          return;
+        }
+      }
+    }
+
     final groupProvider = context.read<GroupProvider>();
     final eventProvider = context.read<EventProvider>();
 
@@ -295,6 +371,8 @@ class _CreateEventFormState extends State<CreateEventForm> {
       endAt: _endAt,
       memberIds: _selectedMemberIds.toList(),
       recurrence: _recurrence,
+      reminderLeadMinutes: _selectedReminderLeadMinutes.toList()..sort(),
+      location: _pendingLocation,
     );
 
     if (!mounted) {
@@ -311,6 +389,17 @@ class _CreateEventFormState extends State<CreateEventForm> {
       );
       return;
     }
+
+    final postCreationErrors = [
+      eventProvider.reminderErrorMessage,
+      eventProvider.locationErrorMessage,
+    ].whereType<String>();
+    if (postCreationErrors.isNotEmpty) {
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(postCreationErrors.join(' '))));
+    }
+
     Navigator.of(context).pop(true);
   }
 
@@ -328,6 +417,8 @@ class _CreateEventFormState extends State<CreateEventForm> {
       endAt: _endAt == _initialEndAt ? null : _endAt,
       clearEndAt: _endAt == null && _initialEndAt != null,
       memberIds: _sameMemberIds ? null : _selectedMemberIds.toList(),
+      recurrence: _sameRecurrence ? null : _recurrence,
+      clearRecurrence: !_sameRecurrence && _recurrence == null,
     );
 
     if (request.isEmpty) {
@@ -366,7 +457,7 @@ class _CreateEventFormState extends State<CreateEventForm> {
 
   String _formatDateTime(DateTime? dateTime) {
     if (dateTime == null) {
-      return 'Seleccionar';
+      return 'Elegir fecha y hora';
     }
 
     final day = dateTime.day.toString().padLeft(2, '0');
@@ -385,7 +476,8 @@ class _CreateEventFormState extends State<CreateEventForm> {
           _descriptionController.text.trim() != _initialDescription ||
           _startAt != _initialStartAt ||
           _endAt != _initialEndAt ||
-          !_sameMemberIds;
+          !_sameMemberIds ||
+          !_sameRecurrence;
     }
 
     return _nameController.text.trim().isNotEmpty ||
@@ -393,7 +485,441 @@ class _CreateEventFormState extends State<CreateEventForm> {
         _startAt != _initialStartAt ||
         _endAt != null ||
         _selectedMemberIds.isNotEmpty ||
+        _selectedReminderLeadMinutes.isNotEmpty ||
+        _pendingLocation != null ||
+        _customReminderController.text.trim().isNotEmpty ||
         _recurrence != null;
+  }
+
+  bool get _sameRecurrence {
+    final current = _recurrence;
+    final initial = _initialRecurrence;
+    if (current == null || initial == null) return current == initial;
+
+    return current.frequency == initial.frequency &&
+        _sameDateTime(current.until, initial.until);
+  }
+
+  bool _sameDateTime(DateTime? first, DateTime? second) {
+    if (first == null || second == null) return first == second;
+    return first.isAtSameMomentAs(second);
+  }
+
+  void _toggleReminder(int leadMinutes, bool selected) {
+    setState(() {
+      if (selected) {
+        _selectedReminderLeadMinutes.add(leadMinutes);
+      } else {
+        _selectedReminderLeadMinutes.remove(leadMinutes);
+      }
+      _reminderSelectionError = null;
+    });
+  }
+
+  void _addCustomReminder() {
+    final leadMinutes = EventReminderOptions.customToLeadMinutes(
+      _customReminderController.text,
+      _customReminderUnit,
+    );
+    if (leadMinutes == null) {
+      setState(() {
+        _reminderSelectionError =
+            'Ingresá un valor de 1 en adelante (máximo 4 semanas en total).';
+      });
+      return;
+    }
+
+    if (_selectedReminderLeadMinutes.contains(leadMinutes)) {
+      setState(() {
+        _reminderSelectionError = 'Esa anticipación ya está agregada.';
+      });
+      return;
+    }
+
+    setState(() {
+      _selectedReminderLeadMinutes.add(leadMinutes);
+      _customReminderController.clear();
+      _reminderSelectionError = null;
+    });
+  }
+
+  Widget _buildReminderSelection({required bool enabled}) {
+    final selectedCustomReminders =
+        _selectedReminderLeadMinutes
+            .where(
+              (leadMinutes) =>
+                  !EventReminderOptions.presets.contains(leadMinutes),
+            )
+            .toList(growable: false)
+          ..sort();
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          'Recordatorios (opcional)',
+          style: Theme.of(context).textTheme.titleMedium?.copyWith(
+            color: AppColors.text,
+            fontWeight: FontWeight.bold,
+          ),
+        ),
+        const SizedBox(height: 4),
+        const Text(
+          'Seleccioná una o más anticipaciones.',
+          style: TextStyle(color: AppColors.mutedText, fontSize: 13),
+        ),
+        const SizedBox(height: 10),
+        Wrap(
+          spacing: 8,
+          runSpacing: 4,
+          children: [
+            for (final leadMinutes in EventReminderOptions.presets)
+              FilterChip(
+                label: Text(EventReminderOptions.presetLabel(leadMinutes)),
+                selected: _selectedReminderLeadMinutes.contains(leadMinutes),
+                onSelected: enabled
+                    ? (selected) => _toggleReminder(leadMinutes, selected)
+                    : null,
+                selectedColor: AppColors.primary.withValues(alpha: 0.2),
+                checkmarkColor: AppColors.primary,
+                labelStyle: TextStyle(
+                  color: _selectedReminderLeadMinutes.contains(leadMinutes)
+                      ? AppColors.text
+                      : AppColors.mutedText,
+                ),
+              ),
+            for (final leadMinutes in selectedCustomReminders)
+              InputChip(
+                label: Text(
+                  EventReminderOptions.formatLeadMinutes(leadMinutes),
+                ),
+                onDeleted: enabled
+                    ? () => _toggleReminder(leadMinutes, false)
+                    : null,
+                deleteIconColor: AppColors.mutedText,
+              ),
+          ],
+        ),
+        const SizedBox(height: 8),
+        const Text(
+          'Agregar otra anticipación',
+          style: TextStyle(
+            color: AppColors.mutedText,
+            fontSize: 13,
+            fontWeight: FontWeight.w600,
+          ),
+        ),
+        const SizedBox(height: 4),
+        Row(
+          children: [
+            SizedBox(
+              width: 88,
+              child: TextField(
+                controller: _customReminderController,
+                enabled: enabled,
+                keyboardType: TextInputType.number,
+                inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                style: const TextStyle(color: AppColors.text),
+                decoration: const InputDecoration(
+                  labelText: 'Cantidad',
+                  hintText: '2',
+                  filled: true,
+                ),
+              ),
+            ),
+            const SizedBox(width: 8),
+            Expanded(
+              child: DropdownButtonFormField<ReminderUnit>(
+                initialValue: _customReminderUnit,
+                items: [
+                  for (final unit in ReminderUnit.values)
+                    DropdownMenuItem(value: unit, child: Text(unit.label)),
+                ],
+                onChanged: enabled
+                    ? (unit) {
+                        if (unit != null) {
+                          setState(() => _customReminderUnit = unit);
+                        }
+                      }
+                    : null,
+                decoration: const InputDecoration(
+                  labelText: 'Unidad',
+                  filled: true,
+                ),
+                style: const TextStyle(color: AppColors.text),
+                dropdownColor: AppColors.surface,
+              ),
+            ),
+            IconButton(
+              onPressed: enabled ? _addCustomReminder : null,
+              tooltip: 'Agregar anticipación',
+              icon: const Icon(Icons.add_circle_outline_rounded),
+              color: AppColors.primary,
+            ),
+          ],
+        ),
+        if (_reminderSelectionError != null) ...[
+          const SizedBox(height: 6),
+          Text(
+            _reminderSelectionError!,
+            style: const TextStyle(color: AppColors.error, fontSize: 13),
+          ),
+        ],
+      ],
+    );
+  }
+
+  Widget _buildDateTimeSection({required bool enabled}) {
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: AppColors.surface,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: AppColors.border),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            'Fecha y hora',
+            style: Theme.of(context).textTheme.titleMedium?.copyWith(
+              color: AppColors.text,
+              fontWeight: FontWeight.bold,
+            ),
+          ),
+          const SizedBox(height: 4),
+          const Text(
+            'Indicá cuándo comienza y, si corresponde, cuándo finaliza.',
+            style: TextStyle(color: AppColors.mutedText, fontSize: 13),
+          ),
+          const SizedBox(height: 14),
+          _DateTimeField(
+            label: 'Comienza *',
+            value: _formatDateTime(_startAt),
+            onTap: enabled ? _selectStartDateTime : null,
+          ),
+          const SizedBox(height: 12),
+          _DateTimeField(
+            label: 'Finaliza (opcional)',
+            value: _formatDateTime(_endAt),
+            onTap: enabled ? _selectEndDateTime : null,
+            onClear: !enabled || _endAt == null ? null : _clearEndDateTime,
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildMembersSection({
+    required List<GetMemberResponseModel> members,
+    required bool enabled,
+    required ThemeData theme,
+  }) {
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: AppColors.surface,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: AppColors.border),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Expanded(
+                child: Text(
+                  'Invitar miembros (opcional)',
+                  style: theme.textTheme.titleMedium?.copyWith(
+                    color: AppColors.text,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+              ),
+              if (_selectedMemberIds.isNotEmpty)
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 10,
+                    vertical: 3,
+                  ),
+                  decoration: BoxDecoration(
+                    color: AppColors.primary,
+                    borderRadius: BorderRadius.circular(20),
+                  ),
+                  child: Text(
+                    '${_selectedMemberIds.length}',
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 12,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                ),
+            ],
+          ),
+          const SizedBox(height: 4),
+          Text(
+            'Invitá a otros miembros del grupo si querés.',
+            style: theme.textTheme.bodySmall?.copyWith(
+              color: AppColors.mutedText,
+            ),
+          ),
+          if (members.isNotEmpty) ...[
+            Align(
+              alignment: Alignment.centerRight,
+              child: _SelectAllToggle(
+                allSelected: members.every(
+                  (member) => _selectedMemberIds.contains(member.id),
+                ),
+                enabled: enabled,
+                onTap: (selectAll) {
+                  setState(() {
+                    if (selectAll) {
+                      _selectedMemberIds.addAll(members.map((m) => m.id));
+                    } else {
+                      _selectedMemberIds.clear();
+                    }
+                  });
+                },
+              ),
+            ),
+            const SizedBox(height: 8),
+          ],
+          const SizedBox(height: 12),
+          if (members.isEmpty)
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                color: AppColors.fieldColor,
+                borderRadius: BorderRadius.circular(14),
+              ),
+              child: const Text(
+                'No hay otros miembros disponibles para asociar.',
+                style: TextStyle(color: AppColors.mutedText),
+              ),
+            )
+          else
+            _MemberAssociationSection(
+              members: members,
+              selectedIds: _selectedMemberIds,
+              enabled: enabled,
+              onToggle: (memberId, selected) {
+                setState(() {
+                  if (selected) {
+                    _selectedMemberIds.add(memberId);
+                  } else {
+                    _selectedMemberIds.remove(memberId);
+                  }
+                });
+              },
+            ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildAdvancedOptions({required bool enabled}) {
+    final hasLocation = _isEditing
+        ? _currentEvent?.location != null
+        : _pendingLocation != null;
+
+    return Container(
+      decoration: BoxDecoration(
+        color: AppColors.surface,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: AppColors.border),
+      ),
+      child: ExpansionTile(
+        initiallyExpanded: _advancedOptionsExpanded,
+        onExpansionChanged: (expanded) {
+          setState(() => _advancedOptionsExpanded = expanded);
+        },
+        leading: const Icon(Icons.tune_rounded, color: AppColors.primary),
+        title: const Text(
+          'Opciones avanzadas',
+          style: TextStyle(color: AppColors.text, fontWeight: FontWeight.w700),
+        ),
+        subtitle: const Text(
+          'Repetición, recordatorios y ubicación',
+          style: TextStyle(color: AppColors.mutedText, fontSize: 12),
+        ),
+        tilePadding: const EdgeInsets.symmetric(horizontal: 16),
+        childrenPadding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        collapsedShape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(16),
+        ),
+        expandedCrossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          EventRecurrenceFields(
+            value: _recurrence,
+            startAt: _startAt,
+            enabled: enabled,
+            onChanged: (value) => setState(() => _recurrence = value),
+          ),
+          const Divider(color: AppColors.border, height: 24),
+          if (_isEditing)
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Recordatorios (opcional)',
+                  style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                    color: AppColors.text,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+                const SizedBox(height: 4),
+                const Text(
+                  'Configurá una o más anticipaciones para el evento.',
+                  style: TextStyle(color: AppColors.mutedText, fontSize: 13),
+                ),
+                const SizedBox(height: 10),
+                OutlinedButton.icon(
+                  onPressed: enabled ? _openReminderSettings : null,
+                  icon: const Icon(Icons.notifications_active_outlined),
+                  label: const Text('Configurar recordatorios'),
+                ),
+              ],
+            )
+          else
+            _buildReminderSelection(enabled: enabled),
+          const Divider(color: AppColors.border, height: 32),
+          Text(
+            'Ubicación (opcional)',
+            style: Theme.of(context).textTheme.titleMedium?.copyWith(
+              color: AppColors.text,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+          const SizedBox(height: 4),
+          const Text(
+            'Elegí un lugar para el evento. Podés cambiarlo más adelante.',
+            style: TextStyle(color: AppColors.mutedText, fontSize: 13),
+          ),
+          if (!_isEditing && _pendingLocation != null) ...[
+            const SizedBox(height: 8),
+            const Text(
+              'Ubicación seleccionada; se guardará al crear el evento.',
+              style: TextStyle(color: AppColors.success, fontSize: 13),
+            ),
+          ],
+          const SizedBox(height: 10),
+          OutlinedButton.icon(
+            onPressed: enabled ? _openLocationEditor : null,
+            icon: Icon(
+              hasLocation
+                  ? Icons.edit_location_alt_rounded
+                  : Icons.add_location_alt_rounded,
+            ),
+            label: Text(
+              hasLocation ? 'Modificar ubicación' : 'Agregar ubicación',
+            ),
+          ),
+        ],
+      ),
+    );
   }
 
   Future<void> _handleBack() async {
@@ -483,11 +1009,36 @@ class _CreateEventFormState extends State<CreateEventForm> {
                               ),
                             ),
 
+                            const SizedBox(height: 8),
+
+                            const Text(
+                              'Los campos marcados con * son obligatorios. '
+                              'Los demás son opcionales.',
+                              textAlign: TextAlign.center,
+                              style: TextStyle(
+                                color: AppColors.mutedText,
+                                fontSize: 13,
+                              ),
+                            ),
+
                             const SizedBox(height: 24),
+
+                            Align(
+                              alignment: Alignment.centerLeft,
+                              child: Text(
+                                'Datos del evento',
+                                style: theme.textTheme.titleMedium?.copyWith(
+                                  color: AppColors.text,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
+                            ),
+
+                            const SizedBox(height: 12),
 
                             GlobalTextField(
                               controller: _nameController,
-                              label: 'Nombre del evento',
+                              label: 'Nombre del evento *',
                             ),
 
                             const SizedBox(height: 16),
@@ -499,147 +1050,17 @@ class _CreateEventFormState extends State<CreateEventForm> {
 
                             const SizedBox(height: 16),
 
-                            _DateTimeField(
-                              label: 'Comienza',
-                              value: _formatDateTime(_startAt),
-                              onTap: isLoading ? null : _selectStartDateTime,
-                            ),
-
+                            _buildDateTimeSection(enabled: !isLoading),
                             const SizedBox(height: 16),
-
-                            _DateTimeField(
-                              label: 'Finaliza (opcional)',
-                              value: _formatDateTime(_endAt),
-                              onTap: isLoading ? null : _selectEndDateTime,
-                              onClear: isLoading || _endAt == null
-                                  ? null
-                                  : _clearEndDateTime,
-                            ),
-
-                            if (!_isEditing) ...[
-                              const SizedBox(height: 24),
-                              EventRecurrenceFields(
-                                value: _recurrence,
-                                startAt: _startAt,
-                                enabled: !isLoading,
-                                onChanged: (EventRecurrenceRequest? value) =>
-                                    setState(() => _recurrence = value),
-                              ),
-                            ],
-                            if (_isEditing) ...[
-                              const SizedBox(height: 16),
-
-                              SizedBox(
-                                width: double.infinity,
-                                child: OutlinedButton.icon(
-                                  onPressed: isLoading
-                                      ? null
-                                      : _openLocationEditor,
-                                  icon: Icon(
-                                    _currentEvent?.location == null
-                                        ? Icons.add_location_alt_rounded
-                                        : Icons.edit_location_alt_rounded,
-                                  ),
-                                  label: Text(
-                                    _currentEvent?.location == null
-                                        ? 'Agregar ubicación'
-                                        : 'Modificar ubicación',
-                                  ),
-                                ),
-                              ),
-                            ],
+                            _buildAdvancedOptions(enabled: !isLoading),
 
                             const SizedBox(height: 24),
 
-                            Row(
-                              children: [
-                                Text(
-                                  'Asociar miembros',
-                                  style: theme.textTheme.titleMedium?.copyWith(
-                                    color: AppColors.text,
-                                    fontWeight: FontWeight.bold,
-                                  ),
-                                ),
-                                const SizedBox(width: 8),
-                                if (_selectedMemberIds.isNotEmpty)
-                                  Container(
-                                    padding: const EdgeInsets.symmetric(
-                                      horizontal: 10,
-                                      vertical: 3,
-                                    ),
-                                    decoration: BoxDecoration(
-                                      color: AppColors.primary,
-                                      borderRadius: BorderRadius.circular(20),
-                                    ),
-                                    child: Text(
-                                      '${_selectedMemberIds.length}',
-                                      style: const TextStyle(
-                                        color: Colors.white,
-                                        fontSize: 12,
-                                        fontWeight: FontWeight.bold,
-                                      ),
-                                    ),
-                                  ),
-                                const Spacer(),
-                                if (members.isNotEmpty)
-                                  _SelectAllToggle(
-                                    allSelected: members.every(
-                                      (m) => _selectedMemberIds.contains(m.id),
-                                    ),
-                                    enabled: !isLoading,
-                                    onTap: (selectAll) {
-                                      setState(() {
-                                        if (selectAll) {
-                                          _selectedMemberIds.addAll(
-                                            members.map((m) => m.id),
-                                          );
-                                        } else {
-                                          _selectedMemberIds.clear();
-                                        }
-                                      });
-                                    },
-                                  ),
-                              ],
+                            _buildMembersSection(
+                              members: members,
+                              enabled: !isLoading,
+                              theme: theme,
                             ),
-
-                            const SizedBox(height: 4),
-
-                            Text(
-                              'Elegí a quiénes invitar a este evento',
-                              style: theme.textTheme.bodySmall?.copyWith(
-                                color: AppColors.mutedText,
-                              ),
-                            ),
-
-                            const SizedBox(height: 12),
-
-                            if (members.isEmpty)
-                              Container(
-                                padding: const EdgeInsets.all(16),
-                                decoration: BoxDecoration(
-                                  color: AppColors.fieldColor,
-                                  borderRadius: BorderRadius.circular(14),
-                                ),
-                                child: const Text(
-                                  'No hay miembros disponibles para asociar.',
-                                  style: TextStyle(color: AppColors.mutedText),
-                                ),
-                              )
-                            else
-                              _MemberAssociationSection(
-                                members: members,
-                                selectedIds: _selectedMemberIds,
-                                enabled: !isLoading,
-                                onToggle: (memberId, selected) {
-                                  setState(() {
-                                    if (selected) {
-                                      _selectedMemberIds.add(memberId);
-                                    } else {
-                                      _selectedMemberIds.remove(memberId);
-                                    }
-                                  });
-                                },
-                              ),
 
                             const SizedBox(height: 24),
 
@@ -647,6 +1068,12 @@ class _CreateEventFormState extends State<CreateEventForm> {
                               text: _isEditing
                                   ? 'Guardar cambios'
                                   : 'Crear evento',
+                              leading: Icon(
+                                _isEditing
+                                    ? Icons.save_rounded
+                                    : Icons.event_available_rounded,
+                                size: 20,
+                              ),
                               loading: isLoading,
                               onPressed: _saveEvent,
                             ),

@@ -213,7 +213,10 @@ class MyApp extends StatelessWidget {
           create: (context) => EventReminderService(context.read<ApiClient>()),
         ),
         provider.ChangeNotifierProvider<EventProvider>(
-          create: (context) => EventProvider(context.read<EventService>()),
+          create: (context) => EventProvider(
+            context.read<EventService>(),
+            reminderService: context.read<EventReminderService>(),
+          ),
         ),
         provider.Provider<ExpenseAccountService>(
           create: (context) => ExpenseAccountService(context.read<ApiClient>()),

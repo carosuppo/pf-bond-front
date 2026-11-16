@@ -1,4 +1,5 @@
 import '../../../core/timezone/app_timezone.dart';
+import 'create_event_model.request.dart';
 
 class UpdateEventRequestModel {
   final String? name;
@@ -8,6 +9,8 @@ class UpdateEventRequestModel {
   final DateTime? endAt;
   final bool clearEndAt;
   final List<int>? memberIds;
+  final EventRecurrenceRequest? recurrence;
+  final bool clearRecurrence;
 
   const UpdateEventRequestModel({
     this.name,
@@ -17,6 +20,8 @@ class UpdateEventRequestModel {
     this.endAt,
     this.clearEndAt = false,
     this.memberIds,
+    this.recurrence,
+    this.clearRecurrence = false,
   });
 
   bool get isEmpty =>
@@ -26,7 +31,9 @@ class UpdateEventRequestModel {
       startAt == null &&
       endAt == null &&
       !clearEndAt &&
-      memberIds == null;
+      memberIds == null &&
+      recurrence == null &&
+      !clearRecurrence;
 
   Map<String, dynamic> toJson() {
     final json = <String, dynamic>{};
@@ -53,6 +60,12 @@ class UpdateEventRequestModel {
 
     if (memberIds != null) {
       json['memberIds'] = memberIds;
+    }
+
+    if (clearRecurrence) {
+      json['recurrence'] = null;
+    } else if (recurrence != null) {
+      json['recurrence'] = recurrence!.toJson();
     }
 
     return json;

@@ -2,18 +2,24 @@ import 'package:flutter/material.dart';
 
 import '../../../core/timezone/app_timezone.dart';
 import '../models/create_event_model.request.dart';
+import '../models/event_location_model.dart';
 import '../models/event_model.response.dart';
 import '../models/update_event_model.request.dart';
+import '../services/event_reminder_service.dart';
 import '../services/event_service.dart';
 
 class EventProvider extends ChangeNotifier {
   final EventService _eventService;
+  final EventReminderService? _eventReminderService;
 
-  EventProvider(this._eventService);
+  EventProvider(this._eventService, {EventReminderService? reminderService})
+    : _eventReminderService = reminderService;
 
   bool isLoading = false;
   bool isEventsLoading = false;
   String? errorMessage;
+  String? reminderErrorMessage;
+  String? locationErrorMessage;
   EventResponseModel? event;
   List<EventResponseModel> events = [];
   int? _eventsGroupId;
@@ -167,10 +173,14 @@ class EventProvider extends ChangeNotifier {
     DateTime? endAt,
     required List<int> memberIds,
     EventRecurrenceRequest? recurrence,
+    List<int> reminderLeadMinutes = const [],
+    EventLocationModel? location,
   }) async {
     final sessionVersion = _sessionVersion;
     isLoading = true;
     errorMessage = null;
+    reminderErrorMessage = null;
+    locationErrorMessage = null;
     event = null;
 
     notifyListeners();
@@ -191,6 +201,41 @@ class EventProvider extends ChangeNotifier {
       );
       if (sessionVersion != _sessionVersion) return false;
       event = createdEvent;
+
+      if (reminderLeadMinutes.isNotEmpty) {
+        try {
+          final reminderService = _eventReminderService;
+          if (reminderService == null) {
+            throw StateError(
+              'El servicio de recordatorios no está disponible.',
+            );
+          }
+
+          await reminderService.setReminders(
+            groupId: groupId,
+            eventId: createdEvent.id,
+            leadMinutes: reminderLeadMinutes,
+          );
+        } catch (_) {
+          reminderErrorMessage =
+              'El evento se creó, pero no se pudieron guardar los recordatorios. '
+              'Podés agregarlos luego desde el detalle del evento.';
+        }
+      }
+
+      if (location != null) {
+        final updatedEvent = await setEventLocation(
+          groupId: groupId,
+          eventId: createdEvent.id,
+          latitude: location.latitude,
+          longitude: location.longitude,
+        );
+        if (updatedEvent == null) {
+          locationErrorMessage =
+              'El evento se creó, pero no se pudo guardar la ubicación. '
+              'Podés agregarla luego desde el detalle del evento.';
+        }
+      }
 
       if (_eventsGroupId == groupId) {
         events = [...events, event!]

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/timezone/app_timezone.dart';
 import '../models/create_event_model.request.dart';
+import 'event_month_calendar.dart';
 
 class EventRecurrenceFields extends StatelessWidget {
   final EventRecurrenceRequest? value;
@@ -20,13 +21,13 @@ class EventRecurrenceFields extends StatelessWidget {
   Future<void> _selectUntil(BuildContext context) async {
     final DateTime base = startAt ?? AppTimezone.now();
     final DateTime first = DateTime(base.year, base.month, base.day + 1);
-    final DateTime? selected = await showDatePicker(
+    final DateTime last = DateTime(first.year + 100, 12, 31);
+    final DateTime? selected = await showEventMonthCalendarPicker(
       context: context,
-      initialDate: value?.until != null && !value!.until!.isBefore(first)
-          ? value!.until!
-          : first,
+      title: 'Fecha límite de repetición',
+      initialDate: value?.until ?? first,
       firstDate: first,
-      lastDate: DateTime(first.year + 100, 12, 31),
+      lastDate: last,
     );
     if (selected == null || !context.mounted) return;
     onChanged(
@@ -51,7 +52,8 @@ class EventRecurrenceFields extends StatelessWidget {
     children: <Widget>[
       SwitchListTile(
         contentPadding: EdgeInsets.zero,
-        title: const Text('Repetir evento'),
+        title: const Text('Repetir evento (opcional)'),
+        subtitle: const Text('Configurá una frecuencia para esta actividad.'),
         value: value != null,
         onChanged: enabled
             ? (bool selected) => onChanged(
