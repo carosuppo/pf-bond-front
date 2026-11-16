@@ -3,11 +3,15 @@ import 'package:latlong2/latlong.dart';
 import 'package:provider/provider.dart';
 
 import '../../../core/models/geocoding_result.dart';
+import '../../../core/routes/app_routes.dart';
 import '../../../core/services/geocoding_service.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/timezone/app_timezone.dart';
 import '../../../core/widgets/user_avatar.dart';
 import '../../auth/providers/auth_provider.dart';
+import '../../expense_account/models/my_expense_account_model.response.dart';
+import '../../expense_account/providers/expense_account_provider.dart';
+import '../../expense_account/widgets/account_balance_label.dart';
 import '../../group/models/get_member_model.response.dart';
 import '../../group/providers/group_provider.dart';
 import '../../location/widgets/location_map.dart';
@@ -260,6 +264,11 @@ class EventDetailsModal extends StatelessWidget {
                           ],
                         ),
                       ],
+
+                      _EventExpenseAccountsSection(
+                        eventId: currentEvent.id,
+                        groupId: groupId,
+                      ),
 
                       const SizedBox(height: 20),
 
@@ -568,6 +577,133 @@ class _EventLocationDetailsState extends State<_EventLocationDetails> {
           ),
         ),
       ],
+    );
+  }
+}
+
+class _EventExpenseAccountsSection extends StatefulWidget {
+  final int eventId;
+  final int groupId;
+
+  const _EventExpenseAccountsSection({
+    required this.eventId,
+    required this.groupId,
+  });
+
+  @override
+  State<_EventExpenseAccountsSection> createState() =>
+      _EventExpenseAccountsSectionState();
+}
+
+class _EventExpenseAccountsSectionState
+    extends State<_EventExpenseAccountsSection> {
+  late final ExpenseAccountProvider _expenseAccountProvider;
+  bool _accountsLoaded = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _expenseAccountProvider = context.read<ExpenseAccountProvider>();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) _loadAccounts();
+    });
+  }
+
+  Future<void> _loadAccounts() async {
+    await _expenseAccountProvider.loadAccounts(clearOnError: true);
+    if (!mounted) return;
+    setState(() => _accountsLoaded = true);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final accounts = context
+        .watch<ExpenseAccountProvider>()
+        .accounts
+        .where(
+          (account) =>
+              account.groupId == widget.groupId &&
+              account.eventId == widget.eventId,
+        )
+        .toList(growable: false);
+
+    if (!_accountsLoaded || accounts.isEmpty) {
+      return const SizedBox.shrink();
+    }
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const SizedBox(height: 20),
+        const _SectionTitle('Gastos'),
+        const SizedBox(height: 10),
+        for (var index = 0; index < accounts.length; index++) ...[
+          if (index > 0) const SizedBox(height: 8),
+          _EventExpenseAccountTile(
+            account: accounts[index],
+            showName: accounts.length > 1,
+          ),
+        ],
+      ],
+    );
+  }
+}
+
+class _EventExpenseAccountTile extends StatelessWidget {
+  final MyExpenseAccountResponseModel account;
+  final bool showName;
+
+  const _EventExpenseAccountTile({
+    required this.account,
+    required this.showName,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: AppColors.fieldColor,
+      borderRadius: BorderRadius.circular(14),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(14),
+        onTap: () => Navigator.of(context).pushNamed(
+          AppRoutes.expenseAccountDetail,
+          arguments: {'accountId': account.id},
+        ),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+          child: Row(
+            children: [
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    if (showName) ...[
+                      Text(
+                        account.name,
+                        style: const TextStyle(
+                          color: AppColors.text,
+                          fontSize: 14,
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                      const SizedBox(height: 4),
+                    ],
+                    AccountBalanceLabel(
+                      status: account.status,
+                      balanceCents: account.balanceCents,
+                      showStatus: false,
+                    ),
+                  ],
+                ),
+              ),
+              const Icon(
+                Icons.chevron_right_rounded,
+                color: AppColors.mutedText,
+              ),
+            ],
+          ),
+        ),
+      ),
     );
   }
 }
